@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtualenv ---
+venv/
+.venv/
+env/
+
+# --- Model weights (too large for git) ---
+weights/*.pt
+weights/*.pl
+weights/*.pth
+weights/*.bin
+weights/*.safetensors
+
+# --- Runtime data ---
+storage/uploads/*
+storage/results/*
+!storage/uploads/.gitkeep
+!storage/results/.gitkeep
+
+# --- Datasets ---
+data/raw/*
+data/annotated/*
+data/processed/*
+!data/raw/.gitkeep
+!data/annotated/.gitkeep
+!data/processed/.gitkeep
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- OS ---
+*.log
+.cache/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
