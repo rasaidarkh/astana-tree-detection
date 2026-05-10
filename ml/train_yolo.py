@@ -35,7 +35,8 @@ def main():
     parser.add_argument("--batch", type=int, default=4)
     parser.add_argument("--device", default="0", help="GPU id, 'cpu', либо '0,1' для multi-GPU")
     parser.add_argument("--name", default="astana_yolo", help="Имя ран папки")
-    parser.add_argument("--project", default="runs/segment")
+    parser.add_argument("--project", default=None,
+                        help="Куда складывать ран. По умолчанию Ultralytics сам кладёт в runs/segment/<name>")
     parser.add_argument("--resume", default=None, help="Путь к last.pt для resume")
     parser.add_argument("--patience", type=int, default=25)
     args = parser.parse_args()
@@ -57,15 +58,20 @@ def main():
     print(f"  Device:  {args.device}")
     print("=" * 60)
 
-    model.train(
+    train_kwargs = dict(
         data=args.data,
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
         device=args.device,
-        project=args.project,
         name=args.name,
         exist_ok=True,
+    )
+    if args.project is not None:
+        train_kwargs["project"] = args.project
+
+    model.train(
+        **train_kwargs,
         patience=args.patience,
         save=True,
         plots=True,
@@ -87,11 +93,13 @@ def main():
         erasing=0.2,
     )
 
-    weights_dir = Path(args.project) / args.name / "weights"
+    save_dir = Path(getattr(model.trainer, "save_dir", Path("runs") / "segment" / args.name))
+    weights_dir = save_dir / "weights"
     print("\nTraining complete.")
-    print(f"  Best:  {weights_dir / 'best.pt'}")
-    print(f"  Last:  {weights_dir / 'last.pt'}")
-    print(f"\nКопируй best.pt → ../weights/yolo_satellite.pt чтобы backend подхватил.")
+    print(f"  Save dir: {save_dir}")
+    print(f"  Best:     {weights_dir / 'best.pt'}")
+    print(f"  Last:     {weights_dir / 'last.pt'}")
+    print(f"\nКопируй best.pt -> weights/yolo_satellite.pt чтобы backend подхватил.")
 
 
 if __name__ == "__main__":
