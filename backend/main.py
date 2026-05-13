@@ -30,6 +30,7 @@ from .map_capture import capture_bbox, save_capture
 from .models import ModelRegistry
 from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
+from .models.deepforest_sam2_adapter import DeepForestSAM2Adapter
 from .models.ensemble_adapter import EnsembleAdapter
 from .models.yolo_adapter import YOLOAdapter
 from .schemas import (
@@ -112,6 +113,14 @@ def _load_models() -> None:
         )
         registry.register(ensemble)
         log.info("Ensemble adapter registered")
+
+    sam2_ckpt = WEIGHTS / "sam2_hiera_base_plus.pt"
+    df_sam2 = DeepForestSAM2Adapter(
+        df_checkpoint_path=str(df_ckpt) if df_ckpt.exists() else None,
+        sam2_checkpoint_path=str(sam2_ckpt) if sam2_ckpt.exists() else None,
+    )
+    registry.register(df_sam2)
+    log.info("DeepForest+SAM2 adapter registered (sam2_local=%s)", sam2_ckpt.exists())
 
 
 _load_models()

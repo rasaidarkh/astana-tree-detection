@@ -12,6 +12,7 @@ class ModelKind(str, Enum):
     YOLO = "yolo"
     DEEPFOREST = "deepforest"
     ENSEMBLE = "ensemble"
+    DEEPFOREST_SAM2 = "deepforest_sam2"
 
 
 class GeoMode(str, Enum):
