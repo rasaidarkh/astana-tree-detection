@@ -1,0 +1,222 @@
+# Chapter 2. Methodology
+
+This chapter describes the technical design of the system. Section 2.1 gives a top-level view of the architecture and the data flow from the raw satellite image to the final inventory. Sections 2.2 through 2.6 detail the three detection models proposed in the literature gap of Chapter 1 — YOLOv8-seg, DeepForest, and SAM — and the ensemble strategy that combines them. Sections 2.7 and 2.8 cover the geographic conversion of pixel coordinates to longitude / latitude and the export of the inventory in formats consumable by GIS specialists. Implementation choices and trade-offs are justified throughout.
+
+## 2.1 System architecture overview
+
+The proposed system follows a classical three-tier separation of concerns: a thin **presentation layer** (a single-page React 18 application served via CDN-loaded UMD bundles and rendered with Babel-standalone), an **application layer** (a FastAPI REST backend implemented in Python 3.11) and a **model layer** (three deep-learning adapters that wrap the underlying frameworks — Ultralytics YOLO for YOLOv8-seg, the DeepForest library for the RetinaNet-based detector and the official Segment Anything implementation from Meta AI for the mask-refinement stage).
+
+The data flow through the system can be summarised as follows:
+
+1. The user opens the web interface and either uploads a satellite image as a file (PNG, JPG, TIFF or GeoTIFF) or selects an area directly on a Leaflet map; in the latter case the backend downloads the appropriate ESRI World Imagery tiles, stitches and crops them, and returns the resulting image with embedded geographic bounds.
+2. The image is stored on the server and assigned an opaque identifier. Image dimensions and, if available, GeoTIFF projection metadata are extracted via the `rasterio` library.
+3. The user selects one of three detection backends (YOLO, DeepForest, Ensemble) and a confidence threshold, and triggers inference. The corresponding adapter is loaded lazily on first request and reused for subsequent calls.
+4. For images larger than the network's native input resolution, the adapter performs sliding-window tiled inference, runs the model on each tile and aggregates the per-tile predictions through Non-Maximum Suppression to produce a single global set of detections.
+5. Each detection is annotated with geographic coordinates via the geographic-conversion module, which supports four operating modes depending on the metadata available (GeoTIFF affine transform, four-corner bilinear interpolation, two-corner axis-aligned conversion, or no conversion).
+6. The result is stored as an immutable job record, returned to the frontend for interactive visualisation on a Leaflet map, and made available for export in three formats (GeoJSON, CSV, standalone HTML).
+
+A key architectural decision is the use of the **adapter pattern** for the model layer: every model adheres to a single abstract base class with a `predict(image_path, confidence) -> List[Detection]` method, so that new models can be added without changes to the rest of the system. The base class also provides lazy initialisation, automatic weight loading from a dedicated `weights/` directory, and exception conversion to FastAPI HTTP responses.
+
+The technology stack and the responsibilities of each component are summarised in Table 2.1.
+
+**Table 2.1 — Technology stack of the proposed system.**
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| Frontend | React 18 (UMD), Leaflet, Babel-standalone | Drag-and-drop upload, interactive map, statistics, export buttons |
+| Backend | FastAPI, Pydantic, Uvicorn | REST API, request validation, lazy model loading, in-memory job store |
+| Geo | rasterio, NumPy, Shapely | GeoTIFF parsing, pixel-to-geo conversion, polygon clipping |
+| Model — YOLO | Ultralytics YOLO 8.4, PyTorch 2.5 + CUDA 12.1 | Instance segmentation of tree crowns |
+| Model — DeepForest | DeepForest 1.5 (RetinaNet) | Bounding-box detection of tree crowns |
+| Model — SAM | segment-anything (ViT-B) | Zero-shot mask refinement of DeepForest boxes |
+| Ensemble | ensemble-boxes (Weighted Box Fusion) | Score-weighted combination of YOLO and DeepForest predictions |
+| Map capture | urllib + Pillow (PIL) | ESRI World Imagery tile download, stitching, crop to bbox |
+| Export | Custom serialisers + Leaflet HTML template | GeoJSON / CSV / standalone HTML output |
+
+The complete source tree of the prototype is organised in three top-level directories — `backend/`, `frontend/` and `ml/` — and is approximately 6 000 lines of code. The training and dataset-preparation scripts in `ml/` are independent from the backend and can be run on a separate machine.
+
+## 2.2 Image input and pre-processing
+
+The system accepts three categories of input, each with its own pre-processing path.
+
+**Regular images** (PNG, JPG, WebP) are stored as-is and decoded with Pillow on the first call. The width and height are recorded as part of the image metadata. Such images carry no geographic information, and the user is expected to supply geographic anchors manually — either as two corners (north-west and south-east) or as four corners (one per image corner) — through draggable markers on the map widget.
+
+**GeoTIFF images** carry an affine transform and a coordinate reference system in their internal metadata. The backend parses this metadata with `rasterio.open()` and extracts the bounds in WGS-84 (EPSG:4326). For GeoTIFFs in other projections (a common case for satellite data delivered in UTM zones) the bounds are re-projected with `pyproj`. This path is the most accurate and is the recommended workflow for final, reproducible inventories.
+
+**In-browser map capture** is the third option, designed for the user who has neither a pre-downloaded GeoTIFF nor a screenshot but wants to inspect a specific area of the city interactively. The user draws a rectangle on a Leaflet map (visualised against the ESRI World Imagery basemap), specifies a zoom level between 17 and 19, and submits the request to the `/api/capture_from_map` endpoint. The backend then:
+
+1. Converts the two corner coordinates from longitude / latitude into floating-point tile coordinates using the Web-Mercator projection: $x = (\lambda + 180) / 360 \cdot 2^z$ and $y = (1 - \log(\tan\phi + \sec\phi) / \pi) / 2 \cdot 2^z$, where $z$ is the zoom level.
+2. Computes the integer range of tiles that must be downloaded to cover the requested bounding box, with an upper limit of 144 tiles (i.e. a 12×12 grid, approximately 3 072 × 3 072 pixels at the standard tile size of 256 pixels). This limit protects the server from accidental bulk downloads.
+3. Downloads the tiles in parallel through a thread pool of eight workers, retrying each tile up to three times with the academic-project user-agent string mandated by the ESRI terms of use. Failed tiles are replaced by a small grey placeholder so that a single missing tile does not invalidate the entire capture.
+4. Stitches the tiles into a single canvas, crops the canvas to the exact bounding box (using the fractional part of the original tile coordinates as sub-tile offsets) and returns a PNG image with the geographic bounds embedded as part of the response.
+
+Subsequent inference on the captured image proceeds as if the user had uploaded a GeoTIFF — the two corners are known with sub-pixel precision and the conversion module switches automatically into two-corner axis-aligned mode.
+
+For all three input categories the maximum file size is currently limited to 100 MiB and the supported extensions are `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff` and `.webp`.
+
+## 2.3 Tiled processing of high-resolution images
+
+A central design challenge of the system is the **scale mismatch** between the typical satellite image and the input resolution of the underlying networks. A YOLOv8-seg or DeepForest model operates on inputs of approximately 640 × 640 pixels; a single satellite screenshot of a city block, however, is often 1 600 × 1 100 pixels or larger. If such an image were resized to fit the network's input, each individual tree crown — typically 20 – 40 pixels in diameter at zoom 18 — would shrink to fewer than ten pixels, well below the resolution that any modern detector can reliably handle. This effect was confirmed empirically in early experiments: a YOLOv8-seg model trained at imgsz=640 directly on the full-resolution inputs detected zero trees on the validation set.
+
+The proposed solution is **sliding-window tiled inference** at the same resolution as training. The original image is partitioned into overlapping tiles of fixed size (640 pixels) with an overlap region (128 pixels) on each side, so that any tree crown is fully contained in at least one tile. The model is then applied independently to each tile and the per-tile detections are translated back into the global image coordinate system by adding the tile offset to every polygon vertex and bounding-box coordinate.
+
+To remove duplicate detections of the same tree that appears in two or more overlapping tiles, the system applies **global Non-Maximum Suppression** with an IoU threshold of 0.5. The procedure is vectorised in NumPy and operates on the full set of global bounding boxes, sorting by confidence and iteratively discarding any box that overlaps a higher-confidence box above the threshold.
+
+The same tiling-and-NMS pattern is used in three places: in `predict_tiled()` inside the YOLO adapter at inference time; in the dataset-preparation script (`ml/tile_dataset.py`) that re-tiles the training data; and in the pre-labelling tool (`ml/prelabel_coco.py`) that uses the v1 model to generate pre-annotations for new images.
+
+## 2.4 YOLOv8-seg branch
+
+### 2.4.1 Architecture
+
+YOLOv8 [@UltralyticsYOLO2023] is a single-stage anchor-free object detector that operates as a fully-convolutional network with a CSP-Darknet53 backbone, a Path Aggregation Network neck and three detection heads producing predictions at three scales (down-sampling factors of 8, 16 and 32). The segmentation variant `YOLOv8x-seg` extends this architecture with an additional **prototype mask head** that produces 32 prototype masks at one quarter the input resolution; each detected instance is then represented by a vector of 32 coefficients that, when linearly combined with the prototype masks and thresholded, produce a binary segmentation mask aligned with the detected bounding box. This design — borrowed from the YOLACT family of real-time instance segmenters — separates the per-pixel and the per-instance computations, so the cost of generating masks scales with the number of detections rather than with the number of pixels.
+
+The variant chosen for this work, `yolov8x-seg`, contains approximately 71 million parameters and is the largest of the YOLOv8 segmentation models. The choice of the extra-large variant is motivated by the small size of the training set: with only a few thousand polygon annotations available, the additional regularisation of a deeper, slower-but-more-expressive model is welcome.
+
+### 2.4.2 Why instance segmentation rather than detection
+
+Bounding-box detection is sufficient for counting trees but is poorly suited to the downstream tasks expected from the system. The municipal user is interested not only in the number of trees but also in their **crown size**, which is a proxy for both species and age, and in the **green-coverage percentage** of a given area, which is a standard indicator in urban-planning regulations. Both quantities require pixel-level masks rather than rectangular boxes — a poplar tree and a birch tree of the same canopy area can have radically different crown silhouettes, and the rectangular bounding box of two adjacent overlapping trees can cover an area that includes a substantial fraction of bare ground.
+
+For these reasons the YOLO branch of the system performs full instance segmentation. The output of the adapter is a list of objects each containing: a bounding box, a polygon mask (the YOLO mask compressed into a closed sequence of $(x, y)$ vertices via Suzuki–Abe contour extraction), a confidence score, and — derived from the mask — the crown area in pixels and (if pixel size in metres is known) in square metres.
+
+### 2.4.3 Training data and pre-processing
+
+The training data for the YOLO branch is a collection of satellite screenshots of Astana taken from Google Earth and ESRI World Imagery at zoom levels 17 to 19. The annotation effort proceeded in two iterations.
+
+**Version 1** (April 2026): 20 source images were annotated manually in CVAT, producing 2 242 individual tree polygons. The class taxonomy was deliberately kept minimal — a single class "Tree" (in the source: "Дерево") — because the satellite resolution available does not allow reliable species discrimination. The dataset was split into 16 training images and 4 validation images at the source-image level (so that no tile from a single source can leak between splits) and tiled into 62 tiles of 640 × 640 pixels with 128-pixel overlap, of which 58 were used for training and 4 for validation. After the polygon-clipping and minimum-area filtering performed by the tiler, the resulting tiled dataset contained 4 628 polygons.
+
+**Version 2** (May 2026, current): 57 additional source images were collected and pre-labelled with the v1 model through the iterative tool described in section 2.3, producing a coarse first pass that was then manually refined in CVAT. The new annotations were merged with the version-1 annotations through a custom COCO-merge script that re-numbers `image_id` and `annotation_id` to avoid collisions while de-duplicating overlapping filenames. The combined dataset contains approximately 77 source images and, after tiling, approximately 5 000 polygon-level annotations distributed over 111 training tiles and 10 validation tiles.
+
+Two custom Python tools support this workflow. `ml/coco_to_yolo_seg.py` converts a CVAT-exported COCO 1.0 annotation file into the polygon-line format expected by Ultralytics YOLO, with sanitisation of Cyrillic filenames into ASCII to avoid Windows-path issues, an explicit duplicate-policy flag for images shared between train and val splits, and explicit handling of the Cyrillic class name. `ml/tile_dataset.py` performs the sliding-window tiling itself using Shapely for polygon clipping, dropping any clipped fragment whose area falls below 25 square pixels (the assumption being that a tree fragment that small is more likely to be an artefact than a useful training signal).
+
+### 2.4.4 Training procedure
+
+The training of the v1 model was performed on a single workstation with an Intel Core i7-13620H CPU, 16 GiB of system RAM and an NVIDIA GeForce RTX 4060 Laptop GPU with 8 GiB of VRAM. The hyper-parameters are listed in Table 2.2.
+
+**Table 2.2 — Training hyper-parameters for the YOLOv8-seg v1 run.**
+
+| Parameter | Value |
+|---|---|
+| Base model | `yolov8x-seg.pt` (COCO pre-trained) |
+| Input resolution | 640 × 640 |
+| Batch size | 2 |
+| Epochs (max) | 500 |
+| Early-stopping patience | 100 |
+| Optimiser | AdamW (auto-selected by Ultralytics) |
+| Initial learning rate | 0.01 (decayed with cosine schedule) |
+| Box loss weight | 7.5 |
+| Classification loss weight | 0.5 |
+| DFL loss weight | 1.5 |
+| Mosaic augmentation | 1.0 |
+| Mix-up augmentation | 0.1 |
+| Copy-paste augmentation | 0.1 |
+| HSV-S / HSV-V jitter | 0.4 / 0.3 |
+| Rotation jitter | ±20° |
+| Mixed-precision (AMP) | enabled |
+
+Mixed-precision training was essential — without it the model with a batch size of two exceeded the available 8 GiB of VRAM. Even with AMP enabled, the peak measured VRAM usage was approximately 6.4 GiB. The same configuration with a batch size of four reproducibly triggered an out-of-memory error.
+
+The training was started with a maximum of 500 epochs and was allowed to early-stop with a patience of 100 epochs. The actual run stopped at epoch 397 after approximately one hour of wall-clock training, with the best checkpoint produced at epoch 296. The detailed numerical results of this training run are reported in Chapter 3.
+
+The version-2 run, currently in progress on the expanded dataset, follows the same hyper-parameters but with the v1 best checkpoint as the starting point in order to retain the learned crown priors and accelerate convergence.
+
+## 2.5 DeepForest branch
+
+### 2.5.1 Architecture
+
+DeepForest [@DeepForest2019] is a tree-detection library built on top of a RetinaNet single-stage detector with a ResNet-50 backbone. RetinaNet was selected over two-stage architectures such as Faster R-CNN because of its better speed–accuracy trade-off on dense detection tasks, and over earlier YOLO versions because of its dedicated focal-loss formulation, which is particularly well-suited to the highly-imbalanced background-to-foreground ratio typical of dense forest scenes — a single satellite tile can easily contain dozens of small tree instances surrounded by hundreds of background patches.
+
+The model is shipped with two pre-trained weight sets. The first, generally referred to as the "tree" model and identified in the HuggingFace registry as `weecology/deepforest-tree`, was originally trained on hundreds of thousands of semi-supervised annotations derived from National Ecological Observatory Network (NEON) lidar data over forested sites in the United States. The second, the "bird" model, is irrelevant to the present work. The default model used in this project is the tree variant.
+
+### 2.5.2 Inference: patch-based tiled processing
+
+DeepForest's recommended inference mode for a full satellite image is the `predict_tile()` method, which performs sliding-window patch-based inference on patches of a configurable size — by default 400 × 400 pixels — with a configurable overlap, typically 5%. Per-patch detections are merged with a Non-Maximum Suppression step internal to the library. The output is a pandas DataFrame with one row per detection, containing the columns `xmin`, `ymin`, `xmax`, `ymax`, `label` and `score`. The DeepForest adapter in this project wraps this method and translates the DataFrame into the same `Detection` dataclass that the YOLO adapter produces, so that the two branches are interchangeable downstream.
+
+The choice of a patch size of 400 (rather than the 640 used by the YOLO branch) reflects the network's training distribution: the NEON imagery on which DeepForest was originally trained has a ground sampling distance of approximately 10 cm per pixel, and the relative crown size in the pre-training data is best matched by the smaller patch.
+
+### 2.5.3 Fine-tuning on Astana data
+
+The pre-trained DeepForest model already performs reasonably well on Astana imagery — in early baseline experiments it detected approximately 67 % of visible trees out of the box, comparable to its reported behaviour on European urban scenes [@SofiaDeepForest2024]. To narrow the remaining domain gap a fine-tuning stage was performed by team member Anuar Totin on an **independent annotation set** maintained for the DeepForest branch (a separate corpus of Astana satellite tiles, annotated as bounding boxes rather than polygons, and held distinct from the YOLO polygon dataset described in Section 2.4). The motivation for the separate annotation set is twofold: first, DeepForest's RetinaNet head consumes bounding-box labels natively and benefits little from the polygon refinement that the YOLO branch requires; second, maintaining two independently-curated datasets reduces the risk of validation-set leakage between the two branches and gives a cleaner methodological story for the head-to-head comparisons of Chapter 3.
+
+Fine-tuning is driven by the DeepForest `Trainer` interface, which is a thin wrapper around PyTorch Lightning. The configuration used for the fine-tune is documented in the `lightning_logs/` directory of the repository and includes: batch size 1, AdamW with learning rate $1 \times 10^{-3}$, ReduceLROnPlateau scheduler on `val_loss` with patience 10 and factor 0.5, horizontal-flip augmentation only, and a single training pass over the dataset per epoch (which matches the library's default `epochs: 1` setting and is appropriate given that DeepForest performs one full pass per call by convention). Multiple successive epochs are obtained by re-invoking the trainer.
+
+The fine-tuned weights are stored on disk as a Lightning checkpoint and re-loaded by the adapter through `torch.load()` followed by a non-strict `load_state_dict()`. The adapter's behaviour is fully backwards-compatible: if the fine-tuned checkpoint is not present, the model falls back automatically to the public `weecology/deepforest-tree` weights, so the system remains usable on machines that do not have the proprietary checkpoint.
+
+## 2.6 SAM mask-refinement branch
+
+The Segment Anything Model [@SAM2023] is a recent foundation model for class-agnostic image segmentation. It was trained on a dataset of more than one billion masks across eleven million images and exposes a prompt-based interface in which the user supplies a "prompt" — a point, a bounding box, or a coarse mask — and the model returns the precise segmentation of the corresponding object. Crucially for the present application, SAM is **zero-shot**: it does not need to be trained or fine-tuned on the target domain to produce sharp object masks, provided that the prompt is approximately correct.
+
+The third branch of the proposed system exploits this property to upgrade DeepForest's bounding-box detections into precise crown polygons without spending additional annotation effort or training time. The pipeline of this branch is the following:
+
+1. The DeepForest detector is run on the input image and produces a list of bounding boxes with associated confidence scores, exactly as in section 2.5.
+2. For each detection above the confidence threshold, the bounding box is converted into a SAM box prompt in the image coordinate frame.
+3. The SAM `predictor.predict()` call returns three candidate masks per prompt and a score for each. The mask with the highest predicted IoU is kept.
+4. The returned binary mask is converted into a polygon contour through the same OpenCV contour-extraction step that the YOLO branch uses, and the resulting `Detection` is emitted as if it had been produced by an end-to-end instance segmenter.
+
+This branch is implemented as a separate adapter (`SAMDeepForestAdapter`) that takes the DeepForest adapter as a constructor argument and follows the same interface as the other adapters. The SAM backbone used is the ViT-B variant, chosen as a compromise between accuracy and inference speed on a laptop GPU; the larger ViT-L and ViT-H variants are also supported through a configuration switch but are too slow for the interactive use case.
+
+Conceptually, this design treats SAM as a **post-processing step** that decorates an otherwise pure bounding-box detector with high-quality polygon masks. The cost is a roughly two-fold increase in inference time per image; the benefit is that the system gains crown-area and crown-coverage statistics without requiring a re-trained polygon-level model.
+
+## 2.7 Ensemble via Weighted Box Fusion
+
+The YOLO and DeepForest branches are trained on the same data but with different network architectures, different patch sizes and different loss formulations. Their errors are therefore partly de-correlated: YOLO tends to over-segment large, dense canopies into several smaller crowns, while DeepForest tends to merge adjacent crowns into a single bounding box. An ensemble that combines the two should benefit from this complementarity.
+
+The chosen ensemble strategy is **Weighted Box Fusion** [@WBF2021], a recent improvement over the older Non-Maximum-Suppression and Soft-NMS ensembles. Where NMS keeps the single highest-confidence box and discards every overlapping box, WBF instead **averages** the coordinates of the overlapping boxes weighted by their confidence scores, producing a single fused box whose coordinates and confidence are functions of all the contributing detections.
+
+The WBF procedure as implemented in the system is:
+
+1. Run the YOLO and DeepForest adapters on the same image and collect the two sets of bounding boxes with their confidence scores.
+2. Normalise the box coordinates to $[0, 1]$ by dividing by the image dimensions.
+3. Sort the union of both sets by confidence in decreasing order and process each box in turn: if the current box has IoU $\geq T_{\text{IoU}}$ with the existing fused box of an already-formed cluster, add it to that cluster; otherwise, start a new cluster with the current box alone.
+4. After all boxes have been processed, replace each cluster of $n$ boxes with a single fused box whose coordinates are the confidence-weighted average of the cluster members and whose confidence is the sum of the cluster members' confidences scaled by $\min(n, \text{models}) / \text{models}$ where $\text{models} = 2$.
+5. De-normalise the coordinates back to pixel space and return the result.
+
+The implementation uses the open-source `ensemble-boxes` package from Roman Solovyev's reference repository. The IoU threshold $T_{\text{IoU}}$ is set to 0.55, slightly higher than the typical 0.5 used for plain NMS, in order to compensate for the systematic location offset between YOLO and DeepForest boxes (the two networks tend to localise the centre of a crown slightly differently due to their different receptive fields). The per-model weights are set to 1.0 for both branches in the current prototype; an ablation study of weight calibration is reserved for future work.
+
+## 2.8 Geographic conversion
+
+A pixel coordinate $(x, y)$ inside the detection mask has no immediate meaning to a municipal user; the system must convert it into a $(\text{longitude}, \text{latitude})$ pair in WGS-84. The conversion is implemented in `backend/geo.py` and supports four operating modes, selected automatically by the system depending on the metadata available.
+
+**Mode 1 — GeoTIFF affine.** If the input image is a GeoTIFF, the affine transform written in the file's metadata maps any pixel coordinate to a coordinate in the projection of the file. The system reads the transform with `rasterio.transform.AffineTransformer.xy(row, col)` and then re-projects the result to EPSG:4326 with `pyproj.Transformer` if needed. This mode is the most accurate and is the recommended workflow for production use.
+
+**Mode 2 — Four-corner bilinear.** If the user supplies the geographic coordinates of all four corners of the image (typically by dragging four markers on the Leaflet map until the screenshot is aligned with the underlying satellite basemap), the conversion uses bilinear interpolation: for a pixel at relative coordinates $(u, v) \in [0,1]^2$, the geographic position is
+$$
+\mathbf{g}(u,v) = (1-u)(1-v)\mathbf{g}_{\text{nw}} + u(1-v)\mathbf{g}_{\text{ne}} + (1-u)v\mathbf{g}_{\text{sw}} + uv\mathbf{g}_{\text{se}}.
+$$
+This mode is appropriate when the image is a rectified satellite view but the precise corners are not known from EXIF or from a GeoTIFF.
+
+**Mode 3 — Two-corner axis-aligned.** When only the north-west and south-east corners are known (the common case after the in-browser map-capture workflow described in section 2.2), the conversion degenerates to a simple linear interpolation along each axis:
+$$
+\lambda(x) = \lambda_{\text{nw}} + (x / W) (\lambda_{\text{se}} - \lambda_{\text{nw}}), \qquad \phi(y) = \phi_{\text{nw}} + (y / H) (\phi_{\text{se}} - \phi_{\text{nw}}).
+$$
+This is exact under the assumption of an axis-aligned, equirectangular projection at the city scale (the meridian curvature is negligible across a few hundred metres of Astana).
+
+**Mode 4 — None.** If the user does not supply any geographic information and the input is not a GeoTIFF, the system returns the detections in pixel coordinates only and the corresponding fields of the JSON response are left as `null`. The Leaflet map is then disabled in the frontend and only the raw detections are displayed.
+
+The choice of mode is recorded in the response metadata so that downstream users can know what level of geographic accuracy to expect.
+
+In addition to the pure coordinate conversion, the geographic module estimates the **pixel size in metres** at the centre of the image, using the Haversine formula on the image diagonal. The estimated pixel size is propagated through to all downstream statistics — average crown area in square metres, total green coverage in hectares, total tree count per hectare — and is reported alongside the inventory.
+
+## 2.9 Result aggregation and export
+
+After the geographic conversion the system produces a final `PredictResult` object that contains:
+
+- The job identifier and the originating image identifier.
+- The list of detections, each with an integer index, a bounding box in pixel and geographic coordinates, a polygon mask, a confidence score, a crown area in pixels and (if applicable) in square metres.
+- The total time taken by the inference, in milliseconds, for performance benchmarking.
+- A `stats` block with the tree count, the mean/min/max confidence, the average crown area, the green-coverage percentage and (when pixel size is known) the analysed area in hectares.
+
+The result is stored in an in-memory job dictionary keyed by job identifier; the prototype does not persist results across restarts, which is appropriate for the present demonstration scope but would have to be replaced by an SQLite or Postgres backing store for production deployment.
+
+Three exporters are provided:
+
+- **GeoJSON** — a FeatureCollection in which each detection is a single Feature whose geometry is a Polygon (the crown mask in WGS-84) and whose properties contain the confidence, the crown area and the bounding box. The GeoJSON file can be loaded directly into QGIS, ArcGIS or any compatible GIS tool.
+- **CSV** — a flat table with one row per detection and columns for the index, the centroid coordinates, the bounding box, the confidence and the area. The CSV is intended for spreadsheet-based inspection and for direct ingestion by Zelenstroy's existing reporting workflow.
+- **Standalone HTML** — a single self-contained HTML file with a Leaflet map embedded inline, the OpenStreetMap and ESRI World Imagery basemaps loaded from CDN, and the detections rendered as a vector layer with on-hover popups. The file is intended for sharing the inventory with a non-technical audience that does not have access to a GIS tool.
+
+The three export endpoints share a common implementation in `backend/export.py` and are reachable via `POST /api/export/{job_id}/{format}`.
+
+## 2.10 Summary
+
+This chapter has presented the methodological foundation of the system: a layered architecture in which a thin presentation layer and a stateless REST backend are connected to a pluggable set of three deep-learning model adapters. The three adapters implement complementary detection paradigms — instance segmentation with YOLOv8-seg, bounding-box detection with DeepForest, zero-shot mask refinement with SAM — and are combined through a Weighted-Box-Fusion ensemble. Tiled inference allows the system to scale to satellite images of arbitrary resolution; four-mode geographic conversion supports inputs ranging from raw screenshots to fully-georeferenced GeoTIFFs; and three exporters deliver the resulting inventory in formats suitable for GIS specialists, spreadsheet users and non-technical viewers. The next chapter reports the experimental evaluation of the trained models and the integrated system on the Astana dataset.
+
+\newpage
