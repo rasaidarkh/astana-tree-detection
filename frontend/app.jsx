@@ -30,6 +30,8 @@ const Icon = ({ name, size = 16, stroke = 1.75 }) => {
     zap: <path d="M13 2L4 14h7l-1 8 9-12h-7z" />,
     globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
     alert: <><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.7L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0z" /></>,
+    circle: <circle cx="12" cy="12" r="5" />,
+    square: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -48,6 +50,105 @@ const LogoMark = ({ size = 28 }) => (
     <circle cx="24" cy="22" r="3" fill="#EF9F27" stroke="#0F6E56" strokeWidth="1.5" />
   </svg>
 );
+
+// ============ VIEW MODE SWITCH ============
+function ViewModeSwitch({ mode, setMode, agg }) {
+  return (
+    <div className="view-mode">
+      <button
+        type="button"
+        className={`vm-opt ${mode === "single" ? "active" : ""}`}
+        onClick={() => setMode("single")}
+        title="Работать с одним снимком: загрузить → инференс → результат"
+      >
+        <Icon name="image" size={13} />
+        <span>Single image</span>
+      </button>
+      <button
+        type="button"
+        className={`vm-opt ${mode === "city" ? "active" : ""}`}
+        onClick={() => setMode("city")}
+        title="Aggregate city map: все деревья из всех сохранённых прогонов"
+      >
+        <Icon name="map" size={13} />
+        <span>City map</span>
+        {agg && agg.total_trees > 0 && (
+          <span className="vm-badge">{agg.total_trees}</span>
+        )}
+      </button>
+    </div>
+  );
+}
+
+// ============ SNAPSHOTS LIST (city view) ============
+function SnapshotsList({ snapshots, onDelete, loading }) {
+  return (
+    <div className="section">
+      <div className="section-label">
+        <Icon name="layers" size={13} />
+        <span>Snapshots in DB</span>
+        <span className="badge-count">{snapshots.length}</span>
+      </div>
+      {loading && <div className="snap-empty">Loading…</div>}
+      {!loading && snapshots.length === 0 && (
+        <div className="snap-empty">No snapshots yet. Switch to <b>Single image</b>, capture a region and run detection — it’ll appear here.</div>
+      )}
+      <ul className="snap-list">
+        {snapshots.map((s) => (
+          <li key={s.image_id} className="snap-item">
+            <div className="snap-row">
+              <div className="snap-name" title={s.filename}>{s.filename}</div>
+              <button
+                className="snap-del"
+                onClick={() => onDelete(s.image_id)}
+                title="Удалить снимок + все его прогоны"
+              >
+                <Icon name="x" size={11} />
+              </button>
+            </div>
+            <div className="snap-meta">
+              <span>{s.width}×{s.height}</span>
+              <span>·</span>
+              <span>{s.run_count} run{s.run_count === 1 ? "" : "s"}</span>
+              <span>·</span>
+              <span className="snap-trees">{s.total_trees} trees</span>
+              {s.last_model && <><span>·</span><span className="snap-model">{s.last_model}</span></>}
+            </div>
+            {s.nw_lat != null && (
+              <div className="snap-coords">
+                N {s.nw_lat.toFixed(5)}° → S {s.se_lat.toFixed(5)}°
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ============ AGGREGATE STATS PANEL (city view) ============
+function AggregateStatsPanel({ stats }) {
+  if (!stats || !stats.snapshot_count) return null;
+  return (
+    <div className="section">
+      <div className="section-label">
+        <span>City Aggregate</span>
+        <span className="badge-live">● LIVE</span>
+      </div>
+      <div className="agg-grid">
+        <div className="agg-card"><div className="agg-v">{stats.total_trees.toLocaleString()}</div><div className="agg-k">trees</div></div>
+        <div className="agg-card"><div className="agg-v">{stats.snapshot_count}</div><div className="agg-k">snapshots</div></div>
+        <div className="agg-card"><div className="agg-v">{stats.run_count}</div><div className="agg-k">runs</div></div>
+        {stats.avg_confidence != null && (
+          <div className="agg-card"><div className="agg-v">{Math.round(stats.avg_confidence * 100)}%</div><div className="agg-k">avg conf</div></div>
+        )}
+        {stats.avg_crown_m != null && (
+          <div className="agg-card"><div className="agg-v">{stats.avg_crown_m.toFixed(1)}<span className="agg-suf"> m</span></div><div className="agg-k">avg crown</div></div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ============ HEADER ============
 function Header({ dark, onToggleDark, modelStatus }) {
@@ -447,7 +548,9 @@ const STAT_SERIES = {
 function StatsPanel({ trees, stats }) {
   const total = stats?.tree_count ?? (trees ? trees.length : 0);
   if (!total) return null;
-  const avgConf = total ? Math.round((trees.reduce((s, t) => s + t.confidence, 0) / total) * 100) : 0;
+  const avgConf = total && trees && trees.length
+    ? Math.round((trees.reduce((s, t) => s + t.confidence, 0) / trees.length) * 100)
+    : 0;
   const coverage = stats?.coverage_pct != null ? stats.coverage_pct : null;
   const area = stats?.analyzed_area_ha;
 
@@ -472,7 +575,7 @@ function StatsPanel({ trees, stats }) {
 }
 
 // ============ MAP LAYERS PANEL ============
-function MapLayersPanel({ baseLayer, setBaseLayer, showOverlay, setShowOverlay, showMarkers, setShowMarkers, overlayOpacity, setOverlayOpacity, hasImage, hasTrees }) {
+function MapLayersPanel({ baseLayer, setBaseLayer, showOverlay, setShowOverlay, displayMode, setDisplayMode, overlayOpacity, setOverlayOpacity, hasImage, hasTrees, hasMasks }) {
   return (
     <div className="section">
       <div className="section-label">
@@ -512,12 +615,44 @@ function MapLayersPanel({ baseLayer, setBaseLayer, showOverlay, setShowOverlay, 
               <span className="layer-opacity-val">{Math.round(overlayOpacity * 100)}%</span>
             </div>
           )}
-          <label className={`layer-toggle ${showMarkers ? "active" : ""} ${!hasTrees ? "disabled" : ""}`}>
-            <input type="checkbox" checked={showMarkers} disabled={!hasTrees} onChange={(e) => setShowMarkers(e.target.checked)} />
-            <span className="layer-icon markers"><Icon name="tree" size={12} /></span>
-            <span className="layer-name">Tree Markers</span>
-            <span className={`layer-switch ${showMarkers ? "on" : ""}`}><span className="layer-switch-thumb"></span></span>
-          </label>
+        </div>
+        <div className="layer-group">
+          <div className="layer-group-label">Detection Display</div>
+          <div className={`display-mode-switch ${!hasTrees ? "disabled" : ""}`}>
+            <button
+              type="button"
+              className={`dms-opt ${displayMode === "point" ? "active" : ""}`}
+              onClick={() => hasTrees && setDisplayMode("point")}
+              disabled={!hasTrees}
+              title="Single point at detection center"
+            >
+              <Icon name="circle" size={12} />
+              <span>Point</span>
+            </button>
+            <button
+              type="button"
+              className={`dms-opt ${displayMode === "bbox" ? "active" : ""}`}
+              onClick={() => hasTrees && setDisplayMode("bbox")}
+              disabled={!hasTrees}
+              title="Bounding box around detection"
+            >
+              <Icon name="square" size={12} />
+              <span>BBox</span>
+            </button>
+            <button
+              type="button"
+              className={`dms-opt ${displayMode === "polygon" ? "active" : ""} ${!hasMasks ? "no-data" : ""}`}
+              onClick={() => hasTrees && setDisplayMode("polygon")}
+              disabled={!hasTrees}
+              title={hasMasks ? "Crown segmentation polygon (YOLO only)" : "No segmentation masks in current result"}
+            >
+              <Icon name="leaf" size={12} />
+              <span>Polygon</span>
+            </button>
+          </div>
+          {displayMode === "polygon" && hasTrees && !hasMasks && (
+            <div className="dms-hint">No masks in current detection — falling back to points. Run YOLO or Ensemble to get polygons.</div>
+          )}
         </div>
       </div>
     </div>
@@ -631,7 +766,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, showMarkers, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -674,7 +809,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
   useEffect(() => {
     if (!layerRef.current || !mapInstance.current) return;
     layerRef.current.clearLayers();
-    if (!trees || !showMarkers) return;
+    if (!trees) return;
     const visible = trees.filter((t) => {
       if (t.confidence < threshold) return false;
       if (t.confidence > 0.7) return filter.high;
@@ -682,40 +817,61 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       return filter.low;
     });
 
+    const popupHtml = (t, color) => (
+      `<div class="tree-popup">
+         <div class="tp-head">
+           <span class="tp-id">Tree #${String(t.id).padStart(3, "0")}</span>
+           <span class="tp-conf" style="background:${color}">${Math.round(t.confidence * 100)}%</span>
+         </div>
+         <div class="tp-grid">
+           <div class="tp-k">Lat</div><div class="tp-v">${t.lat.toFixed(6)}°</div>
+           <div class="tp-k">Lng</div><div class="tp-v">${t.lng.toFixed(6)}°</div>
+           <div class="tp-k">Crown</div><div class="tp-v">${t.crown ? t.crown.toFixed(1) + " m" : "—"}</div>
+         </div>
+       </div>`
+    );
+
     const bounds = [];
     visible.forEach((t) => {
       const color = t.confidence > 0.7 ? "#0F6E56" : t.confidence > 0.5 ? "#5DCAA5" : "#EF9F27";
-      const marker = L.circleMarker([t.lat, t.lng], {
-        radius: markerSize,
-        fillColor: color,
-        color: "#ffffff",
-        weight: 1.5,
-        opacity: 1,
-        fillOpacity: 0.92,
+      let primary = null;
+
+      if (displayMode === "polygon" && t.mask_polygon_geo && t.mask_polygon_geo.length >= 3) {
+        primary = L.polygon(t.mask_polygon_geo, {
+          color, weight: 1.2, opacity: 0.85, fillColor: color, fillOpacity: 0.28,
+        });
+      } else if (displayMode === "bbox" && t.box_geo && t.box_geo.length === 4) {
+        primary = L.polygon(t.box_geo, {
+          color, weight: 1.4, opacity: 0.9, fillColor: color, fillOpacity: 0.12,
+        });
+      } else if (displayMode === "point") {
+        primary = L.circleMarker([t.lat, t.lng], {
+          radius: markerSize,
+          fillColor: color, color: "#ffffff", weight: 1.5, opacity: 1, fillOpacity: 0.92,
+        });
+      }
+
+      // Fallback: если выбранный режим не имеет данных (например polygon для DF) —
+      // показываем точку, чтобы детекция не пропала с карты.
+      if (!primary) {
+        primary = L.circleMarker([t.lat, t.lng], {
+          radius: Math.max(3, markerSize - 2),
+          fillColor: color, color: "#ffffff", weight: 1, opacity: 0.9, fillOpacity: 0.8,
+        });
+      }
+
+      primary.bindPopup(popupHtml(t, color), {
+        className: "tree-popup-wrap", closeButton: false, offset: [0, -markerSize],
       });
-      marker.bindPopup(
-        `<div class="tree-popup">
-           <div class="tp-head">
-             <span class="tp-id">Tree #${String(t.id).padStart(3, "0")}</span>
-             <span class="tp-conf" style="background:${color}">${Math.round(t.confidence * 100)}%</span>
-           </div>
-           <div class="tp-grid">
-             <div class="tp-k">Lat</div><div class="tp-v">${t.lat.toFixed(6)}°</div>
-             <div class="tp-k">Lng</div><div class="tp-v">${t.lng.toFixed(6)}°</div>
-             <div class="tp-k">Crown</div><div class="tp-v">${t.crown ? t.crown.toFixed(1) + " m" : "—"}</div>
-           </div>
-         </div>`,
-        { className: "tree-popup-wrap", closeButton: false, offset: [0, -markerSize] }
-      );
-      marker.on("click", () => onTreeClick && onTreeClick(t));
-      layerRef.current.addLayer(marker);
+      primary.on("click", () => onTreeClick && onTreeClick(t));
+      layerRef.current.addLayer(primary);
       bounds.push([t.lat, t.lng]);
     });
 
     if (bounds.length > 0) {
       try { mapInstance.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); } catch {}
     }
-  }, [trees, filter, threshold, markerSize, showMarkers]);
+  }, [trees, filter, threshold, markerSize, displayMode]);
 
   // Image overlay (real image)
   useEffect(() => {
@@ -958,7 +1114,47 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
-  const [showMarkers, setShowMarkers] = useState(true);
+  // "point" | "bbox" | "polygon" — единый переключатель отображения детекций.
+  // По умолчанию polygon — главное визуальное преимущество YOLOv8-seg.
+  const [displayMode, setDisplayMode] = useState("polygon");
+  // "single" — workflow одного снимка, как было; "city" — aggregate map по всем сохранённым.
+  const [viewMode, setViewMode] = useState("single");
+  const [snapshots, setSnapshots] = useState([]);
+  const [aggregateTrees, setAggregateTrees] = useState([]);
+  const [aggregateStats, setAggregateStats] = useState({ snapshot_count: 0, run_count: 0, total_trees: 0 });
+  const [aggLoading, setAggLoading] = useState(false);
+
+  const refreshAggregate = useCallback(async () => {
+    setAggLoading(true);
+    try {
+      const [snaps, dets, stats] = await Promise.all([
+        window.api.listSnapshots(),
+        window.api.getDetections({ limit: 50000 }),
+        window.api.aggregateStats(),
+      ]);
+      setSnapshots(snaps);
+      setAggregateTrees(window.api.adaptAggregateDetections(dets.detections));
+      setAggregateStats(stats);
+    } catch (e) {
+      console.error("Aggregate refresh failed:", e);
+    } finally {
+      setAggLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "city") refreshAggregate();
+  }, [viewMode, refreshAggregate]);
+
+  const handleDeleteSnapshot = useCallback(async (imageId) => {
+    if (!confirm(`Удалить снимок ${imageId}? Все его прогоны и детекции тоже уйдут.`)) return;
+    try {
+      await window.api.deleteSnapshot(imageId);
+      await refreshAggregate();
+    } catch (e) {
+      console.error("Delete failed:", e);
+    }
+  }, [refreshAggregate]);
   const [overlayOpacity, setOverlayOpacity] = useState(0.8);
   const [captureMode, setCaptureMode] = useState(false);
   const [captureZoom, setCaptureZoom] = useState(18);
@@ -1077,6 +1273,9 @@ function App() {
     setProgress(0);
     setEta(null);
     setTrees(null);
+    setStats(null);
+    setJobId(null);
+    setDuration(null);
     setPredictError(null);
 
     // Псевдо-прогресс пока ждём бэкенд (FastAPI отвечает синхронно)
@@ -1110,6 +1309,8 @@ function App() {
       setDuration(result.duration_ms);
       showToast(`Detection complete · ${adapted.length} trees in ${result.duration_ms} ms`);
       refreshHistory();
+      // Свежий прогон → инвалидируем aggregate-кэш (он подгружается лениво при заходе в city view).
+      if (viewMode === "city") refreshAggregate();
     } catch (e) {
       clearInterval(progressInterval);
       setPredictError(e.message);
@@ -1117,7 +1318,7 @@ function App() {
       setProgress(0);
       showToast("Detection failed: " + e.message, "error");
     }
-  }, [imageId, model, threshold, geo, showToast, refreshHistory]);
+  }, [imageId, model, threshold, geo, showToast, refreshHistory, viewMode, refreshAggregate]);
 
   // ============ Export ============
   const handleExport = useCallback(async (kind) => {
@@ -1153,43 +1354,67 @@ function App() {
     <div className="app">
       <aside className="sidebar">
         <Header dark={dark} onToggleDark={() => setDark(!dark)} modelStatus={modelStatus} />
+        <ViewModeSwitch mode={viewMode} setMode={setViewMode} agg={aggregateStats} />
         <div className="sidebar-scroll">
-          <UploadZone
-            image={image}
-            uploading={uploading}
-            scanning={status === "running"}
-            onUpload={handleUpload}
-            onClear={handleClear}
-            error={uploadError}
-            captureMode={captureMode}
-            onStartCapture={() => setCaptureMode(true)}
-            onCancelCapture={() => setCaptureMode(false)}
-            captureZoom={captureZoom}
-            setCaptureZoom={setCaptureZoom}
-          />
-          <DetectionControls
-            canRun={!!imageId}
-            status={status}
-            progress={progress}
-            eta={eta}
-            onRun={runDetection}
-            model={model}
-            setModel={setModel}
-            modelStatus={modelStatus}
-            error={predictError}
-          />
-          <GeoPanel geo={geo} setGeo={setGeo} image={image} />
-          <StatsPanel trees={trees} stats={stats} />
-          <MapLayersPanel
-            baseLayer={baseLayer} setBaseLayer={setBaseLayer}
-            showOverlay={showOverlay} setShowOverlay={setShowOverlay}
-            showMarkers={showMarkers} setShowMarkers={setShowMarkers}
-            overlayOpacity={overlayOpacity} setOverlayOpacity={setOverlayOpacity}
-            hasImage={!!image} hasTrees={!!trees && trees.length > 0}
-          />
-          <ConfidenceFilter filter={filter} setFilter={setFilter} trees={trees} />
-          <ExportPanel enabled={!!jobId} onExport={handleExport} />
-          <HistoryPanel open={historyOpen} setOpen={setHistoryOpen} history={history} onLoad={handleLoadHistory} />
+          {viewMode === "single" ? (
+            <>
+              <UploadZone
+                image={image}
+                uploading={uploading}
+                scanning={status === "running"}
+                onUpload={handleUpload}
+                onClear={handleClear}
+                error={uploadError}
+                captureMode={captureMode}
+                onStartCapture={() => setCaptureMode(true)}
+                onCancelCapture={() => setCaptureMode(false)}
+                captureZoom={captureZoom}
+                setCaptureZoom={setCaptureZoom}
+              />
+              <DetectionControls
+                canRun={!!imageId}
+                status={status}
+                progress={progress}
+                eta={eta}
+                onRun={runDetection}
+                model={model}
+                setModel={setModel}
+                modelStatus={modelStatus}
+                error={predictError}
+              />
+              <GeoPanel geo={geo} setGeo={setGeo} image={image} />
+              <StatsPanel trees={trees} stats={stats} />
+              <MapLayersPanel
+                baseLayer={baseLayer} setBaseLayer={setBaseLayer}
+                showOverlay={showOverlay} setShowOverlay={setShowOverlay}
+                displayMode={displayMode} setDisplayMode={setDisplayMode}
+                overlayOpacity={overlayOpacity} setOverlayOpacity={setOverlayOpacity}
+                hasImage={!!image} hasTrees={!!trees && trees.length > 0}
+                hasMasks={!!trees && trees.some((t) => t.mask_polygon_geo && t.mask_polygon_geo.length >= 3)}
+              />
+              <ConfidenceFilter filter={filter} setFilter={setFilter} trees={trees} />
+              <ExportPanel enabled={!!jobId} onExport={handleExport} />
+              <HistoryPanel open={historyOpen} setOpen={setHistoryOpen} history={history} onLoad={handleLoadHistory} />
+            </>
+          ) : (
+            <>
+              <AggregateStatsPanel stats={aggregateStats} />
+              <SnapshotsList
+                snapshots={snapshots}
+                onDelete={handleDeleteSnapshot}
+                loading={aggLoading}
+              />
+              <MapLayersPanel
+                baseLayer={baseLayer} setBaseLayer={setBaseLayer}
+                showOverlay={false} setShowOverlay={() => {}}
+                displayMode={displayMode} setDisplayMode={setDisplayMode}
+                overlayOpacity={overlayOpacity} setOverlayOpacity={setOverlayOpacity}
+                hasImage={false} hasTrees={aggregateTrees.length > 0}
+                hasMasks={aggregateTrees.some((t) => t.mask_polygon_geo && t.mask_polygon_geo.length >= 3)}
+              />
+              <ConfidenceFilter filter={filter} setFilter={setFilter} trees={aggregateTrees} />
+            </>
+          )}
         </div>
         <div className="sidebar-footer">
           <button className="footer-btn" onClick={() => setSettingsOpen(!settingsOpen)}>
@@ -1217,24 +1442,28 @@ function App() {
 
       <main className="main">
         <MapView
-          trees={trees}
+          trees={viewMode === "city" ? aggregateTrees : trees}
           filter={filter}
           threshold={threshold}
           baseLayer={baseLayer}
           setBaseLayer={setBaseLayer}
-          markerSize={7}
+          markerSize={viewMode === "city" ? 5 : 7}
           scanning={status === "running"}
-          showOverlay={showOverlay}
-          showMarkers={showMarkers}
+          showOverlay={viewMode === "single" && showOverlay}
+          displayMode={displayMode}
           overlayOpacity={overlayOpacity}
-          image={image}
-          imageBounds={image?.bounds || (geo.mode === "corners_2" ? geo.corners_2 : null)}
+          image={viewMode === "city" ? null : image}
+          imageBounds={viewMode === "city" ? null : ((geo.mode === "corners_2" ? geo.corners_2 : null) || image?.bounds)}
           geo={geo}
           setGeo={setGeo}
-          captureMode={captureMode}
+          captureMode={viewMode === "single" && captureMode}
           onCaptureBbox={handleCaptureBbox}
         />
-        <Legend trees={trees} filter={filter} threshold={threshold} />
+        <Legend
+          trees={viewMode === "city" ? aggregateTrees : trees}
+          filter={filter}
+          threshold={threshold}
+        />
         <div className="map-info-chip">
           <div className="chip-row">
             <span className="chip-k">Region</span>
