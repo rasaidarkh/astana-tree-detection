@@ -71,6 +71,24 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 http://localhost:8000
 
+## Откуда брать снимки
+
+Три варианта по возрастанию точности:
+
+### A. Capture from map (встроенный)
+В UI: кнопка **Capture from map** в зоне загрузки → рисуешь прямоугольник прямо на Leaflet-карте → бэк автоматом скачивает тайлы Esri World Imagery в этой области, склеивает и возвращает уже геопривязанный снимок. Минус: качество ограничено zoom 19 Esri.
+
+### B. Скриншот + draggable corners
+Сделал скрин Google Maps / Google Earth → дропнул в UI → на карте появляются два маркера (NW/SE), тащишь их пока твой снимок не ляжет ровно поверх подложки. Координаты в полях обновляются live.
+
+### C. SAS.Planet → GeoTIFF (рекомендуется для финального тестинга)
+1. Скачать SAS.Planet (free, [sasgis.org](https://www.sasgis.org/sasplaneta/))
+2. В выпадающем «Maps» выбрать **Bing/Esri/Google Satellite**
+3. Зум 18–19, найти район Астаны
+4. Selection Manager → нарисовать рамкой нужный кусок
+5. Operations → **Stitch** → формат **GeoTIFF (.tif)**, projection EPSG:4326 (WGS84)
+6. Дропнуть `.tif` в UI → режим геопривязки переключится на **GeoTIFF (auto from file)**, координаты уже внутри файла, ничего вбивать не нужно
+
 ## API
 
 | Метод | Путь | Назначение |
