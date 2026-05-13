@@ -48,7 +48,7 @@ CITATIONS: dict[str, int] = {
     "He2022": 14, "He2020": 15, "Xu2025": 16, "Awad2021": 17,
     "Branson2019": 18, "Zhang2022": 19, "Zhang2024": 20,
     "Chen2022": 21, "Chen2023": 22, "Schmohl2022": 23,
-    "Huerta2021": 24, "SAM2023": 25, "WBF2021": 26,
+    "Huerta2021": 24, "SAM2023": 25, "SAM2024": 25, "WBF2021": 26,
     "FasterRCNN2015": 27, "MaskRCNN2017": 28, "RetinaNet2017": 29,
     "YOLOv1": 30, "UNet2015": 31, "UltralyticsYOLO2023": 32,
     "Timilsina2020": 33, "Chen2021": 34, "Dong2019": 35,

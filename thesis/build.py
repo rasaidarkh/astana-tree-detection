@@ -65,6 +65,7 @@ CITATIONS: dict[str, int] = {
     "Schmohl2022": 23,
     "Huerta2021": 24,
     "SAM2023": 25,
+    "SAM2024": 25,
     "WBF2021": 26,
     "FasterRCNN2015": 27,
     "MaskRCNN2017": 28,

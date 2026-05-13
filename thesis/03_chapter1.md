@@ -78,13 +78,13 @@ The Sofia DeepForest work of Dakov and Petrova-Antonova [@SofiaDeepForest2024] p
 
 These two data points — Ventura et al. and Dakov and Petrova-Antonova — establish the empirical foundation for the DeepForest branch of the present system and define the performance target: a fine-tuned DeepForest F1 in the 0.65 – 0.73 range, which would match the state of the art for European urban environments.
 
-### 1.3.5 Foundation models: Segment Anything
+### 1.3.5 Foundation models: Segment Anything Model 2
 
-The newest paradigm in the field is the **foundation-model** approach exemplified by the Segment Anything Model (SAM) [@SAM2023]. SAM was trained by Meta AI on the SA-1B dataset of more than one billion masks across eleven million images and exposes a *prompt-based* interface in which the user supplies a point, a bounding box or a coarse mask, and the model returns a precise segmentation of the corresponding object.
+The newest paradigm in the field is the **foundation-model** approach, whose most relevant representative for the present work is the Segment Anything Model 2 (SAM 2) [@SAM2024], released by Meta AI in 2024 as a successor to the original SAM [@SAM2023]. SAM 2 was trained on a large-scale dataset of over one billion masks and exposes a *prompt-based* interface in which the user supplies a point, a bounding box or a coarse mask, and the model returns a precise segmentation of the corresponding object. Compared to SAM v1, SAM 2 introduces a streaming memory module that improves mask consistency and zero-shot generalisation on out-of-domain imagery — a property that is particularly valuable for satellite scenes of Astana, which bear no resemblance to the web images and photographs that dominate the training distribution.
 
-The critical property of SAM is its **zero-shot generalisation**: because the model was trained on such a diverse dataset, it produces sharp masks even on object categories that were never explicitly labelled at training time, including trees in satellite imagery. The implication is that SAM can be used as a **mask-refinement stage** on top of any bounding-box detector — DeepForest in our case — without requiring an additional fine-tune. This idea is explored in detail in Section 2.6 of the methodology chapter.
+The critical property of SAM 2 is its **zero-shot generalisation**: because the model was trained on such a diverse dataset, it produces sharp masks even on object categories that were never explicitly labelled at training time, including trees in satellite imagery. The implication is that SAM 2 can be used as a **mask-refinement stage** on top of any bounding-box detector — DeepForest in our case — without requiring an additional fine-tune. This idea is explored in detail in Section 2.6 of the methodology chapter.
 
-Although no SAM-for-tree-detection paper is present in the surveyed corpus (the closest are concurrent works that apply SAM to general remote-sensing segmentation), the rapid uptake of the model since its 2023 release and the simplicity of its API make its inclusion in the present project a low-risk, high-value design choice.
+Although no SAM 2 paper specifically addressing tree detection is present in the surveyed corpus, the model's strong zero-shot performance on remote-sensing objects and its straightforward batch-inference API make its inclusion in the present project a low-risk, high-value design choice.
 
 ## 1.4 Quantitative results reported in the literature
 
