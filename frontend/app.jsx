@@ -1,50 +1,7 @@
 /* global React, ReactDOM, L */
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-// ============ MOCK TREE DATA (initial demo state) ============
 const ASTANA_CENTER = [51.1605, 71.4704];
-
-function mulberry32(seed) {
-  return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generateMockTrees(count, seed = 42) {
-  const rand = mulberry32(seed);
-  const trees = [];
-  const clusters = [
-    { lat: 51.1605, lng: 71.4704, spread: 0.004, weight: 0.4 },
-    { lat: 51.1638, lng: 71.4495, spread: 0.003, weight: 0.25 },
-    { lat: 51.1572, lng: 71.4828, spread: 0.0035, weight: 0.2 },
-    { lat: 51.1668, lng: 71.4612, spread: 0.005, weight: 0.15 },
-  ];
-  for (let i = 0; i < count; i++) {
-    let r = rand();
-    let cluster = clusters[0];
-    let acc = 0;
-    for (const c of clusters) {
-      acc += c.weight;
-      if (r <= acc) { cluster = c; break; }
-    }
-    const dx = (rand() + rand() + rand() - 1.5) * cluster.spread;
-    const dy = (rand() + rand() + rand() - 1.5) * cluster.spread;
-    const conf = 0.42 + rand() * 0.55;
-    trees.push({
-      id: i + 1,
-      lat: cluster.lat + dx,
-      lng: cluster.lng + dy,
-      confidence: Math.min(0.97, conf),
-      crown: 2.5 + rand() * 5.5,
-    });
-  }
-  return trees;
-}
-
-const MOCK_TREES = generateMockTrees(47);
 
 // ============ ICONS ============
 const Icon = ({ name, size = 16, stroke = 1.75 }) => {
@@ -126,7 +83,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -161,7 +118,41 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error }) {
           <div className="upload-secondary">PNG · JPG · TIFF · GeoTIFF · Max 100MB</div>
           <div className="upload-hint">Source: Google Earth / SAS.Planet · Zoom 17–20</div>
         </div>
-      ) : (
+      ) : null}
+      {!image && !captureMode && (
+        <div className="capture-row">
+          <button
+            type="button"
+            className="btn-capture"
+            onClick={onStartCapture}
+            disabled={uploading}
+            title="Нарисовать прямоугольник на карте, скачать тайлы Esri"
+          >
+            <Icon name="target" size={14} />
+            <span>Capture from map</span>
+          </button>
+          <div className="capture-zoom">
+            <label>Zoom</label>
+            <input
+              type="number" min="14" max="19" step="1"
+              value={captureZoom}
+              onChange={(e) => setCaptureZoom(Math.max(14, Math.min(19, +e.target.value || 18)))}
+            />
+          </div>
+        </div>
+      )}
+      {!image && captureMode && (
+        <div className="capture-active">
+          <div className="capture-active-row">
+            <span className="capture-pulse"></span>
+            <span>Нарисуй прямоугольник на карте справа</span>
+          </div>
+          <button type="button" className="btn-capture-cancel" onClick={onCancelCapture}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {image && (
         <div className="upload-preview">
           <div className={`upload-preview-img ${scanning ? "is-scanning" : ""}`}>
             {image.url ? (<img src={image.url} alt={image.name} />) : (
@@ -322,20 +313,21 @@ function GeoPanel({ geo, setGeo, image }) {
 
       {geo.mode === "corners_2" && (
         <div className="corners-grid">
+          <div className="corners-hint">Перетащи маркеры NW/SE на карте, либо вбей вручную:</div>
           <div className="corner-row">
             <label>NW lat</label>
-            <input type="number" step="0.0001" defaultValue={geo.corners_2?.nw?.lat ?? 51.17}
+            <input type="number" step="0.0001" value={geo.corners_2?.nw?.lat ?? 51.17}
               onChange={(e) => setCorner("nw", "lat", e.target.value)} />
             <label>NW lng</label>
-            <input type="number" step="0.0001" defaultValue={geo.corners_2?.nw?.lng ?? 71.46}
+            <input type="number" step="0.0001" value={geo.corners_2?.nw?.lng ?? 71.46}
               onChange={(e) => setCorner("nw", "lng", e.target.value)} />
           </div>
           <div className="corner-row">
             <label>SE lat</label>
-            <input type="number" step="0.0001" defaultValue={geo.corners_2?.se?.lat ?? 51.15}
+            <input type="number" step="0.0001" value={geo.corners_2?.se?.lat ?? 51.15}
               onChange={(e) => setCorner("se", "lat", e.target.value)} />
             <label>SE lng</label>
-            <input type="number" step="0.0001" defaultValue={geo.corners_2?.se?.lng ?? 71.49}
+            <input type="number" step="0.0001" value={geo.corners_2?.se?.lng ?? 71.49}
               onChange={(e) => setCorner("se", "lng", e.target.value)} />
           </div>
         </div>
@@ -639,12 +631,17 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, showMarkers, overlayOpacity, image, imageBounds }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, showMarkers, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
   const tileLayerRef = useRef(null);
   const overlayRef = useRef(null);
+  const cornersLayerRef = useRef(null);
+  const nwMarkerRef = useRef(null);
+  const seMarkerRef = useRef(null);
+  const rectRef = useRef(null);
+  const captureRectRef = useRef(null);
 
   useEffect(() => {
     if (mapInstance.current || !mapRef.current) return;
@@ -658,6 +655,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
 
     L.control.scale({ position: "bottomright", imperial: false }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
+    cornersLayerRef.current = L.layerGroup().addTo(map);
 
     return () => { map.remove(); mapInstance.current = null; };
   }, []);
@@ -714,8 +712,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       bounds.push([t.lat, t.lng]);
     });
 
-    if (bounds.length > 0 && trees.length !== MOCK_TREES.length) {
-      // Auto-fit only when we have new (non-mock) data
+    if (bounds.length > 0) {
       try { mapInstance.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); } catch {}
     }
   }, [trees, filter, threshold, markerSize, showMarkers]);
@@ -739,6 +736,125 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       }).addTo(mapInstance.current);
     }
   }, [showOverlay, overlayOpacity, image, imageBounds]);
+
+  // Draggable corner markers — создаём один раз когда включился режим corners_2 + есть image
+  useEffect(() => {
+    if (!cornersLayerRef.current || !mapInstance.current) return;
+    cornersLayerRef.current.clearLayers();
+    nwMarkerRef.current = null;
+    seMarkerRef.current = null;
+    rectRef.current = null;
+    if (!image || geo?.mode !== "corners_2" || !geo.corners_2) return;
+
+    const { nw, se } = geo.corners_2;
+    const rect = L.rectangle(
+      [[nw.lat, nw.lng], [se.lat, se.lng]],
+      { color: "#1D9E75", weight: 2, dashArray: "6 6", fillColor: "#1D9E75", fillOpacity: 0.04, interactive: false },
+    );
+    cornersLayerRef.current.addLayer(rect);
+    rectRef.current = rect;
+
+    const makeHandle = (which, latlng, label) => {
+      const icon = L.divIcon({
+        className: "corner-handle",
+        html: `<div class="corner-handle-inner"><span>${label}</span></div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      const m = L.marker(latlng, { icon, draggable: true, autoPan: true });
+      m.on("drag", (e) => {
+        const ll = e.target.getLatLng();
+        setGeo((prev) => ({
+          ...prev,
+          corners_2: { ...prev.corners_2, [which]: { lat: ll.lat, lng: ll.lng } },
+        }));
+      });
+      cornersLayerRef.current.addLayer(m);
+      return m;
+    };
+
+    nwMarkerRef.current = makeHandle("nw", [nw.lat, nw.lng], "NW");
+    seMarkerRef.current = makeHandle("se", [se.lat, se.lng], "SE");
+  }, [image, geo?.mode, setGeo]);
+
+  // Sync позиций маркеров и rectangle когда geo.corners_2 меняется (поля ввода / drag другого маркера)
+  useEffect(() => {
+    if (geo?.mode !== "corners_2" || !geo.corners_2) return;
+    const { nw, se } = geo.corners_2;
+    if (nwMarkerRef.current && !nwMarkerRef.current.dragging?._draggable?._moving) {
+      nwMarkerRef.current.setLatLng([nw.lat, nw.lng]);
+    }
+    if (seMarkerRef.current && !seMarkerRef.current.dragging?._draggable?._moving) {
+      seMarkerRef.current.setLatLng([se.lat, se.lng]);
+    }
+    rectRef.current?.setBounds([[nw.lat, nw.lng], [se.lat, se.lng]]);
+  }, [geo?.corners_2]);
+
+  // Capture-mode: рисуем прямоугольник мышью, отдаём bbox наружу на mouseup
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+
+    const container = map.getContainer();
+    if (!captureMode) {
+      container.classList.remove("capture-cursor");
+      if (captureRectRef.current) {
+        map.removeLayer(captureRectRef.current);
+        captureRectRef.current = null;
+      }
+      return;
+    }
+
+    container.classList.add("capture-cursor");
+    let startLL = null;
+
+    const onDown = (e) => {
+      startLL = e.latlng;
+      map.dragging.disable();
+      if (captureRectRef.current) {
+        map.removeLayer(captureRectRef.current);
+        captureRectRef.current = null;
+      }
+      captureRectRef.current = L.rectangle(
+        [startLL, startLL],
+        { color: "#EF9F27", weight: 2, fillColor: "#EF9F27", fillOpacity: 0.12, dashArray: "4 4" },
+      ).addTo(map);
+    };
+    const onMove = (e) => {
+      if (!startLL || !captureRectRef.current) return;
+      captureRectRef.current.setBounds([startLL, e.latlng]);
+    };
+    const onUp = (e) => {
+      if (!startLL) return;
+      const endLL = e.latlng;
+      map.dragging.enable();
+      const a = startLL, b = endLL;
+      startLL = null;
+      const nw = { lat: Math.max(a.lat, b.lat), lng: Math.min(a.lng, b.lng) };
+      const se = { lat: Math.min(a.lat, b.lat), lng: Math.max(a.lng, b.lng) };
+      // Минимальный размер защита: ≥ ~30 м на земле
+      const dlat = Math.abs(nw.lat - se.lat);
+      const dlng = Math.abs(se.lng - nw.lng);
+      if (dlat < 0.0003 || dlng < 0.0003) {
+        if (captureRectRef.current) {
+          map.removeLayer(captureRectRef.current);
+          captureRectRef.current = null;
+        }
+        return;
+      }
+      onCaptureBbox && onCaptureBbox({ nw, se });
+    };
+
+    map.on("mousedown", onDown);
+    map.on("mousemove", onMove);
+    map.on("mouseup", onUp);
+    return () => {
+      map.off("mousedown", onDown);
+      map.off("mousemove", onMove);
+      map.off("mouseup", onUp);
+      map.dragging.enable();
+    };
+  }, [captureMode, onCaptureBbox]);
 
   const zoomIn = () => mapInstance.current?.zoomIn();
   const zoomOut = () => mapInstance.current?.zoomOut();
@@ -822,7 +938,7 @@ function App() {
   const [status, setStatus] = useState("idle");          // idle | running | done
   const [progress, setProgress] = useState(0);
   const [eta, setEta] = useState(null);
-  const [trees, setTrees] = useState(MOCK_TREES);        // start with mock for empty-state demo
+  const [trees, setTrees] = useState(null);
   const [stats, setStats] = useState(null);
   const [jobId, setJobId] = useState(null);
   const [predictError, setPredictError] = useState(null);
@@ -844,6 +960,8 @@ function App() {
   const [showOverlay, setShowOverlay] = useState(false);
   const [showMarkers, setShowMarkers] = useState(true);
   const [overlayOpacity, setOverlayOpacity] = useState(0.8);
+  const [captureMode, setCaptureMode] = useState(false);
+  const [captureZoom, setCaptureZoom] = useState(18);
 
   useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; }, [dark]);
 
@@ -906,13 +1024,48 @@ function App() {
   const handleClear = useCallback(() => {
     setImage(null);
     setImageId(null);
-    setTrees(MOCK_TREES);
+    setTrees(null);
     setStats(null);
     setJobId(null);
     setStatus("idle");
     setUploadError(null);
     setShowOverlay(false);
   }, []);
+
+  // ============ Capture from map ============
+  const handleCaptureBbox = useCallback(async (bbox) => {
+    setCaptureMode(false);
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const meta = await window.api.captureFromMap({
+        nw: bbox.nw,
+        se: bbox.se,
+        zoom: captureZoom,
+      });
+      setImage({
+        ...meta,
+        name: meta.filename,
+        url: window.api.imageUrl(meta.image_id),
+      });
+      setImageId(meta.image_id);
+      setTrees(null);
+      setStats(null);
+      setJobId(null);
+      setStatus("idle");
+      // bounds уже есть в meta — выставим режим corners_2 с этими углами
+      if (meta.bounds) {
+        setGeo({ mode: "corners_2", corners_2: meta.bounds });
+        setShowOverlay(true);
+      }
+      showToast(`Captured ${meta.width}×${meta.height} from map (zoom ${captureZoom})`);
+    } catch (e) {
+      setUploadError(e.message);
+      showToast("Capture failed: " + e.message, "error");
+    } finally {
+      setUploading(false);
+    }
+  }, [captureZoom, showToast]);
 
   // ============ Run detection ============
   const runDetection = useCallback(async () => {
@@ -1008,6 +1161,11 @@ function App() {
             onUpload={handleUpload}
             onClear={handleClear}
             error={uploadError}
+            captureMode={captureMode}
+            onStartCapture={() => setCaptureMode(true)}
+            onCancelCapture={() => setCaptureMode(false)}
+            captureZoom={captureZoom}
+            setCaptureZoom={setCaptureZoom}
           />
           <DetectionControls
             canRun={!!imageId}
@@ -1071,6 +1229,10 @@ function App() {
           overlayOpacity={overlayOpacity}
           image={image}
           imageBounds={image?.bounds || (geo.mode === "corners_2" ? geo.corners_2 : null)}
+          geo={geo}
+          setGeo={setGeo}
+          captureMode={captureMode}
+          onCaptureBbox={handleCaptureBbox}
         />
         <Legend trees={trees} filter={filter} threshold={threshold} />
         <div className="map-info-chip">

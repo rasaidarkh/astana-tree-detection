@@ -25,6 +25,14 @@
       return _json(await fetch(`${BASE}/api/upload`, { method: "POST", body: fd }));
     },
 
+    async captureFromMap({ nw, se, zoom = 18 }) {
+      return _json(await fetch(`${BASE}/api/capture_from_map`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nw, se, zoom }),
+      }));
+    },
+
     imageUrl(imageId) {
       return `${BASE}/api/image/${imageId}`;
     },

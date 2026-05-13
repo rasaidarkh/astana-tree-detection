@@ -1822,3 +1822,156 @@ html[data-theme="dark"] .progress-eta-val { color: var(--green-400); }
   align-items: center;
   gap: 8px;
 }
+
+/* ===== Draggable corner handles ===== */
+.corners-hint {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  line-height: 1.35;
+}
+.corner-handle {
+  background: transparent;
+  border: none;
+}
+.corner-handle-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1D9E75;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(15, 110, 86, 0.4);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  user-select: none;
+  transition: transform 120ms ease;
+}
+.corner-handle-inner:hover {
+  transform: scale(1.12);
+}
+.corner-handle-inner:active,
+.leaflet-marker-draggable.leaflet-drag-target .corner-handle-inner {
+  cursor: grabbing;
+  background: #0F6E56;
+  transform: scale(1.08);
+}
+
+/* ===== Capture from map ===== */
+.capture-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+.btn-capture {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.btn-capture:hover:not(:disabled) {
+  background: var(--green-50, #e8f3ee);
+  border-color: var(--green-600, #1D9E75);
+  color: var(--green-700, #0F6E56);
+}
+.btn-capture:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.capture-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.capture-zoom label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.capture-zoom input {
+  width: 36px;
+  border: none;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink-1);
+  outline: none;
+}
+.capture-active {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(239, 159, 39, 0.12);
+  border: 1px dashed #EF9F27;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.capture-active-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a8651a;
+  font-weight: 500;
+}
+.capture-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #EF9F27;
+  box-shadow: 0 0 0 0 rgba(239, 159, 39, 0.65);
+  animation: capture-pulse 1.4s infinite;
+  flex-shrink: 0;
+}
+@keyframes capture-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 159, 39, 0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(239, 159, 39, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 159, 39, 0); }
+}
+.btn-capture-cancel {
+  align-self: flex-start;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid #EF9F27;
+  border-radius: 4px;
+  color: #a8651a;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-capture-cancel:hover {
+  background: rgba(239, 159, 39, 0.15);
+}
+
+/* Crosshair cursor для карты в режиме capture */
+.leaflet-container.capture-cursor,
+.leaflet-container.capture-cursor .leaflet-grab,
+.leaflet-container.capture-cursor .leaflet-interactive {
+  cursor: crosshair !important;
+}
