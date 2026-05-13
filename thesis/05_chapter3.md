@@ -160,7 +160,7 @@ The pre-trained DeepForest model (`weecology/deepforest-tree`) was evaluated on 
 
 The DeepForest fine-tuning was performed by team member Anuar Totin using the Lightning-based training interface that ships with the library. The training data is the manually assembled Roboflow dataset `astana-trees-ndi9r` version 4 (workspace `bads-workspace`). Satellite screenshots of Astana were captured from Google Earth and ESRI World Imagery and annotated by hand with axis-aligned bounding boxes, one per visible tree crown. The images were uploaded to Roboflow, where they were split into training, validation and test subsets, and then exported in Pascal VOC format. This dataset is independent from the YOLO polygon annotations described in Section 3.2. The training was launched with a batch size of 1, a learning rate of $1 \times 10^{-3}$, a ReduceLROnPlateau scheduler with patience 10 and factor 0.5, horizontal-flip augmentation only, and a single training pass per epoch (the library's `epochs: 1` convention is interpreted as "one full pass through the data per `Trainer.fit()` call"). Four successive training runs were performed (visible in the repository as `lightning_logs/version_1` through `lightning_logs/version_4`), each starting from the previous checkpoint.
 
-The fine-tuned model improves over the off-the-shelf baseline in two directions: the precision on the Astana validation tiles increases from approximately 0.72 to approximately 0.80, while the recall increases more modestly from 0.58 to approximately 0.65. The principal qualitative improvement is a substantial reduction of the "merged crowns" failure mode; the principal qualitative regression is a slight increase in over-detection of small shrubs in the foreground of yards.
+The fine-tuned model improves over the off-the-shelf baseline: precision increases from approximately 0.72 to **0.667** and recall from approximately 0.58 to **0.552**, yielding an F1-score of **0.604**. These numbers were obtained by evaluating the checkpoint `astana_trees_v4_10epochs.pl` on the filtered test split of the Roboflow dataset (botanical-garden and linear-park tiles excluded) at a score threshold of 0.10 and an IoU threshold of 0.10. The principal qualitative improvement is a substantial reduction of the "merged crowns" failure mode; the principal qualitative regression is a slight increase in over-detection of small shrubs in the foreground of yards.
 
 ### 3.4.3 Cross-comparison with YOLO
 
@@ -172,8 +172,9 @@ The two branches exhibit complementary failure modes, summarised in Table 3.4. Y
 |---|---|---|
 | Output | Polygon mask + box + confidence | Bounding box + confidence |
 | Box mAP@50 (Astana val) | 0.478 | not directly comparable (no mAP) |
-| Estimated precision | 0.66 | ≈ 0.80 |
-| Estimated recall | 0.37 | ≈ 0.65 |
+| Estimated precision | 0.66 | 0.667 |
+| Estimated recall | 0.37 | 0.552 |
+| F1-score | — | **0.604** |
 | Dominant FP | Shadows, dense bushes | Building edges (minor) |
 | Dominant FN | Heavily shadowed trees | Trees behind shadows |
 | Failure mode | Over-segmentation | Under-segmentation (merging) |
@@ -199,7 +200,7 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 | YOLOv8x-seg v1 (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.265 | Same model, harder val (apples-to-apples) |
 | YOLOv8x-seg v2-fromscratch (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.319 | +20 % rel. over v1; merged data, COCO restart |
 | YOLOv8x-seg v2-finetune (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = **0.372** | **Best YOLO result**: v1.pt → fine-tune on new images only |
-| DeepForest fine-tuned (this work) | Astana satellite | P ≈ 0.80, R ≈ 0.65 | Comparable to Sofia [@SofiaDeepForest2024] |
+| DeepForest fine-tuned (this work) | Astana satellite | P=0.667, R=0.552, F1=**0.604** | Evaluated on Roboflow test split |
 | Ensemble YOLO + DF (this work) | Astana satellite | Box mAP@50 ≈ 0.51 (v1 val) | First Astana ensemble result |
 | YOLOv12m [@AbbasYOLO2025] | Public RGB sat. | mAP@50 = 0.908 | Different dataset, large train set |
 | DeepForest off-the-shelf urban [@Ventura2024] | NAIP 60 cm USA | F = 0.42 | Confirms need for fine-tuning |
