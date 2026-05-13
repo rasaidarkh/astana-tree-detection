@@ -6,8 +6,9 @@
 
   async function _json(res) {
     if (!res.ok) {
+      const text = await res.text();
       let detail;
-      try { detail = (await res.json()).detail; } catch { detail = await res.text(); }
+      try { detail = JSON.parse(text).detail; } catch { detail = text; }
       throw new Error(`API ${res.status}: ${detail || res.statusText}`);
     }
     return res.json();
@@ -71,17 +72,15 @@
 
   // Преобразование Detection из API в формат, ожидаемый существующим UI (lat/lng/confidence/crown)
   api.adaptDetectionsForUI = function (apiDetections) {
-    return apiDetections
-      .filter((d) => d.lat != null && d.lng != null)
-      .map((d) => ({
-        id: d.id,
-        lat: d.lat,
-        lng: d.lng,
-        confidence: d.confidence,
-        crown: d.crown_diameter_m != null ? d.crown_diameter_m : 4.0,
-        box: d.box,
-        mask_polygon: d.mask_polygon,
-      }));
+    return apiDetections.map((d) => ({
+      id: d.id,
+      lat: d.lat,
+      lng: d.lng,
+      confidence: d.confidence,
+      crown: d.crown_diameter_m != null ? d.crown_diameter_m : 4.0,
+      box: d.box,
+      mask_polygon: d.mask_polygon,
+    }));
   };
 
   window.api = api;

@@ -453,8 +453,8 @@ const STAT_SERIES = {
 };
 
 function StatsPanel({ trees, stats }) {
-  if (!trees || trees.length === 0) return null;
-  const total = trees.length;
+  const total = stats?.tree_count ?? (trees ? trees.length : 0);
+  if (!total) return null;
   const avgConf = total ? Math.round((trees.reduce((s, t) => s + t.confidence, 0) / total) * 100) : 0;
   const coverage = stats?.coverage_pct != null ? stats.coverage_pct : null;
   const area = stats?.analyzed_area_ha;
@@ -828,12 +828,12 @@ function App() {
   const [predictError, setPredictError] = useState(null);
   const [duration, setDuration] = useState(null);
 
-  const [model, setModel] = useState("yolo");
+  const [model, setModel] = useState("deepforest");
   const [modelStatus, setModelStatus] = useState(null);
-  const [geo, setGeo] = useState({ mode: "none", corners_2: { nw: { lat: 51.17, lng: 71.46 }, se: { lat: 51.15, lng: 71.49 } } });
+  const [geo, setGeo] = useState({ mode: "corners_2", corners_2: { nw: { lat: 51.17, lng: 71.46 }, se: { lat: 51.15, lng: 71.49 } } });
 
   const [filter, setFilter] = useState({ high: true, med: true, low: true });
-  const [threshold, setThreshold] = useState(0.4);
+  const [threshold, setThreshold] = useState(0.1);
   const [baseLayer, setBaseLayer] = useState("satellite");
   const [historyOpen, setHistoryOpen] = useState(true);
   const [history, setHistory] = useState([]);
