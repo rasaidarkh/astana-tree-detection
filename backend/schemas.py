@@ -79,6 +79,10 @@ class Detection(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     crown_diameter_m: Optional[float] = None
+    # Та же маска, но в lat/lng — для рендера на Leaflet
+    mask_polygon_geo: Optional[list[list[float]]] = None  # [[lat,lng], ...]
+    # 4 угла bbox в lat/lng — NW, NE, SE, SW. Рисуется как Leaflet polygon (точный четырёхугольник).
+    box_geo: Optional[list[list[float]]] = None  # [[lat,lng] × 4]
 
 
 class ImageMeta(BaseModel):

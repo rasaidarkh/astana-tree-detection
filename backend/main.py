@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
+from . import db
 from .export import to_csv, to_geojson, to_standalone_html
 from .geo import GeoContext, annotate_detections, build_context, load_geotiff_meta
 from .map_capture import capture_bbox, save_capture
@@ -60,9 +61,11 @@ UPLOADS = STORAGE / "uploads"
 RESULTS = STORAGE / "results"
 WEIGHTS = ROOT / "weights"
 FRONTEND = ROOT / "frontend"
+DB_PATH = STORAGE / "app.db"
 
 UPLOADS.mkdir(parents=True, exist_ok=True)
 RESULTS.mkdir(parents=True, exist_ok=True)
+db.init_db(DB_PATH)
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
@@ -113,11 +116,8 @@ def _load_models() -> None:
 
 _load_models()
 
-# ============ In-memory job store ============
-# В продакшне — заменить на SQLite / Redis. Для прототипа достаточно.
-_jobs: dict[str, PredictResult] = {}
-_meta: dict[str, ImageMeta] = {}
-_history: list[HistoryEntry] = []
+# ============ Persistent store via SQLite (see backend/db.py) ============
+# Старый in-memory job store удалён — состояние теперь полностью в storage/app.db.
 
 
 # ============ Routes: status ============
@@ -125,6 +125,7 @@ _history: list[HistoryEntry] = []
 
 @app.get("/api/status")
 def status() -> dict:
+    agg = db.aggregate_stats()
     return {
         "status": "ok",
         "models": {
@@ -135,8 +136,9 @@ def status() -> dict:
             }
             for kind in ModelKind
         },
-        "uploads": len(list(UPLOADS.glob("*"))),
-        "history_size": len(_history),
+        "snapshots": agg["snapshot_count"],
+        "runs": agg["run_count"],
+        "total_trees": agg["total_trees"],
     }
 
 
@@ -161,7 +163,7 @@ async def upload_image(file: UploadFile = File(...)):
     saved_path.write_bytes(contents)
 
     meta = _build_meta(saved_path, image_id, file.filename, len(contents))
-    _meta[image_id] = meta
+    db.save_snapshot(meta)
     log.info("Uploaded %s → %s (%dx%d, %s)", file.filename, saved_path.name, meta.width, meta.height,
              "GeoTIFF" if meta.is_geotiff else "regular")
     return meta
@@ -203,7 +205,7 @@ def capture_from_map(req: CaptureFromMapRequest):
             se=LatLng(lat=result.se_lat, lng=result.se_lng),
         ),
     )
-    _meta[image_id] = meta
+    db.save_snapshot(meta)
     log.info(
         "Captured from map: bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %dx%d (%d bytes)",
         req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom, w, h, size_bytes,
@@ -213,11 +215,8 @@ def capture_from_map(req: CaptureFromMapRequest):
 
 @app.get("/api/image/{image_id}")
 def get_image(image_id: str):
-    meta = _meta.get(image_id)
-    if not meta:
+    if db.load_snapshot(image_id) is None:
         raise HTTPException(404, f"Unknown image_id {image_id}")
-    p = UPLOADS / Path(meta.filename).with_stem(image_id).name  # combine id with ext
-    # safer: glob for image_id.*
     matches = list(UPLOADS.glob(f"{image_id}.*"))
     if not matches:
         raise HTTPException(404, "File missing on disk")
@@ -226,7 +225,7 @@ def get_image(image_id: str):
 
 @app.get("/api/image/{image_id}/meta", response_model=ImageMeta)
 def get_image_meta(image_id: str):
-    meta = _meta.get(image_id)
+    meta = db.load_snapshot(image_id)
     if not meta:
         raise HTTPException(404, f"Unknown image_id {image_id}")
     return meta
@@ -237,7 +236,7 @@ def get_image_meta(image_id: str):
 
 @app.post("/api/predict", response_model=PredictResult)
 def predict(req: PredictRequest):
-    meta = _meta.get(req.image_id)
+    meta = db.load_snapshot(req.image_id)
     if not meta:
         raise HTTPException(404, f"Unknown image_id {req.image_id}. Сначала загрузи через /api/upload.")
 
@@ -256,7 +255,6 @@ def predict(req: PredictRequest):
     detections = adapter.predict(image_path, confidence=req.confidence)
     duration_ms = int((time.perf_counter() - t0) * 1000)
 
-    # Geo annotation
     ctx = build_context(
         width=meta.width,
         height=meta.height,
@@ -264,7 +262,6 @@ def predict(req: PredictRequest):
         geotiff_path=image_path if meta.is_geotiff else None,
     )
     detections = annotate_detections(detections, ctx)
-
     stats = _compute_stats(detections, meta, ctx)
 
     job_id = uuid.uuid4().hex[:12]
@@ -276,28 +273,15 @@ def predict(req: PredictRequest):
         duration_ms=duration_ms,
         stats=stats,
     )
-    _jobs[job_id] = result
-
-    # History entry
-    from datetime import datetime
-
-    _history.append(
-        HistoryEntry(
-            image_id=req.image_id,
-            filename=meta.filename,
-            date=datetime.utcnow().isoformat() + "Z",
-            model=req.model,
-            tree_count=len(detections),
-            coverage_pct=stats.get("coverage_pct"),
-        )
-    )
-    log.info("Done %s: %d detections in %d ms", adapter.kind.value, len(detections), duration_ms)
+    db.save_run(result, geo_mode=req.geo.mode.value, confidence=req.confidence)
+    log.info("Done %s: %d detections in %d ms (job=%s)", adapter.kind.value,
+             len(detections), duration_ms, job_id)
     return result
 
 
 @app.get("/api/result/{job_id}", response_model=PredictResult)
 def get_result(job_id: str):
-    result = _jobs.get(job_id)
+    result = db.load_run(job_id)
     if not result:
         raise HTTPException(404, f"Unknown job_id {job_id}")
     return result
@@ -308,11 +292,11 @@ def get_result(job_id: str):
 
 @app.post("/api/export/{job_id}/{fmt}")
 def export(job_id: str, fmt: str):
-    result = _jobs.get(job_id)
+    result = db.load_run(job_id)
     if not result:
         raise HTTPException(404, f"Unknown job_id {job_id}")
 
-    meta = _meta.get(result.image_id)
+    meta = db.load_snapshot(result.image_id)
 
     if fmt == "geojson":
         body = json.dumps(to_geojson(result.detections, meta), indent=2)
@@ -340,12 +324,101 @@ def export(job_id: str, fmt: str):
     raise HTTPException(400, f"Unsupported format {fmt}. Available: geojson, csv, html")
 
 
-# ============ Routes: history ============
+# ============ Routes: history & aggregate ============
 
 
 @app.get("/api/history", response_model=list[HistoryEntry])
 def history(limit: int = 20):
-    return list(reversed(_history[-limit:]))
+    runs = db.list_recent_runs(limit=limit)
+    out: list[HistoryEntry] = []
+    for r in runs:
+        stats = json.loads(r["stats_json"]) if r.get("stats_json") else {}
+        out.append(HistoryEntry(
+            image_id=r["image_id"],
+            filename=r["filename"],
+            date=r["created_at"],
+            model=ModelKind(r["model"]),
+            tree_count=r["tree_count"],
+            coverage_pct=stats.get("coverage_pct"),
+        ))
+    return out
+
+
+@app.get("/api/snapshots")
+def list_snapshots():
+    """Список всех снимков с агрегатами (count runs, last_run_at, total trees)."""
+    return db.list_snapshots()
+
+
+@app.delete("/api/snapshots/{image_id}")
+def delete_snapshot(image_id: str):
+    """Удалить снимок целиком: запись в БД, runs (cascade), детекции (cascade), файл с диска."""
+    snap = db.load_snapshot(image_id)
+    if not snap:
+        raise HTTPException(404, f"Unknown image_id {image_id}")
+    ok = db.delete_snapshot(image_id)
+    files_removed = 0
+    for p in UPLOADS.glob(f"{image_id}.*"):
+        try:
+            p.unlink()
+            files_removed += 1
+        except Exception as e:
+            log.warning("Failed to remove %s: %s", p, e)
+    log.info("Deleted snapshot %s (db=%s, files=%d)", image_id, ok, files_removed)
+    return {"deleted": ok, "image_id": image_id, "files_removed": files_removed}
+
+
+@app.delete("/api/runs/{job_id}")
+def delete_run(job_id: str):
+    """Удалить один прогон (не трогая снимок)."""
+    ok = db.delete_run(job_id)
+    if not ok:
+        raise HTTPException(404, f"Unknown job_id {job_id}")
+    log.info("Deleted run %s", job_id)
+    return {"deleted": True, "job_id": job_id}
+
+
+@app.get("/api/detections")
+def aggregate_detections(
+    nw_lat: float | None = None,
+    nw_lng: float | None = None,
+    se_lat: float | None = None,
+    se_lng: float | None = None,
+    model: str | None = None,
+    min_confidence: float = 0.0,
+    limit: int = 50_000,
+):
+    """Главный aggregate-запрос для городской карты.
+    Возвращает все детекции (с lat/lng) из текущего состояния БД, опционально:
+      - по географической рамке (nw_lat/lng + se_lat/lng),
+      - по модели (yolo|deepforest|ensemble),
+      - по порогу confidence.
+    По умолчанию — только последний прогон на каждый снимок (без дублей)."""
+    bbox = None
+    if all(v is not None for v in (nw_lat, nw_lng, se_lat, se_lng)):
+        bbox = (nw_lat, nw_lng, se_lat, se_lng)
+    models = [model] if model else None
+    detections = db.query_detections(
+        bbox=bbox, models=models, min_confidence=min_confidence, limit=limit,
+    )
+    return {
+        "count": len(detections),
+        "detections": detections,
+    }
+
+
+@app.get("/api/aggregate/stats")
+def aggregate_statistics(
+    nw_lat: float | None = None,
+    nw_lng: float | None = None,
+    se_lat: float | None = None,
+    se_lng: float | None = None,
+):
+    """Сводка по всему городу/области для главного экрана."""
+    bbox = None
+    if all(v is not None for v in (nw_lat, nw_lng, se_lat, se_lng)):
+        bbox = (nw_lat, nw_lng, se_lat, se_lng)
+    return db.aggregate_stats(bbox=bbox)
 
 
 # ============ Static frontend ============

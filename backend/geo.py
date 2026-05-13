@@ -145,15 +145,38 @@ def pixel_to_gps(px: float, py: float, ctx: GeoContext) -> tuple[Optional[float]
 
 
 def annotate_detections(detections: list[Detection], ctx: GeoContext) -> list[Detection]:
-    """Заполнить lat/lng/crown_diameter_m в каждой детекции (in-place + return)."""
+    """Заполнить lat/lng/crown_diameter_m + mask_polygon_geo в каждой детекции."""
     for det in detections:
         lat, lng = pixel_to_gps(det.box.cx, det.box.cy, ctx)
         det.lat = lat
         det.lng = lng
         if ctx.pixel_size_m and det.box.area_px > 0:
-            # diameter ≈ sqrt(area * 4 / pi)
             diameter_px = float(np.sqrt(det.box.area_px * 4 / np.pi))
             det.crown_diameter_m = round(diameter_px * ctx.pixel_size_m, 2)
+        # Конвертация polygon-маски pixel → lat/lng. Skip когда нет geo.
+        if det.mask_polygon and lat is not None:
+            geo_poly: list[list[float]] = []
+            for px, py in det.mask_polygon:
+                plat, plng = pixel_to_gps(px, py, ctx)
+                if plat is None:
+                    geo_poly = []
+                    break
+                geo_poly.append([plat, plng])
+            if geo_poly:
+                det.mask_polygon_geo = geo_poly
+        # 4 угла bbox в lat/lng (NW, NE, SE, SW) — для рендера в режиме bbox.
+        if lat is not None:
+            b = det.box
+            corners_px = [(b.x1, b.y1), (b.x2, b.y1), (b.x2, b.y2), (b.x1, b.y2)]
+            box_geo: list[list[float]] = []
+            for px, py in corners_px:
+                plat, plng = pixel_to_gps(px, py, ctx)
+                if plat is None:
+                    box_geo = []
+                    break
+                box_geo.append([plat, plng])
+            if box_geo:
+                det.box_geo = box_geo
     return detections
 
 
