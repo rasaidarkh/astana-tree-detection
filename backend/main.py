@@ -21,22 +21,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from pydantic import BaseModel, Field
+
 from .export import to_csv, to_geojson, to_standalone_html
 from .geo import GeoContext, annotate_detections, build_context, load_geotiff_meta
+from .map_capture import capture_bbox, save_capture
 from .models import ModelRegistry
 from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
 from .models.ensemble_adapter import EnsembleAdapter
 from .models.yolo_adapter import YOLOAdapter
 from .schemas import (
+    Corners2,
     GeoMode,
     GeoParams,
     HistoryEntry,
     ImageMeta,
+    LatLng,
     ModelKind,
     PredictRequest,
     PredictResult,
 )
+
+
+class CaptureFromMapRequest(BaseModel):
+    nw: LatLng
+    se: LatLng
+    zoom: int = Field(18, ge=1, le=19)
 
 # ============ Setup ============
 
@@ -153,6 +164,50 @@ async def upload_image(file: UploadFile = File(...)):
     _meta[image_id] = meta
     log.info("Uploaded %s → %s (%dx%d, %s)", file.filename, saved_path.name, meta.width, meta.height,
              "GeoTIFF" if meta.is_geotiff else "regular")
+    return meta
+
+
+@app.post("/api/capture_from_map", response_model=ImageMeta)
+def capture_from_map(req: CaptureFromMapRequest):
+    """Скачивает Esri-тайлы для bbox, склеивает и сохраняет как обычный upload.
+    Возвращает ImageMeta — клиент дальше идёт по обычному /api/predict."""
+    try:
+        result = capture_bbox(
+            nw_lat=req.nw.lat,
+            nw_lng=req.nw.lng,
+            se_lat=req.se.lat,
+            se_lng=req.se.lng,
+            zoom=req.zoom,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        log.exception("capture_bbox failed")
+        raise HTTPException(502, f"Tile fetch failed: {e}")
+
+    image_id = uuid.uuid4().hex[:12]
+    out_path = UPLOADS / f"{image_id}.png"
+    save_capture(result, out_path)
+    size_bytes = out_path.stat().st_size
+    w, h = result.image.size
+
+    meta = ImageMeta(
+        image_id=image_id,
+        filename=f"map_capture_z{req.zoom}.png",
+        width=w,
+        height=h,
+        size_bytes=size_bytes,
+        is_geotiff=False,
+        bounds=Corners2(
+            nw=LatLng(lat=result.nw_lat, lng=result.nw_lng),
+            se=LatLng(lat=result.se_lat, lng=result.se_lng),
+        ),
+    )
+    _meta[image_id] = meta
+    log.info(
+        "Captured from map: bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %dx%d (%d bytes)",
+        req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom, w, h, size_bytes,
+    )
     return meta
 
 
