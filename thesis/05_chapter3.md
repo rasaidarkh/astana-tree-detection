@@ -211,11 +211,21 @@ Two points are worth emphasising. First, the obtained YOLO v1 result is **in lin
 
 ## 3.7 Integrated pipeline
 
-### 3.7.1 End-to-end demonstration
+### 3.7.1 Production configuration
 
-The trained models were integrated into the FastAPI backend and the React frontend described in Chapter 2. The end-to-end pipeline accepts an image (uploaded or captured from the map), runs the selected model with the chosen confidence threshold, converts the resulting detections to geographic coordinates and renders the output on a Leaflet map alongside a statistics panel.
+The trained YOLO and DeepForest checkpoints were integrated into the FastAPI backend and the React frontend through the adapter interface of Chapter 2. The YOLO branch loads the version-2-finetune weights from `weights/yolo_satellite.pt` (a copy of `runs/segment/astana_tiled_x_v2_finetune/weights/best.pt`, MD5 `f88d0d3dc6d1609e17c7670639e38b24`); the DeepForest branch falls back to the public `weecology/deepforest-tree` weights when the optional fine-tuned `weights/deepforest_astana.pl` file is absent, so the system remains operational on machines that do not have the proprietary checkpoint.
 
-A typical interactive session proceeds as follows: the user selects a 1 km × 1 km area on the map at zoom 18, clicks **Capture from map**, and the backend stitches the ESRI tiles within approximately two seconds. The user then selects the **Ensemble (YOLO + DeepForest)** model, sets the confidence threshold to 0.30 and clicks **Detect**. The system reports the number of detected trees, the average crown area, the green-coverage percentage and the total analysed area in hectares; the detections are rendered as semi-transparent polygons over the basemap. The full end-to-end response time for a 1 km × 1 km capture at zoom 18 (approximately 3 000 × 3 000 pixels, requiring 25 tiled inference passes) is approximately **18 seconds** on the laptop GPU — comfortably below the 30-second budget set by the requirements of Chapter 1.
+All inference results are persisted in the SQLite database described in Section 2.9. A re-start of the backend therefore preserves every snapshot, every inference run and every individual detection ever produced by the system, which is essential for the aggregate **city-map view** documented below.
+
+### 3.7.2 End-to-end demonstration
+
+A typical interactive session proceeds as follows: the user selects a 1 km × 1 km area on the basemap at zoom 18, clicks *Capture from map*, and the backend stitches the ESRI tiles within approximately two seconds. The user then selects one of the three available models (YOLO, DeepForest, Ensemble), sets the confidence threshold (the default value is 0.25) and clicks *Run detection*. The system reports the number of detected trees, the average crown area, the green-coverage percentage and the total analysed area in hectares; the detections are rendered as semi-transparent polygons over the basemap. The full end-to-end response time for a 1 km × 1 km capture at zoom 18 (approximately 3 000 × 3 000 pixels, requiring 25 tiled inference passes) is approximately **18 seconds** on the laptop GPU — comfortably below the 30-second budget set by the requirements of Chapter 1.
+
+### 3.7.3 The city-map view as principal deliverable
+
+Beyond the per-image workflow described above, the application exposes a *city-map view* that visualises every detection of every snapshot ever processed by the system on a single Leaflet layer. Internally the view issues a single `GET /api/detections` request, which the backend translates into a single SQL query over the `detections` table joined with the `snapshots` table for the geographic bounds. The frontend then clusters the result at low zoom levels (using the same Leaflet cluster-marker plugin as standard GIS tools) and renders individual detections at high zoom levels.
+
+The city-map view is the principal demonstration deliverable of the application. A municipal employee can use it as the canonical inventory of Astana trees produced by the system: it grows organically as each new district is processed by the *Capture from map* flow, supports geographic filtering by drawing a sub-rectangle on the map, supports model and confidence filtering through the side panel, and supports per-snapshot deletion through a cascading database operation. The cap of 50 000 detections per request is a safety measure against accidental browser crashes; with the average density of approximately 70 trees per processed tile observed in Section 3.2, this cap is sufficient for an inventory of approximately 700 captured snapshots — well in excess of what the system is expected to handle in the present prototype scope.
 
 ### 3.7.2 Export formats
 
@@ -270,9 +280,7 @@ The current implementation has a number of known limitations.
 
 5. **No SAM-vs-fine-tuned-mask ablation.** The current implementation includes the SAM mask-refinement branch as a qualitative demonstration only. A quantitative ablation that compares the SAM-refined masks against the YOLO-produced masks on the same set of detections is required before any production use of the SAM output.
 
-6. **In-memory job store.** The backend keeps detection results in a Python dictionary that is lost on every process restart. A SQLite or Postgres backing store with a foreign-key relationship to the uploaded image is a straightforward extension and is planned before any deployment to *Zelenstroy*.
-
-7. **Single-laptop deployment only.** The current system was deployed and tested only on the development laptop. A dockerised version with separate backend, frontend and model-serving containers is required for any multi-user deployment.
+6. **Single-laptop deployment only.** The current system was deployed and tested only on the development laptop. A dockerised version with separate backend, frontend and model-serving containers is required for any multi-user deployment. The SQLite database described in Section 2.9 would have to be promoted to PostgreSQL for any deployment with concurrent writers.
 
 Despite these limitations, the system as currently deployed already meets all six functional requirements of Section 1.6 and produces results that are qualitatively informative for the *Zelenstroy* end user.
 

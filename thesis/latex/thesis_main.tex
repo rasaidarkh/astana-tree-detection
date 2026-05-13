@@ -1,0 +1,163 @@
+% Auto-generated driver for the AITU memoir thesis template.
+% Built by thesis/build_latex.py from the per-chapter Markdown sources.
+
+\RequirePackage[l2tabu]{nag}
+\let\ordinal\relax
+\documentclass[a4paper,12pt,oneside,openbib,oldfontcommands]{memoir}
+
+\usepackage{datetime}
+\usepackage{ifpdf}
+\ifpdf
+\pdfinfo{
+   /Author (Totin A., Aidarkhanov R., Sharipov B.)
+   /Title (Tree Detection for Astana)
+   /Keywords (Astana; Tree Detection; YOLO; DeepForest; SAM; Deep Learning; Remote Sensing)
+}
+\fi
+
+\usepackage{microtype}
+\sloppy
+
+% A4 page layout (memoir-style, matches AITU template)
+\settrimmedsize{297mm}{210mm}{*}
+\setlength{\trimtop}{0pt}
+\setlength{\trimedge}{\stockwidth}
+\addtolength{\trimedge}{-\paperwidth}
+\settypeblocksize{634pt}{448.13pt}{*}
+\setulmargins{4cm}{*}{*}
+\setlrmargins{*}{*}{1.5}
+\setmarginnotes{17pt}{51pt}{\onelineskip}
+\setheadfoot{\onelineskip}{2\onelineskip}
+\setheaderspaces{*}{2\onelineskip}{*}
+\checkandfixthelayout
+
+\frenchspacing
+\OnehalfSpacing
+
+\setsecnumdepth{subsection}
+\maxsecnumdepth{subsubsection}
+
+\makepagestyle{myvf}
+\makeoddfoot{myvf}{}{\thepage}{}
+\makeevenfoot{myvf}{}{\thepage}{}
+\makeevenhead{myvf}{\small\textsc{\leftmark}}{}{}
+\makeoddhead{myvf}{}{}{\small\textsc{\rightmark}}
+\pagestyle{myvf}
+
+\newcommand{\clearemptydoublepage}{\newpage{\thispagestyle{empty}\cleardoublepage}}
+
+% Use fontspec (xelatex) with a Unicode font that covers Latin + Cyrillic
+% (including Kazakh-specific glyphs ғ ө ұ ң қ һ і) instead of T2A/T1 which
+% miss several Kazakh letters.
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+% Hyphenation in three languages via babel (no character mapping done by babel
+% when fontspec is in use).
+\usepackage[main=english, russian]{babel}
+\babelprovide[import]{kazakh}
+
+\usepackage{import}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{newlfont}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{url}
+\usepackage[colorlinks=true,allcolors=black]{hyperref}
+\usepackage{memhfixc}
+\usepackage{enumerate}
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{calc}
+\usepackage{etoolbox}
+
+% Tighter list spacing (pandoc-friendly defaults are too loose)
+\setlist[itemize]{itemsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=2pt, topsep=4pt}
+
+% Pandoc helpers
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\providecommand{\passthrough}[1]{#1}
+% Pandoc emits `{\def\LTcaptype{none} ... \end{longtable}}` to suppress
+% auto-captioning of longtables. The trick requires a `none` counter to exist;
+% memoir doesn't define one, so we create a dummy.
+\newcounter{none}
+% Code-block environment expected by pandoc's LaTeX output (Shaded wraps
+% Highlighting; we define a minimal shaded background).
+\usepackage{framed}
+\usepackage{fancyvrb}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}, fontsize=\small}
+% Pandoc highlight tokens (NormalTok, KeywordTok, etc.) — define as no-ops
+% so syntax-highlighted code compiles even without a colour scheme.
+\providecommand{\NormalTok}[1]{#1}
+\providecommand{\KeywordTok}[1]{\textbf{#1}}
+\providecommand{\DataTypeTok}[1]{#1}
+\providecommand{\DecValTok}[1]{#1}
+\providecommand{\StringTok}[1]{#1}
+\providecommand{\CommentTok}[1]{\textit{#1}}
+\providecommand{\OperatorTok}[1]{#1}
+\providecommand{\AttributeTok}[1]{#1}
+\providecommand{\FunctionTok}[1]{#1}
+\providecommand{\ControlFlowTok}[1]{\textbf{#1}}
+\providecommand{\BuiltInTok}[1]{#1}
+\providecommand{\OtherTok}[1]{#1}
+\providecommand{\VariableTok}[1]{#1}
+\providecommand{\SpecialCharTok}[1]{#1}
+\providecommand{\PreprocessorTok}[1]{#1}
+\providecommand{\WarningTok}[1]{\textbf{#1}}
+\providecommand{\AlertTok}[1]{\textbf{#1}}
+\providecommand{\ErrorTok}[1]{\textbf{#1}}
+\providecommand{\InformationTok}[1]{#1}
+\providecommand{\AnnotationTok}[1]{\textit{#1}}
+\providecommand{\ConstantTok}[1]{#1}
+\providecommand{\FloatTok}[1]{#1}
+\providecommand{\BaseNTok}[1]{#1}
+\providecommand{\CharTok}[1]{#1}
+\providecommand{\SpecialStringTok}[1]{#1}
+\providecommand{\VerbatimStringTok}[1]{#1}
+\providecommand{\ImportTok}[1]{#1}
+\providecommand{\DocumentationTok}[1]{#1}
+\providecommand{\CommentVarTok}[1]{#1}
+\providecommand{\ExtensionTok}[1]{#1}
+\providecommand{\RegionMarkerTok}[1]{#1}
+
+\widowpenalty=1000
+\clubpenalty=1000
+
+\begin{document}
+
+\frontmatter
+\pagenumbering{roman}
+
+\input{frontmatter/title}
+
+\input{frontmatter/abstract}
+
+\renewcommand{\contentsname}{Table of Contents}
+\maxtocdepth{subsection}
+\tableofcontents*
+\clearpage
+
+\input{frontmatter/intro.tex}
+
+\mainmatter
+
+\import{chapters/chapter01/}{introduction.tex}
+
+\import{chapters/chapter02/}{main.tex}
+
+\import{chapters/chapter03/}{conclusion.tex}
+
+\input{frontmatter/concl.tex}
+
+\backmatter
+\input{chapters/appendices/references.tex}
+
+\end{document}

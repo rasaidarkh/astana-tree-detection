@@ -60,6 +60,17 @@ thesis/thesis.docx
 thesis/thesis.html
 thesis/thesis.pdf
 thesis/thesis_full.md
+thesis/thesis_latex.pdf
+thesis/latex/thesis_main.pdf
+thesis/latex/*.log
+thesis/latex/*.aux
+thesis/latex/*.bbl
+thesis/latex/*.blg
+thesis/latex/*.toc
+thesis/latex/*.lof
+thesis/latex/*.lot
+thesis/latex/*.out
+thesis/latex/*.synctex.gz
 _extract.py
 "критериии и примеры"/
 

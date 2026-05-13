@@ -24,7 +24,8 @@ The technology stack and the responsibilities of each component are summarised i
 | Component | Technology | Responsibility |
 |---|---|---|
 | Frontend | React 18 (UMD), Leaflet, Babel-standalone | Drag-and-drop upload, interactive map, statistics, export buttons |
-| Backend | FastAPI, Pydantic, Uvicorn | REST API, request validation, lazy model loading, in-memory job store |
+| Backend | FastAPI, Pydantic, Uvicorn | REST API, request validation, lazy model loading |
+| Persistence | SQLite (`storage/app.db`) | Snapshots, runs, detections (3 tables, cascading FK) |
 | Geo | rasterio, NumPy, Shapely | GeoTIFF parsing, pixel-to-geo conversion, polygon clipping |
 | Model — YOLO | Ultralytics YOLO 8.4, PyTorch 2.5 + CUDA 12.1 | Instance segmentation of tree crowns |
 | Model — DeepForest | DeepForest 1.5 (RetinaNet) | Bounding-box detection of tree crowns |
@@ -196,7 +197,7 @@ The choice of mode is recorded in the response metadata so that downstream users
 
 In addition to the pure coordinate conversion, the geographic module estimates the **pixel size in metres** at the centre of the image, using the Haversine formula on the image diagonal. The estimated pixel size is propagated through to all downstream statistics — average crown area in square metres, total green coverage in hectares, total tree count per hectare — and is reported alongside the inventory.
 
-## 2.9 Result aggregation and export
+## 2.9 Result aggregation, persistent storage and export
 
 After the geographic conversion the system produces a final `PredictResult` object that contains:
 
@@ -205,17 +206,74 @@ After the geographic conversion the system produces a final `PredictResult` obje
 - The total time taken by the inference, in milliseconds, for performance benchmarking.
 - A `stats` block with the tree count, the mean/min/max confidence, the average crown area, the green-coverage percentage and (when pixel size is known) the analysed area in hectares.
 
-The result is stored in an in-memory job dictionary keyed by job identifier; the prototype does not persist results across restarts, which is appropriate for the present demonstration scope but would have to be replaced by an SQLite or Postgres backing store for production deployment.
+**Persistent storage.** All results are written to a local SQLite database at `storage/app.db` rather than kept in a Python process dictionary. The schema consists of three tables linked by foreign keys with `ON DELETE CASCADE`:
 
-Three exporters are provided:
+- `snapshots` — one row per uploaded or captured image, with file path, geographic bounds and capture metadata;
+- `runs` — one row per model invocation on a snapshot, with model name, confidence threshold, total inference time and the chosen geographic mode;
+- `detections` — one row per detected tree, with the bounding box, polygon mask, confidence, crown area and geographic coordinates.
+
+The persistence layer is implemented in `backend/db.py` and is used by every read and write path in the backend. The schema choice has three practical consequences. First, restarting the FastAPI process loses no detections — a critical property for any tool that is expected to be operated by a non-developer end user. Second, the **city-map view** (described in Section 2.10 below) can query the database for *every detection ever produced* with a single SQL query and visualise them all on a single Leaflet layer; this is the principal aggregate-inspection workflow of the application. Third, snapshot deletion is implemented via a single `DELETE FROM snapshots WHERE id = ?` statement; the cascading foreign keys then remove all dependent runs, detections and the source image file from disk.
+
+**Export.** Three exporters are provided, all sharing a common implementation in `backend/export.py` and reachable via `POST /api/export/{job_id}/{format}`:
 
 - **GeoJSON** — a FeatureCollection in which each detection is a single Feature whose geometry is a Polygon (the crown mask in WGS-84) and whose properties contain the confidence, the crown area and the bounding box. The GeoJSON file can be loaded directly into QGIS, ArcGIS or any compatible GIS tool.
-- **CSV** — a flat table with one row per detection and columns for the index, the centroid coordinates, the bounding box, the confidence and the area. The CSV is intended for spreadsheet-based inspection and for direct ingestion by Zelenstroy's existing reporting workflow.
+- **CSV** — a flat table with one row per detection and columns for the index, the centroid coordinates, the bounding box, the confidence and the area. The CSV is intended for spreadsheet-based inspection and for direct ingestion by *Zelenstroy*'s existing reporting workflow.
 - **Standalone HTML** — a single self-contained HTML file with a Leaflet map embedded inline, the OpenStreetMap and ESRI World Imagery basemaps loaded from CDN, and the detections rendered as a vector layer with on-hover popups. The file is intended for sharing the inventory with a non-technical audience that does not have access to a GIS tool.
 
-The three export endpoints share a common implementation in `backend/export.py` and are reachable via `POST /api/export/{job_id}/{format}`.
+## 2.10 Frontend application and user workflows
 
-## 2.10 Summary
+The frontend is a single-page React 18 application served by FastAPI at the root URL, implemented in three files (`frontend/index.html`, `frontend/app.jsx`, `frontend/styles.css`) and a small API client (`frontend/api.js`). The application deliberately avoids a build step: React, Babel-standalone and Leaflet are loaded directly from a CDN as UMD bundles. The motivation for this choice is operational simplicity — a municipal employee can run the system without Node.js, npm or any other JavaScript toolchain installed on the host.
+
+### 2.10.1 Two view modes
+
+The application exposes two main views, switchable in the sidebar.
+
+**Single image view** is the workflow for a single satellite image. The user uploads a PNG, JPG or GeoTIFF (or captures one interactively from the map), selects a detection model and a confidence threshold, clicks *Run detection* and watches a progress indicator while the backend performs inference. The result is then visualised in three coordinated panels: a Leaflet map with the image overlaid as a semi-transparent layer and the detections rendered on top; a statistics panel showing the tree count, the green-coverage percentage, the mean confidence and the analysed area in hectares; and a confidence-filter slider that interactively hides or shows low-confidence detections without re-running the model.
+
+**City-map view** is the aggregate-inspection mode. It queries the persistent database for the full collection of all snapshots ever processed by the system and renders every detected tree on a single Leaflet layer (with a safety cap of 50 000 detections to protect the browser). A side panel lists each snapshot with a per-snapshot summary (number of runs, total trees, last-used model, geographic centre) and a deletion action that cascades through the database and the disk. This view is the principal demonstration deliverable of the project: a single map of Astana that grows tree-by-tree as the user processes new districts, building up an organic city-wide inventory that the user can browse, query, and export at any time.
+
+### 2.10.2 Geographic configuration and map capture
+
+In both views the user controls the geographic mode of the active snapshot through a dedicated panel. The four modes of Section 2.8 (None, two-corner, four-corner, GeoTIFF) are exposed as a segmented switch, and the user can enter corner coordinates either by typing numbers into form fields or by dragging draggable NW/SE markers directly on the map until the image overlay aligns visually with the basemap. Crucially, when the user moves the corner markers, the image overlay is rebound to the new bounds in real time, so the snapshot, the markers and the basemap stay coupled while the user finds the correct fit. The coordinates are written back to the database on the next inference run and persist across page reloads.
+
+The `Capture from map` flow goes one step further. The user draws a rectangle on the basemap with the built-in Leaflet rectangle tool, picks a zoom level (typically 18 for street-level detail or 19 for the highest available resolution in central Astana) and submits the selection. The backend stitches the ESRI World Imagery tiles for the requested bounding box as described in Section 2.2 and returns a regular image snapshot with the geographic bounds embedded; the snapshot is then immediately available for inference without any further input from the user. This flow makes the system usable on areas of the city for which the user has neither a pre-downloaded GeoTIFF nor a high-resolution screenshot — a common situation for new districts under active construction, where archival aerial imagery does not yet exist.
+
+### 2.10.3 Detection display modes
+
+Every detection produced by the backend carries three independent geometric representations: a centre point (latitude / longitude of the bounding-box centroid), an axis-aligned bounding box (four corners in pixel space, lifted into geographic space through the active geo-conversion mode), and a polygon mask (for YOLO and SAM-refined branches, a closed sequence of vertices following the projected crown outline). The frontend exposes these as three mutually-exclusive rendering modes through a segmented control:
+
+- **Point** — each detection is a small circle at its centroid. Useful for inspecting density and overall coverage on coarse zoom levels.
+- **Box** — each detection is rendered as a `L.polygon` formed by the four geographic corners of its bounding box. The four-corner representation is important in `corners_4` mode, where the image is rotated relative to north and a rectangle in pixel space becomes a non-axis-aligned quadrilateral in geographic space.
+- **Polygon** — each detection is rendered as a `L.polygon` formed by the projected crown mask. This is the default and the principal visualisation deliverable of the project.
+
+The three modes operate on the same underlying detection list; switching between them is instantaneous and does not require a backend round-trip. When a particular detection lacks data for the currently-selected mode (for example, a DeepForest detection that has no polygon mask because DeepForest is a bounding-box-only model), the frontend falls back automatically to point rendering, so the detection never silently disappears from the map.
+
+### 2.10.4 REST endpoints
+
+The backend exposes a complete REST API documented automatically by FastAPI's built-in OpenAPI integration at `/docs`. Table 2.3 summarises the endpoints used by the frontend and by the export workflows.
+
+**Table 2.3 — REST endpoints exposed by the backend.**
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/status` | Health check and aggregate counts (snapshots, runs, total trees) |
+| `POST` | `/api/upload` | Upload a satellite image; returns an `ImageMeta` with assigned id |
+| `POST` | `/api/capture_from_map` | Stitch ESRI tiles for `(nw, se, zoom)` and return an `ImageMeta` |
+| `GET` | `/api/image/{id}` | Serve the raw image PNG |
+| `GET` | `/api/image/{id}/meta` | Image metadata |
+| `POST` | `/api/predict` | Run inference: `{image_id, model, confidence, geo}` |
+| `GET` | `/api/result/{job_id}` | Reload a past prediction result |
+| `GET` | `/api/snapshots` | List snapshots with per-snapshot aggregates |
+| `GET` | `/api/detections` | Aggregate query with optional bbox / model / min-confidence filters |
+| `GET` | `/api/aggregate/stats` | Database-wide summary (counts and averages) |
+| `DELETE` | `/api/snapshots/{id}` | Cascade-delete a snapshot, its runs, its detections and its file |
+| `DELETE` | `/api/runs/{job_id}` | Delete a single inference run |
+| `POST` | `/api/export/{job_id}/{format}` | Export as GeoJSON / CSV / standalone HTML |
+| `GET` | `/api/history` | Most recent N runs across all snapshots |
+
+The endpoints are intentionally fine-grained: the frontend composes complex views from several small JSON responses rather than from a single monolithic dump, which makes the city-map view efficient even with tens of thousands of detections in the database.
+
+## 2.11 Summary
 
 This chapter has presented the methodological foundation of the system: a layered architecture in which a thin presentation layer and a stateless REST backend are connected to a pluggable set of three deep-learning model adapters. The three adapters implement complementary detection paradigms — instance segmentation with YOLOv8-seg, bounding-box detection with DeepForest, zero-shot mask refinement with SAM — and are combined through a Weighted-Box-Fusion ensemble. Tiled inference allows the system to scale to satellite images of arbitrary resolution; four-mode geographic conversion supports inputs ranging from raw screenshots to fully-georeferenced GeoTIFFs; and three exporters deliver the resulting inventory in formats suitable for GIS specialists, spreadsheet users and non-technical viewers. The next chapter reports the experimental evaluation of the trained models and the integrated system on the Astana dataset.
 
