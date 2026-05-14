@@ -108,7 +108,7 @@ def ensure_styles() -> None:
 
 
 def combine_markdown() -> tuple[Path, str]:
-    """Read 01..07 .md, replace citations, write thesis_full.md."""
+    """Read 00b/00c + 01..07 .md, replace citations, write thesis_full.md."""
     files = sorted(
         p for p in HERE.iterdir()
         if (p.suffix == ".md"

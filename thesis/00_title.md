@@ -1,5 +1,5 @@
 ---
-title: "Tree Detection for Astana — Deep Learning for Urban Green Space Mapping"
+title: "Development of a Deep Learning Model for Automated Tree Recognition and Green Space Mapping in Urban Environments"
 author:
   - Anuar Totin
   - Rasul Aidarkhanov
@@ -26,8 +26,8 @@ ASTANA IT UNIVERSITY}
 \vspace{1cm}
 
 \textbf{Topic:}\\
-\Large Tree Detection for Astana —\\
-Deep Learning for Urban Green Space Mapping
+\Large Development of a Deep Learning Model for Automated\\
+Tree Recognition and Green Space Mapping in Urban Environments
 
 \vspace{2cm}
 

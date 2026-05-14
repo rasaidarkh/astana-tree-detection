@@ -216,6 +216,14 @@ def make_chapter_tex(md_path: Path) -> str:
 
 # ============ References ============
 
+def make_declaration_tex(md: str) -> str:
+    return md_to_latex(md)
+
+
+def make_definitions_tex(md: str) -> str:
+    return md_to_latex(md)
+
+
 def make_references_tex(md: str) -> str:
     """References from 07_references.md. We do NOT use bibtex — we just emit
     a 'References' chapter with numbered entries."""
@@ -373,6 +381,10 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 
 \input{frontmatter/abstract}
 
+\input{frontmatter/declaration}
+
+\input{frontmatter/definitions}
+
 \renewcommand{\contentsname}{Table of Contents}
 \maxtocdepth{subsection}
 \tableofcontents*
@@ -406,7 +418,7 @@ def main() -> None:
 
     print("=== Reading Markdown sources ===")
     md = {p.stem: p.read_text(encoding="utf-8")
-          for p in HERE.glob("0?_*.md")}
+          for p in sorted(HERE.glob("0?_*.md")) + sorted(HERE.glob("0?b_*.md")) + sorted(HERE.glob("0?c_*.md"))}
     for k in sorted(md):
         print(f"  {k}: {len(md[k]):,} chars")
 
@@ -414,6 +426,10 @@ def main() -> None:
     write(LATEX / "frontmatter" / "title.tex", make_title_tex())
     write(LATEX / "frontmatter" / "abstract.tex",
           make_abstract_tex(md["01_abstract"]))
+    write(LATEX / "frontmatter" / "declaration.tex",
+          make_declaration_tex(md["01b_declaration"]))
+    write(LATEX / "frontmatter" / "definitions.tex",
+          make_definitions_tex(md["01c_definitions"]))
     write(LATEX / "frontmatter" / "intro.tex",
           make_intro_tex(md["02_intro"]))
     write(LATEX / "chapters" / "chapter01" / "introduction.tex",
