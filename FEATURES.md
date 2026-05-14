@@ -13,7 +13,7 @@
 |---|---|
 | **Rasul Aidarkhanov** | YOLOv8-seg pipeline, backend wiring, frontend, общая product-логика |
 | **Anuar Totin** | SAM integration (in progress). DeepForest — его существующая ветка `Added-deepforest_fine_tuned`, веса .pl у него локально |
-| **Berik Sharipov** | «Ещё одна модель» (тип TBD) |
+| **Berik Sharipov** | Mask R-CNN (in progress, ветка `feat/maskrcnn`) — instance segmentation as a two-stage baseline vs YOLO |
 | **Supervisor**: Syndar Satbayev | |
 
 Свежая база для всех: ветка **`yolov8-work`** на `origin` — отбраничивайтесь оттуда, не от `main`.
@@ -143,7 +143,7 @@
 
 - **DeepForest fine-tuned .pl** — отсутствует в репо (~600 MB, у Anuar локально).
 - **SAM** — Anuar пишет.
-- **Berik's model** — TBD.
+- **Berik's model** — Mask R-CNN (torchvision `maskrcnn_resnet50_fpn_v2`), in progress on `feat/maskrcnn`. Trains on `annotations_merged` COCO. See `docs/maskrcnn.md`.
 - **Bulk upload папки** GeoTIFF — UX заплатка, сейчас можно по одной.
 - **Compare mode** — две даты, diff деревьев.
 - **Click на snapshot в city list → load в single view** — навигация-удобство.

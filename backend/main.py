@@ -32,6 +32,7 @@ from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
 from .models.deepforest_sam2_adapter import DeepForestSAM2Adapter
 from .models.ensemble_adapter import EnsembleAdapter
+from .models.maskrcnn_adapter import MaskRCNNAdapter
 from .models.yolo_adapter import YOLOAdapter
 from .schemas import (
     Corners2,
@@ -121,6 +122,16 @@ def _load_models() -> None:
     )
     registry.register(df_sam2)
     log.info("DeepForest+SAM2 adapter registered (sam2_local=%s)", sam2_ckpt.exists())
+
+    mrcnn_ckpt = WEIGHTS / "maskrcnn_astana.pt"
+    mrcnn = MaskRCNNAdapter(
+        checkpoint_path=str(mrcnn_ckpt) if mrcnn_ckpt.exists() else None,
+    )
+    registry.register(mrcnn)
+    log.info(
+        "Mask R-CNN adapter registered (checkpoint=%s)",
+        mrcnn_ckpt if mrcnn_ckpt.exists() else "torchvision pretrained",
+    )
 
 
 _load_models()
