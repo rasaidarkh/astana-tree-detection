@@ -1,6 +1,6 @@
 # Chapter 2. Methodology
 
-This chapter describes the technical design of the system. Section 2.1 gives a top-level view of the architecture and the data flow from the raw satellite image to the final inventory. Sections 2.2 through 2.6 detail the three detection models proposed in the literature gap of Chapter 1 — YOLOv8-seg, DeepForest, and SAM — and the ensemble strategy that combines them. Sections 2.7 and 2.8 cover the geographic conversion of pixel coordinates to longitude / latitude and the export of the inventory in formats consumable by GIS specialists. Implementation choices and trade-offs are justified throughout.
+This chapter describes the technical design of the system. Section 2.1 gives a top-level view of the architecture and the data flow from the raw satellite image to the final inventory. Sections 2.2 through 2.7 detail the four detection models proposed in the literature gap of Chapter 1 — YOLOv8-seg, Mask R-CNN, DeepForest, and SAM 2 — and the ensemble strategy of Section 2.8 that combines their detector outputs. Sections 2.9 and 2.10 cover the geographic conversion of pixel coordinates to longitude / latitude and the export of the inventory in formats consumable by GIS specialists. Implementation choices and trade-offs are justified throughout.
 
 ## 2.1 System architecture overview
 
@@ -29,12 +29,15 @@ The technology stack and the responsibilities of each component are summarised i
 | Geo | rasterio, NumPy, Shapely | GeoTIFF parsing, pixel-to-geo conversion, polygon clipping |
 | Model — YOLO | Ultralytics YOLO 8.4, PyTorch 2.5 + CUDA 12.1 | Instance segmentation of tree crowns |
 | Model — DeepForest | DeepForest 1.5 (RetinaNet) | Bounding-box detection of tree crowns |
-| Model — SAM | segment-anything (ViT-B) | Zero-shot mask refinement of DeepForest boxes |
+| Model — Mask R-CNN | Detectron2 / torchvision (ResNet-50 + FPN) | Instance segmentation of tree crowns (architectural alternative to YOLO) |
+| Model — SAM 2 | segment-anything-2 (Hiera-Base) | Zero-shot mask refinement of DeepForest boxes |
 | Ensemble | ensemble-boxes (Weighted Box Fusion) | Score-weighted combination of YOLO and DeepForest predictions |
 | Map capture | urllib + Pillow (PIL) | ESRI World Imagery tile download, stitching, crop to bbox |
 | Export | Custom serialisers + Leaflet HTML template | GeoJSON / CSV / standalone HTML output |
 
 The complete source tree of the prototype is organised in three top-level directories — `backend/`, `frontend/` and `ml/` — and is approximately 6 000 lines of code. The training and dataset-preparation scripts in `ml/` are independent from the backend and can be run on a separate machine.
+
+> **Figure 2.1 (placeholder).** *High-level system architecture: a Leaflet+React frontend (top), a FastAPI REST backend (middle), and four pluggable model adapters (YOLOv8-seg, Mask R-CNN, DeepForest, SAM 2) backed by an SQLite store and an in-browser ESRI World Imagery tile-capture component. Place the source diagram in `figures/architecture.png` (e.g. exported from draw.io or Excalidraw) and replace this placeholder block with a regular Markdown image link.*
 
 ## 2.2 Image input and pre-processing
 
@@ -120,21 +123,85 @@ The training was started with a maximum of 500 epochs and was allowed to early-s
 
 The version-2 run, currently in progress on the expanded dataset, follows the same hyper-parameters but with the v1 best checkpoint as the starting point in order to retain the learned crown priors and accelerate convergence.
 
-## 2.5 DeepForest branch
+### 2.4.5 Loss function
+
+The training objective of YOLOv8-seg is the weighted sum of four components — a bounding-box regression loss, a per-class classification loss, a Distribution Focal Loss for the discrete-bin regression head, and a per-pixel mask loss — assembled into a single scalar objective:
+
+$$
+\mathcal{L} \;=\; \lambda_{\text{box}}\,\mathcal{L}_{\text{CIoU}} \;+\; \lambda_{\text{cls}}\,\mathcal{L}_{\text{BCE-cls}} \;+\; \lambda_{\text{dfl}}\,\mathcal{L}_{\text{DFL}} \;+\; \lambda_{\text{seg}}\,\mathcal{L}_{\text{BCE-mask}}
+$$
+
+The bounding-box term is the **Complete IoU loss**, an extension of the plain IoU loss that also penalises centre-point distance and aspect-ratio mismatch:
+
+$$
+\mathcal{L}_{\text{CIoU}} \;=\; 1 \;-\; \mathrm{IoU} \;+\; \frac{\rho^{2}(b, b^{\,gt})}{c^{2}} \;+\; \alpha\,v
+$$
+
+where $\rho$ is the Euclidean distance between predicted and ground-truth box centres, $c$ is the diagonal length of the smallest box that encloses both, $v$ is a measure of aspect-ratio inconsistency, and $\alpha$ is a trade-off coefficient. The classification and mask losses are standard per-element binary cross-entropy. The loss-weight defaults used in the present project are the Ultralytics-standard $\lambda_{\text{box}} = 7.5$, $\lambda_{\text{cls}} = 0.5$, $\lambda_{\text{dfl}} = 1.5$ and an implicit $\lambda_{\text{seg}} = 1.0$ from Table 2.2, retained as-is to maintain comparability with the COCO-pretrained checkpoint.
+
+## 2.5 Mask R-CNN branch
+
+> *This section is authored and to be completed by Berik Sharipov. The skeleton below is provided as a structural placeholder by the team; final wording, hyper-parameters and bibliographic anchors are Berik's responsibility.*
 
 ### 2.5.1 Architecture
 
+Mask R-CNN [@MaskRCNN2017] is a two-stage instance-segmentation network that extends the Faster R-CNN [@FasterRCNN2015] detector with an additional fully-convolutional mask head operating in parallel with the bounding-box regression head. Compared with the single-stage YOLOv8-seg of Section 2.4, the two-stage design relies on a Region Proposal Network (RPN) that first generates a small set of class-agnostic region proposals, which are then classified, regressed and segmented independently. This design typically achieves higher localisation quality at the cost of inference time.
+
+The variant adopted in the present work is the standard Mask R-CNN with a ResNet-50 backbone and an FPN neck, initialised from publicly-available COCO-pretrained weights and fine-tuned on the same Astana polygon dataset used for the YOLO branch (Section 2.4.3). The motivation for including this branch is methodological: it provides a like-for-like architectural comparison between a one-stage (YOLO) and a two-stage (Mask R-CNN) instance segmenter under identical training data and validation conditions, in line with the comparative analysis surveyed in Section 1.4.
+
+### 2.5.2 Training data and preparation
+
+The Mask R-CNN branch consumes the exact same Astana polygon dataset as the YOLOv8-seg branch (Section 2.4.3). The COCO-formatted annotations are loaded directly without re-conversion. Tile-level splits at 640 × 640 pixels are reused unchanged; this guarantees that any difference in measured performance between the two branches reflects a genuine architectural effect rather than a difference in the training data.
+
+### 2.5.3 Training procedure
+
+*[Berik to complete: framework choice (Detectron2 vs MMDetection vs torchvision-references), backbone, optimiser, learning-rate schedule, number of epochs, augmentation pipeline, mixed-precision usage and any class-imbalance handling.]*
+
+**Table 2.X — Training hyper-parameters for the Mask R-CNN run.**
+
+| Parameter | Value |
+|---|---|
+| Base model | *[Berik: e.g. `mask_rcnn_R_50_FPN_3x.pkl`]* |
+| Framework | *[Berik: Detectron2 / MMDetection / torchvision]* |
+| Input resolution | *[Berik]* |
+| Batch size | *[Berik]* |
+| Epochs | *[Berik]* |
+| Initial learning rate | *[Berik]* |
+| Optimiser | *[Berik]* |
+| Augmentation | *[Berik]* |
+| Mixed-precision (AMP) | *[Berik]* |
+
+### 2.5.4 Adapter integration
+
+The trained Mask R-CNN checkpoint is integrated into the FastAPI backend through the same adapter interface as the other branches (Section 2.1). The `MaskRCNNAdapter` class exposes the standard `predict(image_path, confidence) -> List[Detection]` method, internally performs the same sliding-window tiled inference as the YOLO branch (Section 2.3) and returns polygon masks extracted from the binary outputs through the same OpenCV contour-extraction routine. This uniform interface allows the Mask R-CNN branch to be used as a drop-in alternative to YOLO in both single-image and city-map workflows, and is a prerequisite for the like-for-like quantitative comparison reported in Chapter 3.
+
+> **Figure 2.X (placeholder).** *Berik: insert a final diagram of the Mask R-CNN architecture — two-stage backbone (ResNet-50 + FPN), Region Proposal Network and the parallel per-RoI classification, bounding-box regression and mask heads. Place the source image in `figures/maskrcnn_architecture.png` and replace this placeholder block with a regular Markdown image link.*
+
+\newpage
+
+## 2.6 DeepForest branch
+
+### 2.6.1 Architecture
+
 DeepForest [@DeepForest2019] is a tree-detection library built on top of a RetinaNet single-stage detector with a ResNet-50 backbone. RetinaNet was selected over two-stage architectures such as Faster R-CNN because of its better speed–accuracy trade-off on dense detection tasks, and over earlier YOLO versions because of its dedicated focal-loss formulation, which is particularly well-suited to the highly-imbalanced background-to-foreground ratio typical of dense forest scenes — a single satellite tile can easily contain dozens of small tree instances surrounded by hundreds of background patches.
+
+Formally, the focal-loss formulation [@RetinaNet2017] reweights the standard cross-entropy by a modulating factor that down-weights the contribution of well-classified examples:
+
+$$
+\mathcal{L}_{\text{focal}}(p_t) \;=\; -(1 - p_t)^{\gamma}\, \log(p_t)
+$$
+
+where $p_t$ is the predicted probability for the ground-truth class and $\gamma \geq 0$ is the focusing parameter (the RetinaNet default $\gamma = 2$ is retained by the DeepForest implementation). The $(1 - p_t)^{\gamma}$ factor approaches zero for easy-to-classify examples ($p_t \to 1$) and remains close to one for hard mis-classified examples ($p_t \to 0$), so the gradient is dominated by the difficult cases — exactly the property needed for a detector that sees orders of magnitude more background patches than foreground tree crowns.
 
 The model is shipped with two pre-trained weight sets. The first, generally referred to as the "tree" model and identified in the HuggingFace registry as `weecology/deepforest-tree`, was originally trained on hundreds of thousands of semi-supervised annotations derived from National Ecological Observatory Network (NEON) lidar data over forested sites in the United States. The second, the "bird" model, is irrelevant to the present work. The default model used in this project is the tree variant.
 
-### 2.5.2 Inference: patch-based tiled processing
+### 2.6.2 Inference: patch-based tiled processing
 
 DeepForest's recommended inference mode for a full satellite image is the `predict_tile()` method, which performs sliding-window patch-based inference on patches of a configurable size — by default 400 × 400 pixels — with a configurable overlap, typically 5%. Per-patch detections are merged with a Non-Maximum Suppression step internal to the library. The output is a pandas DataFrame with one row per detection, containing the columns `xmin`, `ymin`, `xmax`, `ymax`, `label` and `score`. The DeepForest adapter in this project wraps this method and translates the DataFrame into the same `Detection` dataclass that the YOLO adapter produces, so that the two branches are interchangeable downstream.
 
 The choice of a patch size of 400 (rather than the 640 used by the YOLO branch) reflects the network's training distribution: the NEON imagery on which DeepForest was originally trained has a ground sampling distance of approximately 10 cm per pixel, and the relative crown size in the pre-training data is best matched by the smaller patch.
 
-### 2.5.3 Fine-tuning on Astana data
+### 2.6.3 Fine-tuning on Astana data
 
 The pre-trained DeepForest model already performs reasonably well on Astana imagery — in early baseline experiments it detected approximately 67 % of visible trees out of the box, comparable to its reported behaviour on European urban scenes [@SofiaDeepForest2024]. To narrow the remaining domain gap a fine-tuning stage was performed by team member Anuar Totin on an **independent annotation set** maintained for the DeepForest branch (a separate corpus of Astana satellite tiles, annotated as bounding boxes rather than polygons, and held distinct from the YOLO polygon dataset described in Section 2.4). The motivation for the separate annotation set is twofold: first, DeepForest's RetinaNet head consumes bounding-box labels natively and benefits little from the polygon refinement that the YOLO branch requires; second, maintaining two independently-curated datasets reduces the risk of validation-set leakage between the two branches and gives a cleaner methodological story for the head-to-head comparisons of Chapter 3.
 
@@ -142,26 +209,39 @@ Fine-tuning is driven by the DeepForest `Trainer` interface, which is a thin wra
 
 The fine-tuned weights are stored on disk as a Lightning checkpoint and re-loaded by the adapter through `torch.load()` followed by a non-strict `load_state_dict()`. The adapter's behaviour is fully backwards-compatible: if the fine-tuned checkpoint is not present, the model falls back automatically to the public `weecology/deepforest-tree` weights, so the system remains usable on machines that do not have the proprietary checkpoint.
 
-## 2.6 SAM mask-refinement branch
+## 2.7 SAM 2 mask-refinement branch
 
-The Segment Anything Model [@SAM2023] is a recent foundation model for class-agnostic image segmentation. It was trained on a dataset of more than one billion masks across eleven million images and exposes a prompt-based interface in which the user supplies a "prompt" — a point, a bounding box, or a coarse mask — and the model returns the precise segmentation of the corresponding object. Crucially for the present application, SAM is **zero-shot**: it does not need to be trained or fine-tuned on the target domain to produce sharp object masks, provided that the prompt is approximately correct.
+The Segment Anything 2 model (SAM 2) [@SAM2_2024] is the second-generation version of Meta AI's foundation segmentation model, succeeding the original Segment Anything Model (SAM) [@SAM2023]. Where the first SAM was trained on the SA-1B dataset of more than one billion masks across eleven million images, SAM 2 extends this with the SA-V dataset of more than thirty-five million masks across ≈ 250 000 videos and a streaming memory module that allows mask propagation across frames. For the static-image, single-frame tree-detection task addressed in the present work only the image-level segmentation capability of SAM 2 is used; its temporal-propagation mode is reserved as a future-work direction for multi-temporal canopy monitoring.
 
-The third branch of the proposed system exploits this property to upgrade DeepForest's bounding-box detections into precise crown polygons without spending additional annotation effort or training time. The pipeline of this branch is the following:
+Like its predecessor, SAM 2 exposes a prompt-based interface in which the user supplies a "prompt" — a point, a bounding box, or a coarse mask — and the model returns the precise segmentation of the corresponding object. Crucially for the present application, SAM 2 is **zero-shot**: it does not need to be trained or fine-tuned on the target domain to produce sharp object masks, provided that the prompt is approximately correct. Compared to the original SAM, SAM 2 reports both improved mask quality on natural-image benchmarks and a roughly 6× speed-up at comparable accuracy thanks to the simpler Hiera-based image encoder.
 
-1. The DeepForest detector is run on the input image and produces a list of bounding boxes with associated confidence scores, exactly as in section 2.5.
-2. For each detection above the confidence threshold, the bounding box is converted into a SAM box prompt in the image coordinate frame.
-3. The SAM `predictor.predict()` call returns three candidate masks per prompt and a score for each. The mask with the highest predicted IoU is kept.
+The fourth branch of the proposed system exploits this property to upgrade DeepForest's bounding-box detections into precise crown polygons without spending additional annotation effort or training time. The pipeline of this branch is the following:
+
+1. The DeepForest detector is run on the input image and produces a list of bounding boxes with associated confidence scores, exactly as in Section 2.6.
+2. For each detection above the confidence threshold, the bounding box is converted into a SAM 2 box prompt in the image coordinate frame.
+3. The SAM 2 `predictor.predict()` call returns three candidate masks per prompt and a score for each. The mask with the highest predicted IoU is kept.
 4. The returned binary mask is converted into a polygon contour through the same OpenCV contour-extraction step that the YOLO branch uses, and the resulting `Detection` is emitted as if it had been produced by an end-to-end instance segmenter.
 
-This branch is implemented as a separate adapter (`SAMDeepForestAdapter`) that takes the DeepForest adapter as a constructor argument and follows the same interface as the other adapters. The SAM backbone used is the ViT-B variant, chosen as a compromise between accuracy and inference speed on a laptop GPU; the larger ViT-L and ViT-H variants are also supported through a configuration switch but are too slow for the interactive use case.
+This branch is implemented as a separate adapter (`SAMDeepForestAdapter`) that takes the DeepForest adapter as a constructor argument and follows the same interface as the other adapters. The SAM 2 encoder backbone used is the **Hiera-Base** variant, chosen as a compromise between accuracy and inference speed on a laptop GPU; the larger Hiera-Large variant is also supported through a configuration switch but is too slow for the interactive use case.
 
-Conceptually, this design treats SAM as a **post-processing step** that decorates an otherwise pure bounding-box detector with high-quality polygon masks. The cost is a roughly two-fold increase in inference time per image; the benefit is that the system gains crown-area and crown-coverage statistics without requiring a re-trained polygon-level model.
+Conceptually, this design treats SAM 2 as a **post-processing step** that decorates an otherwise pure bounding-box detector with high-quality polygon masks. The cost is a roughly two-fold increase in inference time per image; the benefit is that the system gains crown-area and crown-coverage statistics without requiring a re-trained polygon-level model.
 
-## 2.7 Ensemble via Weighted Box Fusion
+> **Figure 2.X (placeholder).** *Anuar: insert a side-by-side example of SAM 2 mask refinement on a representative Astana satellite tile — a DeepForest bounding-box prompt (blue rectangle) and the resulting SAM 2 polygon mask (green outline). Place the source image in `figures/sam2_refinement.png` and replace this placeholder block with a regular Markdown image link.*
+
+## 2.8 Ensemble via Weighted Box Fusion
 
 The YOLO and DeepForest branches are trained on the same data but with different network architectures, different patch sizes and different loss formulations. Their errors are therefore partly de-correlated: YOLO tends to over-segment large, dense canopies into several smaller crowns, while DeepForest tends to merge adjacent crowns into a single bounding box. An ensemble that combines the two should benefit from this complementarity.
 
 The chosen ensemble strategy is **Weighted Box Fusion** [@WBF2021], a recent improvement over the older Non-Maximum-Suppression and Soft-NMS ensembles. Where NMS keeps the single highest-confidence box and discards every overlapping box, WBF instead **averages** the coordinates of the overlapping boxes weighted by their confidence scores, producing a single fused box whose coordinates and confidence are functions of all the contributing detections.
+
+Formally, for a cluster of $n$ overlapping predictions $\{(\mathbf{b}_{i}, c_{i})\}_{i=1}^{n}$, where $\mathbf{b}_{i} = (x_{1}, y_{1}, x_{2}, y_{2})_{i}$ is the $i$-th box and $c_{i}$ is its confidence, the WBF-fused box and fused confidence are
+
+$$
+\mathbf{b}_{\text{fused}} \;=\; \frac{\sum_{i=1}^{n} c_{i}\, \mathbf{b}_{i}}{\sum_{i=1}^{n} c_{i}}, \qquad
+c_{\text{fused}} \;=\; \frac{\sum_{i=1}^{n} c_{i}}{n} \cdot \frac{\min(n, M)}{M}
+$$
+
+where $M$ is the total number of models being ensembled (here $M = 2$, YOLO and DeepForest). The right-hand factor $\min(n, M)/M$ down-weights clusters that contain detections from only a subset of the available models — a single-model cluster receives half of its raw average confidence, while a two-model cluster receives the full average. This factor is the key conceptual difference between WBF and a naive confidence-weighted average and is what makes WBF a true ensemble (it rewards agreement between models) rather than a smoothing operation.
 
 The WBF procedure as implemented in the system is:
 
@@ -173,7 +253,7 @@ The WBF procedure as implemented in the system is:
 
 The implementation uses the open-source `ensemble-boxes` package from Roman Solovyev's reference repository. The IoU threshold $T_{\text{IoU}}$ is set to 0.55, slightly higher than the typical 0.5 used for plain NMS, in order to compensate for the systematic location offset between YOLO and DeepForest boxes (the two networks tend to localise the centre of a crown slightly differently due to their different receptive fields). The per-model weights are set to 1.0 for both branches in the current prototype; an ablation study of weight calibration is reserved for future work.
 
-## 2.8 Geographic conversion
+## 2.9 Geographic conversion
 
 A pixel coordinate $(x, y)$ inside the detection mask has no immediate meaning to a municipal user; the system must convert it into a $(\text{longitude}, \text{latitude})$ pair in WGS-84. The conversion is implemented in `backend/geo.py` and supports four operating modes, selected automatically by the system depending on the metadata available.
 
@@ -197,7 +277,7 @@ The choice of mode is recorded in the response metadata so that downstream users
 
 In addition to the pure coordinate conversion, the geographic module estimates the **pixel size in metres** at the centre of the image, using the Haversine formula on the image diagonal. The estimated pixel size is propagated through to all downstream statistics — average crown area in square metres, total green coverage in hectares, total tree count per hectare — and is reported alongside the inventory.
 
-## 2.9 Result aggregation, persistent storage and export
+## 2.10 Result aggregation, persistent storage and export
 
 After the geographic conversion the system produces a final `PredictResult` object that contains:
 
@@ -212,7 +292,7 @@ After the geographic conversion the system produces a final `PredictResult` obje
 - `runs` — one row per model invocation on a snapshot, with model name, confidence threshold, total inference time and the chosen geographic mode;
 - `detections` — one row per detected tree, with the bounding box, polygon mask, confidence, crown area and geographic coordinates.
 
-The persistence layer is implemented in `backend/db.py` and is used by every read and write path in the backend. The schema choice has three practical consequences. First, restarting the FastAPI process loses no detections — a critical property for any tool that is expected to be operated by a non-developer end user. Second, the **city-map view** (described in Section 2.10 below) can query the database for *every detection ever produced* with a single SQL query and visualise them all on a single Leaflet layer; this is the principal aggregate-inspection workflow of the application. Third, snapshot deletion is implemented via a single `DELETE FROM snapshots WHERE id = ?` statement; the cascading foreign keys then remove all dependent runs, detections and the source image file from disk.
+The persistence layer is implemented in `backend/db.py` and is used by every read and write path in the backend. The schema choice has three practical consequences. First, restarting the FastAPI process loses no detections — a critical property for any tool that is expected to be operated by a non-developer end user. Second, the **city-map view** (described in Section 2.11 below) can query the database for *every detection ever produced* with a single SQL query and visualise them all on a single Leaflet layer; this is the principal aggregate-inspection workflow of the application. Third, snapshot deletion is implemented via a single `DELETE FROM snapshots WHERE id = ?` statement; the cascading foreign keys then remove all dependent runs, detections and the source image file from disk.
 
 **Export.** Three exporters are provided, all sharing a common implementation in `backend/export.py` and reachable via `POST /api/export/{job_id}/{format}`:
 
@@ -220,25 +300,27 @@ The persistence layer is implemented in `backend/db.py` and is used by every rea
 - **CSV** — a flat table with one row per detection and columns for the index, the centroid coordinates, the bounding box, the confidence and the area. The CSV is intended for spreadsheet-based inspection and for direct ingestion by *Zelenstroy*'s existing reporting workflow.
 - **Standalone HTML** — a single self-contained HTML file with a Leaflet map embedded inline, the OpenStreetMap and ESRI World Imagery basemaps loaded from CDN, and the detections rendered as a vector layer with on-hover popups. The file is intended for sharing the inventory with a non-technical audience that does not have access to a GIS tool.
 
-## 2.10 Frontend application and user workflows
+## 2.11 Frontend application and user workflows
 
 The frontend is a single-page React 18 application served by FastAPI at the root URL, implemented in three files (`frontend/index.html`, `frontend/app.jsx`, `frontend/styles.css`) and a small API client (`frontend/api.js`). The application deliberately avoids a build step: React, Babel-standalone and Leaflet are loaded directly from a CDN as UMD bundles. The motivation for this choice is operational simplicity — a municipal employee can run the system without Node.js, npm or any other JavaScript toolchain installed on the host.
 
-### 2.10.1 Two view modes
+### 2.11.1 Two view modes
 
 The application exposes two main views, switchable in the sidebar.
 
 **Single image view** is the workflow for a single satellite image. The user uploads a PNG, JPG or GeoTIFF (or captures one interactively from the map), selects a detection model and a confidence threshold, clicks *Run detection* and watches a progress indicator while the backend performs inference. The result is then visualised in three coordinated panels: a Leaflet map with the image overlaid as a semi-transparent layer and the detections rendered on top; a statistics panel showing the tree count, the green-coverage percentage, the mean confidence and the analysed area in hectares; and a confidence-filter slider that interactively hides or shows low-confidence detections without re-running the model.
 
+> **Figure 2.X (placeholder) — Single-image view of the frontend.** *Take a screenshot of the single-image workflow with a sample Astana detection result loaded — drag-and-drop area on the left, Leaflet preview with crown polygons in the centre, statistics panel + confidence slider on the right. Save as `figures/frontend_single_image.png` and replace this placeholder block with a regular Markdown image link.*
+
 **City-map view** is the aggregate-inspection mode. It queries the persistent database for the full collection of all snapshots ever processed by the system and renders every detected tree on a single Leaflet layer (with a safety cap of 50 000 detections to protect the browser). A side panel lists each snapshot with a per-snapshot summary (number of runs, total trees, last-used model, geographic centre) and a deletion action that cascades through the database and the disk. This view is the principal demonstration deliverable of the project: a single map of Astana that grows tree-by-tree as the user processes new districts, building up an organic city-wide inventory that the user can browse, query, and export at any time.
 
-### 2.10.2 Geographic configuration and map capture
+### 2.11.2 Geographic configuration and map capture
 
 In both views the user controls the geographic mode of the active snapshot through a dedicated panel. The four modes of Section 2.8 (None, two-corner, four-corner, GeoTIFF) are exposed as a segmented switch, and the user can enter corner coordinates either by typing numbers into form fields or by dragging draggable NW/SE markers directly on the map until the image overlay aligns visually with the basemap. Crucially, when the user moves the corner markers, the image overlay is rebound to the new bounds in real time, so the snapshot, the markers and the basemap stay coupled while the user finds the correct fit. The coordinates are written back to the database on the next inference run and persist across page reloads.
 
 The `Capture from map` flow goes one step further. The user draws a rectangle on the basemap with the built-in Leaflet rectangle tool, picks a zoom level (typically 18 for street-level detail or 19 for the highest available resolution in central Astana) and submits the selection. The backend stitches the ESRI World Imagery tiles for the requested bounding box as described in Section 2.2 and returns a regular image snapshot with the geographic bounds embedded; the snapshot is then immediately available for inference without any further input from the user. This flow makes the system usable on areas of the city for which the user has neither a pre-downloaded GeoTIFF nor a high-resolution screenshot — a common situation for new districts under active construction, where archival aerial imagery does not yet exist.
 
-### 2.10.3 Detection display modes
+### 2.11.3 Detection display modes
 
 Every detection produced by the backend carries three independent geometric representations: a centre point (latitude / longitude of the bounding-box centroid), an axis-aligned bounding box (four corners in pixel space, lifted into geographic space through the active geo-conversion mode), and a polygon mask (for YOLO and SAM-refined branches, a closed sequence of vertices following the projected crown outline). The frontend exposes these as three mutually-exclusive rendering modes through a segmented control:
 
@@ -248,7 +330,7 @@ Every detection produced by the backend carries three independent geometric repr
 
 The three modes operate on the same underlying detection list; switching between them is instantaneous and does not require a backend round-trip. When a particular detection lacks data for the currently-selected mode (for example, a DeepForest detection that has no polygon mask because DeepForest is a bounding-box-only model), the frontend falls back automatically to point rendering, so the detection never silently disappears from the map.
 
-### 2.10.4 REST endpoints
+### 2.11.4 REST endpoints
 
 The backend exposes a complete REST API documented automatically by FastAPI's built-in OpenAPI integration at `/docs`. Table 2.3 summarises the endpoints used by the frontend and by the export workflows.
 
@@ -273,8 +355,8 @@ The backend exposes a complete REST API documented automatically by FastAPI's bu
 
 The endpoints are intentionally fine-grained: the frontend composes complex views from several small JSON responses rather than from a single monolithic dump, which makes the city-map view efficient even with tens of thousands of detections in the database.
 
-## 2.11 Summary
+## 2.12 Summary
 
-This chapter has presented the methodological foundation of the system: a layered architecture in which a thin presentation layer and a stateless REST backend are connected to a pluggable set of three deep-learning model adapters. The three adapters implement complementary detection paradigms — instance segmentation with YOLOv8-seg, bounding-box detection with DeepForest, zero-shot mask refinement with SAM — and are combined through a Weighted-Box-Fusion ensemble. Tiled inference allows the system to scale to satellite images of arbitrary resolution; four-mode geographic conversion supports inputs ranging from raw screenshots to fully-georeferenced GeoTIFFs; and three exporters deliver the resulting inventory in formats suitable for GIS specialists, spreadsheet users and non-technical viewers. The next chapter reports the experimental evaluation of the trained models and the integrated system on the Astana dataset.
+This chapter has presented the methodological foundation of the system: a layered architecture in which a thin presentation layer and a stateless REST backend are connected to a pluggable set of four deep-learning model adapters. The four adapters implement complementary detection paradigms — instance segmentation with YOLOv8-seg (Section 2.4), instance segmentation with Mask R-CNN (Section 2.5), bounding-box detection with DeepForest (Section 2.6), and zero-shot mask refinement with SAM 2 (Section 2.7) — and the YOLO and DeepForest detector outputs are combined through a Weighted-Box-Fusion ensemble (Section 2.8). Tiled inference allows the system to scale to satellite images of arbitrary resolution; four-mode geographic conversion supports inputs ranging from raw screenshots to fully-georeferenced GeoTIFFs; and three exporters deliver the resulting inventory in formats suitable for GIS specialists, spreadsheet users and non-technical viewers. The next chapter reports the experimental evaluation of the trained models and the integrated system on the Astana dataset.
 
 \newpage

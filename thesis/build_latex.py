@@ -52,6 +52,7 @@ CITATIONS: dict[str, int] = {
     "FasterRCNN2015": 27, "MaskRCNN2017": 28, "RetinaNet2017": 29,
     "YOLOv1": 30, "UNet2015": 31, "UltralyticsYOLO2023": 32,
     "Timilsina2020": 33, "Chen2021": 34, "Dong2019": 35,
+    "SAM2_2024": 36, "Ravi2024": 36,
 }
 
 CITE_GROUP_RE = re.compile(r"\[((?:@[A-Za-z0-9_]+(?:\s*;\s*)?)+)\]")
@@ -159,8 +160,9 @@ def make_title_tex() -> str:
 \vspace{3mm}
 {\large\bfseries Topic:}\\[2mm]
 {\linespread{1.2}\selectfont
-{\Large\bfseries Tree Detection for Astana ---\\
-Deep Learning for Urban Green Space Mapping}\\[6mm]
+{\Large\bfseries Development of a Deep Learning Model for\\
+Automated Tree Recognition and Green Space Mapping\\
+in Urban Environments}\\[6mm]
 }
 
 \rule[0.5ex]{\linewidth}{1pt}\vspace*{-\baselineskip}\vspace{3.2pt}
@@ -176,9 +178,9 @@ Deep Learning for Urban Green Space Mapping}\\[6mm]
 
 \begin{minipage}{12cm}
 \centering
-Educational Program: 6B06103 --- Information Technologies\\[2mm]
+Educational Program: 6B06101 --- Computer Science\\[2mm]
 Scientific Supervisor: Syndar Satbayev\\[2mm]
-\itshape School of Information Technologies, Astana IT University
+\itshape School of Artificial Intelligence and Data Science, Astana IT University
 \end{minipage}\\[12mm]
 
 \vfill
@@ -243,8 +245,8 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 \ifpdf
 \pdfinfo{
    /Author (Totin A., Aidarkhanov R., Sharipov B.)
-   /Title (Tree Detection for Astana)
-   /Keywords (Astana; Tree Detection; YOLO; DeepForest; SAM; Deep Learning; Remote Sensing)
+   /Title (Development of a Deep Learning Model for Automated Tree Recognition and Green Space Mapping in Urban Environments)
+   /Keywords (Astana; Tree Detection; YOLO; Mask R-CNN; DeepForest; SAM 2; Deep Learning; Remote Sensing)
 }
 \fi
 
@@ -295,6 +297,13 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 \usepackage{amssymb}
 \usepackage{newlfont}
 \usepackage{graphicx}
+% Look for figures referenced as `figures/X.png` in markdown:
+% - `figures/` resolves at the top-level (thesis/latex/figures/) for frontmatter \input
+% - `../../figures/` resolves for chapters imported via \import{chapters/chapterNN/}{...}
+\graphicspath{{figures/}{../figures/}{../../figures/}{logos/}}
+% Default \includegraphics to fit the text width and preserve aspect ratio so
+% large screenshots / multi-tile val_batch grids do not overflow the page.
+\setkeys{Gin}{width=\linewidth,keepaspectratio}
 \usepackage{float}
 \usepackage{url}
 \usepackage[colorlinks=true,allcolors=black]{hyperref}
@@ -316,6 +325,9 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 % Pandoc helpers
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 \providecommand{\passthrough}[1]{#1}
+% Defensive fallback for pandoc's image-wrapping macro (newer pandoc emits
+% \pandocbounded around \includegraphics; older preambles like ours lack it).
+\providecommand{\pandocbounded}[1]{#1}
 % Pandoc emits `{\def\LTcaptype{none} ... \end{longtable}}` to suppress
 % auto-captioning of longtables. The trick requires a `none` counter to exist;
 % memoir doesn't define one, so we create a dummy.
@@ -427,6 +439,19 @@ def main() -> None:
     write(LATEX / "chapters" / "appendices" / "references.tex",
           make_references_tex(md["07_references"]))
     write(LATEX / "thesis_main.tex", THESIS_MAIN_TEX)
+
+    # Mirror the markdown-side `thesis/figures/` directory into the LaTeX
+    # build tree so that \includegraphics{figures/X.png} resolves both at the
+    # top level (thesis/latex/figures/X.png via the `figures/` graphicspath
+    # entry) and from within \import-ed chapters.
+    src_figures = HERE / "figures"
+    if src_figures.exists():
+        dst_figures = LATEX / "figures"
+        if dst_figures.exists():
+            shutil.rmtree(dst_figures)
+        shutil.copytree(src_figures, dst_figures)
+        print(f"\n=== Mirrored {len(list(dst_figures.iterdir()))} figure(s) "
+              f"into {dst_figures.relative_to(HERE)} ===")
 
     print("\n=== Compiling with tectonic ===")
     cmd = [str(TECTONIC), "--keep-logs", "--print",

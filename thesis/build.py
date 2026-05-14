@@ -75,6 +75,9 @@ CITATIONS: dict[str, int] = {
     "Timilsina2020": 33,
     "Chen2021": 34,
     "Dong2019": 35,
+    "SAM2_2024": 36,
+    "Ravi2024": 36,  # alias
+    "MaskRCNN2017_b": 28,  # alias of MaskRCNN2017 for Mask R-CNN section
 }
 
 CITE_GROUP_RE = re.compile(r"\[((?:@[A-Za-z0-9_]+(?:\s*;\s*)?)+)\]")
@@ -180,7 +183,7 @@ def main() -> None:
         outputfile=str(HERE / "thesis.html"),
         extra_args=["--standalone", "--toc", "--toc-depth=2",
                     "--number-sections",
-                    "--metadata", "title=Tree Detection for Astana"],
+                    "--metadata", "title=Development of a Deep Learning Model for Automated Tree Recognition and Green Space Mapping in Urban Environments"],
     )
     print(f"Wrote HTML: {HERE / 'thesis.html'}")
 

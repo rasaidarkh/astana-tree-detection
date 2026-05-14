@@ -43,7 +43,7 @@ To achieve this aim the following \textbf{objectives} are set:
 \item
   Build a custom annotated dataset of Astana satellite imagery, suitable for training instance-segmentation models in the urban domain.
 \item
-  Train and fine-tune three complementary detection models (an instance-segmentation YOLOv8 network, a DeepForest RetinaNet detector and a SAM-based mask-refinement stage), and combine their outputs through a model-ensemble strategy.
+  Train and fine-tune four complementary detection models (an instance-segmentation YOLOv8 network, a Mask R-CNN instance segmenter, a DeepForest RetinaNet detector and a SAM 2 zero-shot mask-refinement stage), and combine their detector outputs through a model-ensemble strategy.
 \item
   Design and implement a complete software pipeline --- backend, frontend, geographic conversion and export --- exposing the trained models through a usable web interface and producing GeoJSON / CSV / standalone-HTML deliverables.
 \item
@@ -59,7 +59,7 @@ The work draws on a combination of theoretical and experimental methods:
 \item
   \textbf{Literature analysis} of peer-reviewed publications from journals such as \emph{Remote Sensing}, \emph{ISPRS Annals}, \emph{Computers, Environment and Urban Systems} and conference proceedings of 2019--2025, in order to characterise the state of the art.
 \item
-  \textbf{Deep-learning model training and fine-tuning} based on the PyTorch and Ultralytics frameworks, the DeepForest library and the SAM (Segment Anything) foundation model.
+  \textbf{Deep-learning model training and fine-tuning} based on the PyTorch and Ultralytics frameworks, the DeepForest library, the SAM 2 (Segment Anything 2) foundation model and torchvision/Detectron2 for the Mask R-CNN branch.
 \item
   \textbf{Dataset engineering}: collection of source satellite tiles, manual annotation in the CVAT tool, conversion between COCO and YOLO label formats, tiling of high-resolution images into overlapping patches and automatic pre-labelling with an iterative model-in-the-loop workflow.
 \item
@@ -79,9 +79,9 @@ The scientific novelty of the work consists in the following:
 \item
   It is, to the best of the authors' knowledge, the first published evaluation of state-of-the-art deep-learning tree-detection models on satellite imagery of Astana and, more generally, of any major Central-Asian capital.
 \item
-  The work proposes a hybrid three-model architecture (YOLOv8 instance segmentation; DeepForest fine-tuned on local data; SAM zero-shot mask refinement of DeepForest bounding boxes), combined through a Weighted-Box-Fusion ensemble, and quantitatively compares the three branches on a single dataset.
+  The work proposes a hybrid four-model architecture (YOLOv8 instance segmentation; Mask R-CNN instance segmentation; DeepForest fine-tuned on local data; SAM 2 zero-shot mask refinement of DeepForest bounding boxes), combined through a Weighted-Box-Fusion ensemble of the detector outputs, and quantitatively compares the branches on a single dataset.
 \item
-  It introduces a small but novel annotated dataset of Astana satellite imagery (≈ 77 source images, ≈ 5 000 polygon-level tree annotations after tiling) which is reusable for future research in the region.
+  It introduces a small but novel annotated dataset of Astana satellite imagery (≈ 77 source images, ≈ 8 000 polygon-level tree annotations after tiling) which is reusable for future research in the region.
 \item
   It contributes a complete reusable software template --- a FastAPI backend with a pluggable model-adapter interface and a Leaflet-based frontend with in-browser tile capture from ESRI World Imagery --- that turns research models into a deployable internal tool.
 \end{itemize}
@@ -96,7 +96,7 @@ The diploma project consists of an introduction, three chapters, a conclusion, a
 
 \textbf{Chapter 1} analyses the subject area of urban-tree detection from remote-sensing data, reviews the relevant literature of 2019--2025, identifies the research gap with respect to Central-Asian cities, and formulates the precise problem statement that the rest of the work attempts to solve.
 
-\textbf{Chapter 2} describes the proposed methodology: the overall system architecture, the three deep-learning models (YOLOv8-seg, DeepForest, SAM), the data-preparation pipeline (annotation, tiling, augmentation), the ensemble strategy and the geographic-conversion and export components.
+\textbf{Chapter 2} describes the proposed methodology: the overall system architecture, the four deep-learning models (YOLOv8-seg, Mask R-CNN, DeepForest, SAM 2), the data-preparation pipeline (annotation, tiling, augmentation), the ensemble strategy and the geographic-conversion and export components.
 
 \textbf{Chapter 3} documents the experiments and reports the quantitative and qualitative results --- training curves and validation metrics for each model, qualitative inspection of predictions, an ablation comparing the three models on the same data, the integrated pipeline as deployed in the prototype and the limitations of the current implementation.
 

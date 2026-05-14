@@ -70,4 +70,6 @@
 
 35. **Dong T., Shen Y., Zhang J., Ye Y., Fan J.** Progressive Cascaded Convolutional Neural Networks for Single Tree Detection with Google Earth Imagery. *Remote Sensing*, 2019, vol. 11, no. 15, art. 1786.
 
+36. **Ravi N., Gabeur V., Hu Y.-T., Hu R., Ryali C., Ma T., Khedr H., Rädle R., Rolland C., Gustafson L., Mintun E., Pan J., Alwala K. V., Carion N., Wu C.-Y., Girshick R., Dollár P., Feichtenhofer C.** SAM 2: Segment Anything in Images and Videos. *arXiv preprint*, 2024, arXiv:2408.00714.
+
 \newpage

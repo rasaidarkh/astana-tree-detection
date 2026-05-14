@@ -10,8 +10,8 @@
 \ifpdf
 \pdfinfo{
    /Author (Totin A., Aidarkhanov R., Sharipov B.)
-   /Title (Tree Detection for Astana)
-   /Keywords (Astana; Tree Detection; YOLO; DeepForest; SAM; Deep Learning; Remote Sensing)
+   /Title (Development of a Deep Learning Model for Automated Tree Recognition and Green Space Mapping in Urban Environments)
+   /Keywords (Astana; Tree Detection; YOLO; Mask R-CNN; DeepForest; SAM 2; Deep Learning; Remote Sensing)
 }
 \fi
 
@@ -62,6 +62,13 @@
 \usepackage{amssymb}
 \usepackage{newlfont}
 \usepackage{graphicx}
+% Look for figures referenced as `figures/X.png` in markdown:
+% - `figures/` resolves at the top-level (thesis/latex/figures/) for frontmatter \input
+% - `../../figures/` resolves for chapters imported via \import{chapters/chapterNN/}{...}
+\graphicspath{{figures/}{../figures/}{../../figures/}{logos/}}
+% Default \includegraphics to fit the text width and preserve aspect ratio so
+% large screenshots / multi-tile val_batch grids do not overflow the page.
+\setkeys{Gin}{width=\linewidth,keepaspectratio}
 \usepackage{float}
 \usepackage{url}
 \usepackage[colorlinks=true,allcolors=black]{hyperref}
@@ -83,6 +90,9 @@
 % Pandoc helpers
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 \providecommand{\passthrough}[1]{#1}
+% Defensive fallback for pandoc's image-wrapping macro (newer pandoc emits
+% \pandocbounded around \includegraphics; older preambles like ours lack it).
+\providecommand{\pandocbounded}[1]{#1}
 % Pandoc emits `{\def\LTcaptype{none} ... \end{longtable}}` to suppress
 % auto-captioning of longtables. The trick requires a `none` counter to exist;
 % memoir doesn't define one, so we create a dummy.

@@ -1,6 +1,6 @@
 # Chapter 3. Experiments and results
 
-This chapter reports the experimental evaluation of the system described in Chapter 2. Section 3.1 documents the hardware and software environment used. Section 3.2 details the dataset of Astana satellite imagery, its two annotation iterations and the tile-level splits actually used for training. Section 3.3 presents the quantitative and qualitative results of the YOLOv8-seg branch. Section 3.4 reports the corresponding results for the DeepForest branch, both before and after fine-tuning on Astana data. Section 3.5 shows the integration of the Segment Anything Model as a mask-refinement stage. Section 3.6 compares the three branches against the literature baselines summarised in Chapter 1. Sections 3.7 and 3.8 describe the integrated pipeline as deployed in the prototype and the limitations of the current implementation.
+This chapter reports the experimental evaluation of the system described in Chapter 2. Section 3.1 documents the hardware and software environment used. Section 3.2 details the dataset of Astana satellite imagery, its two annotation iterations and the tile-level splits actually used for training. Section 3.3 presents the quantitative and qualitative results of the YOLOv8-seg branch. Section 3.4 reports the training and validation of the Mask R-CNN branch. Section 3.5 reports the corresponding results for the DeepForest branch, both before and after fine-tuning on Astana data. Section 3.6 shows the integration of SAM 2 as a mask-refinement stage. Section 3.7 compares the four branches against the literature baselines summarised in Chapter 1. Sections 3.8 and 3.9 describe the integrated pipeline as deployed in the prototype and the limitations of the current implementation.
 
 ## 3.1 Hardware and software environment
 
@@ -68,13 +68,29 @@ The complete data-preparation pipeline that turns a CVAT COCO export into a tile
 
 ## 3.3 YOLOv8-seg training results
 
+Throughout this chapter, detection quality is reported using the standard COCO-style metrics. For a single prediction $p$ and a ground-truth annotation $g$, the **Intersection-over-Union** is defined as
+
+$$
+\mathrm{IoU}(p, g) \;=\; \frac{|p \cap g|}{|p \cup g|}.
+$$
+
+A prediction is counted as a True Positive when it has an IoU of at least $0.5$ against any unmatched ground-truth instance; otherwise it is a False Positive. Ground-truth instances with no matching prediction are False Negatives. **Precision**, **Recall** and the **F1-score** are then
+
+$$
+P \;=\; \frac{TP}{TP + FP}, \qquad R \;=\; \frac{TP}{TP + FN}, \qquad F_{1} \;=\; \frac{2 \cdot P \cdot R}{P + R}.
+$$
+
+The **Average Precision at IoU = 0.5** (AP@50) is the area under the Precision-Recall curve obtained by sweeping the detector's confidence threshold from 1 to 0. **mAP@50** is the mean of AP@50 across object classes (here only one — *Tree*). The stricter **mAP@50:95** averages the AP at ten IoU thresholds $\{0.50, 0.55, \ldots, 0.95\}$ — a metric that penalises imprecise localisation as well as missed detections. The same definitions apply to the segmentation-mask outputs, with the IoU computed over per-pixel mask sets rather than over rectangular boxes (denoted *Mask mAP@50* in the tables that follow).
+
 ### 3.3.1 Version-1 training run
 
 The version-1 model was trained with the hyper-parameters listed in Table 2.2 of Chapter 2. The training was launched with a maximum of 500 epochs and an early-stopping patience of 100 epochs, and was allowed to run to convergence. The actual run stopped at **epoch 397** after approximately **1.008 wall-clock hours**, with the best checkpoint produced at **epoch 296**.
 
 ### 3.3.2 Training loss
 
-The training loss curves recorded by Ultralytics for the version-1 run are reproduced in the appendices (see `runs/segment/astana_tiled_x_max/results.png`). Three loss components are reported by the framework:
+The training loss curves recorded by Ultralytics for the version-1 run are reproduced in Figure 3.1 below. Three loss components are reported by the framework:
+
+![*Ultralytics-generated training and validation curves for the YOLOv8x-seg v1 run. Top row: box, segmentation, classification and DFL losses on the training set. Bottom row: the same losses on the validation set together with Box / Mask precision, recall, mAP@50 and mAP@50-95 over the 397 trained epochs.*](figures/yolo_v1_results.png)
 
 - **Box loss** (`box_loss`) — the IoU-based regression loss for bounding-box localisation. The training-set box loss decreased smoothly from approximately 2.6 at epoch 1 to approximately 0.45 at the best epoch 296, and the validation-set box loss followed a similar trajectory from approximately 2.7 to approximately 0.95 at the best epoch.
 
@@ -97,7 +113,7 @@ Table 3.3 reports the final validation metrics on the four held-out tiles (94 gr
 
 The headline number — Box mAP@50 = **0.478** — is, taken at face value, modest. It is below the 0.65 – 0.73 range reported in the European urban-tree DeepForest literature [@SofiaDeepForest2024; @VelasquezCamacho2023] and substantially below the > 0.9 reported for YOLO variants on dedicated public satellite-tree datasets [@AbbasYOLO2025]. There are, however, three mitigating factors.
 
-First, the **validation set is exceptionally small** — four tiles, 94 polygons. With this sample size the 95 % confidence interval on a binomial-class mean-average-precision estimate is approximately ± 0.10, so the reported number must be read as "0.48 ± 0.10" rather than as a point estimate. The sample size is a direct consequence of the labour cost of polygon-level annotation in CVAT and is an explicit limitation of the project, addressed in Section 3.8.
+First, the **validation set is exceptionally small** — four tiles, 94 polygons. With this sample size the 95 % confidence interval on a binomial-class mean-average-precision estimate is approximately ± 0.10, so the reported number must be read as "0.48 ± 0.10" rather than as a point estimate. The sample size is a direct consequence of the labour cost of polygon-level annotation in CVAT and is an explicit limitation of the project, addressed in Section 3.9.
 
 Second, the **annotation noise** is high. The team's labelling, by design, treats every visible tree as a single polygon, but in dense canopies the boundary between two adjacent trees is genuinely ambiguous and different annotators draw it differently. A mean average precision below the literature numbers is therefore expected when, on the validation set, the model and the ground truth disagree primarily on the label ambiguities rather than on the model's ability to detect a tree at all.
 
@@ -105,7 +121,9 @@ Third, **the qualitative quality of the predictions is substantially higher than
 
 ### 3.3.4 Qualitative analysis
 
-To complement the aggregate metrics, the trained model was run on all four validation tiles at an inference confidence threshold of 0.25, and the resulting predictions were overlaid on the source tiles. Sample outputs are available in `runs/predict/val_check/img_val_001..004__y0000_x0000.jpg`. Three observations stand out.
+To complement the aggregate metrics, the trained model was run on all four validation tiles at an inference confidence threshold of 0.25, and the resulting predictions were overlaid on the source tiles. A representative sample is shown in Figure 3.2 below; the full set is available in `runs/predict/val_check/`. Three observations stand out.
+
+![*Sample YOLOv8x-seg v1 prediction on a sparse-residential Astana validation tile: predicted crown polygons (blue masks) with per-detection confidence scores overlaid on the source imagery. On a tile with roughly twenty visible crowns the model produces only a partial inventory at confidence ≥ 0.25 — a recall typical of the v1 baseline and one of the principal motivations for the version-2 fine-tune reported in Section 3.3.5 below.*](figures/yolo_val_qualitative_001.jpg)
 
 - **Detection coverage is high** — visually, the model finds the vast majority of trees in the validation tiles. Trees missed by the model are typically either heavily shadowed or partially occluded by buildings, both of which represent genuine annotation ambiguity.
 
@@ -148,23 +166,66 @@ The principal observations from Table 3.3a are the following.
 
 3. The v2-finetune result narrows the gap to the published urban-DeepForest baselines [@SofiaDeepForest2024; @Ventura2024]: Box mAP@50 = 0.372 is approximately 55 % of the Sofia F1 = 0.68 and approximately 50 % of the Ventura fine-tuned F = 0.729, with both target numbers reported on datasets at least one order of magnitude larger than the present Astana corpus.
 
-The v2-finetune checkpoint is the model selected for the integrated pipeline reported in Section 3.7 and for the ensemble experiments of Section 3.6. The version-1 and v2-fromscratch checkpoints are retained on disk for reproducibility and as baselines against which future iterations will be benchmarked. The **0.372 / 0.331 numbers obtained by v2-finetune on the version-2 validation set should be regarded as the honest current state of the art** for the project on the Astana dataset.
+The v2-finetune checkpoint is the model selected for the integrated pipeline reported in Section 3.8 and for the ensemble experiments of Section 3.7. The version-1 and v2-fromscratch checkpoints are retained on disk for reproducibility and as baselines against which future iterations will be benchmarked. The **0.372 / 0.331 numbers obtained by v2-finetune on the version-2 validation set should be regarded as the honest current state of the art** for the project on the Astana dataset.
 
-## 3.4 DeepForest results
+![*Like-for-like qualitative comparison on a held-out version-2 validation tile. Left: ground-truth polygon annotation. Centre: YOLOv8x-seg v1 prediction. Right: YOLOv8x-seg v2-finetune prediction. The v2-finetune model recovers a substantially larger fraction of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge.*](figures/yolo_v1_vs_v2_side_by_side.png)
 
-### 3.4.1 Off-the-shelf baseline
+The full training and validation curves of the v2-finetune run, complementary to those of the v1 run shown above, are reproduced in the figure below.
+
+![*Ultralytics-generated training and validation curves for the YOLOv8x-seg v2-finetune run over its 173 trained epochs (best checkpoint at epoch 99). The relative regularity of the validation loss compared to the v1 run reflects the larger version-2 validation set and the slower effective learning rate that comes from fine-tuning the already-converged v1 checkpoint on the new-image subset only.*](figures/yolo_v2_finetune_results.png)
+
+Qualitative predictions of the v2-finetune checkpoint on two four-tile samples drawn from the version-2 validation set are shown in the figures below. Each panel is one held-out Astana tile with predicted crown polygons (blue masks) and per-detection confidence scores. Compared to the v1 sample of the previous sub-section, the v2-finetune model recovers almost every visible crown and is noticeably more confident on clearly-resolved trees in the foreground.
+
+![*YOLOv8x-seg v2-finetune predictions on a four-tile sample from the version-2 validation set. The model recovers nearly all visible crowns and assigns higher confidence (0.6 – 0.9) to clearly-resolved trees in the foreground; the small number of low-confidence detections in the periphery correspond to either small shrubs or shadowed crowns.*](figures/yolo_v2_finetune_val_batch1.jpg)
+
+![*Additional four-tile sample of YOLOv8x-seg v2-finetune predictions on the version-2 validation set. The model handles both sparse-residential and dense-canopy scenes; the lower-right panel illustrates a residual over-detection failure mode — small ornamental shrubs along the road shoulder are tagged as trees at low confidence (≈ 0.3 – 0.4), and were already discussed for the v1 model in Section 3.3.4.*](figures/yolo_v2_finetune_val_batch2.jpg)
+
+## 3.4 Mask R-CNN training and results
+
+> *This section is authored and to be completed by Berik Sharipov. The skeleton below is provided as a structural placeholder; the actual training numbers (epochs, hyper-parameter choices, training time and validation metrics) are Berik's responsibility. The data, validation split, and reporting conventions are aligned with Sections 3.2 and 3.3 so that the Mask R-CNN result is directly comparable with the YOLOv8-seg v2-finetune result of Table 3.3a.*
+
+### 3.4.1 Experimental setup
+
+The Mask R-CNN training is performed on the same hardware described in Section 3.1 and uses the same Astana polygon dataset as the YOLOv8-seg branch (Section 3.2). The framework, base model, training schedule and hyper-parameters are documented in Section 2.5 and are not repeated here. The validation set used for reporting metrics is the merged version-2 set of 10 tiles (≈ 230 polygons) described in Section 3.2.3, which is also the validation set used for the YOLO like-for-like comparison in Section 3.3.5 — this is the prerequisite for any honest head-to-head numbers between the two instance segmenters.
+
+### 3.4.2 Training results
+
+*[Berik to complete: report the training loss curves, wall-clock training time, best epoch and the final validation metrics. Use the same metric set as the YOLO results — Box Precision / Recall / mAP@50 / mAP@50:95 and Mask Precision / Recall / mAP@50 / mAP@50:95 — and report numbers on the same merged v2 validation set so that the result is directly comparable to v2-finetune.]*
+
+**Table 3.4a (placeholder) — Mask R-CNN final validation metrics on the v2 merged validation set.**
+
+| Output head | Precision | Recall | mAP@50 | mAP@50:95 |
+|---|---|---|---|---|
+| Bounding box | *[Berik]* | *[Berik]* | *[Berik]* | *[Berik]* |
+| Segmentation mask | *[Berik]* | *[Berik]* | *[Berik]* | *[Berik]* |
+
+> **Figure 3.X (placeholder).** *Berik: insert the Mask R-CNN training loss curves (total loss, classification loss, mask loss, bounding-box regression loss) over the training epochs, including both training and validation curves. Place the source image in `figures/maskrcnn_loss.png` and replace this placeholder block with a regular Markdown image link.*
+
+### 3.4.3 Qualitative analysis
+
+*[Berik: a brief qualitative discussion comparable in scope to Section 3.3.4 — what failure modes does Mask R-CNN exhibit on Astana imagery, where does it differ qualitatively from YOLO, and what is the dominant precision-vs-recall trade-off observed. Sample annotated tiles from `runs/maskrcnn/predict/val_check/*.jpg` should be referenced once available.]*
+
+### 3.4.4 Comparison with YOLOv8-seg
+
+*[Berik: a final sub-section placing the Mask R-CNN numbers side-by-side with the v2-finetune YOLO numbers from Table 3.3a, and reflecting on whether the two-stage vs one-stage architectural choice yielded the differences predicted by the literature reviewed in Section 1.4 (e.g. higher localisation accuracy at the cost of inference time).]*
+
+\newpage
+
+## 3.5 DeepForest results
+
+### 3.5.1 Off-the-shelf baseline
 
 The pre-trained DeepForest model (`weecology/deepforest-tree`) was evaluated on the same four version-1 validation tiles as a baseline, using the library's `predict_tile()` interface at the default patch size of 400 pixels and an overlap of 5 %. The pre-trained model detected approximately two-thirds of the visible trees in the validation tiles, with a precision of approximately 0.72 and a recall of approximately 0.58 — broadly consistent with the off-the-shelf urban-DeepForest performance reported by [@Ventura2024] (precision 0.74, recall 0.29) and by [@SofiaDeepForest2024] (precision 0.78, recall 0.59). The principal failure mode of the off-the-shelf model is the merging of two adjacent crowns into a single bounding box — the complementary failure to the YOLO over-segmentation discussed above.
 
-### 3.4.2 Fine-tuned model
+### 3.5.2 Fine-tuned model
 
-The DeepForest fine-tuning was performed by team member Anuar Totin using the Lightning-based training interface that ships with the library. The training data consists of the same Astana annotations as the YOLO branch, converted from polygons to axis-aligned bounding boxes by taking the minimum enclosing rectangle of each polygon. The training was launched with a batch size of 1, a learning rate of $1 \times 10^{-3}$, a ReduceLROnPlateau scheduler with patience 10 and factor 0.5, horizontal-flip augmentation only, and a single training pass per epoch (the library's `epochs: 1` convention is interpreted as "one full pass through the data per `Trainer.fit()` call"). Four successive training runs were performed (visible in the repository as `lightning_logs/version_1` through `lightning_logs/version_4`), each starting from the previous checkpoint.
+The DeepForest fine-tuning was performed by team member Anuar Totin using the Lightning-based training interface that ships with the library. **The training data for this branch is an independent bounding-box annotation set for Astana satellite imagery, maintained separately from the polygon dataset used for the YOLO and Mask R-CNN branches.** The motivation for the two-dataset design is given in Section 2.6.3: DeepForest's RetinaNet head consumes axis-aligned bounding boxes natively and benefits little from the polygon refinement that the instance-segmentation branches require, while maintaining two independently-curated datasets also reduces the risk of validation-set leakage between branches. The training was launched with a batch size of 1, a learning rate of $1 \times 10^{-3}$, a ReduceLROnPlateau scheduler with patience 10 and factor 0.5, horizontal-flip augmentation only, and a single training pass per epoch (the library's `epochs: 1` convention is interpreted as "one full pass through the data per `Trainer.fit()` call"). Four successive training runs were performed (visible in the repository as `lightning_logs/version_1` through `lightning_logs/version_4`), each starting from the previous checkpoint.
 
 The fine-tuned model improves over the off-the-shelf baseline in two directions: the precision on the Astana validation tiles increases from approximately 0.72 to approximately 0.80, while the recall increases more modestly from 0.58 to approximately 0.65. The principal qualitative improvement is a substantial reduction of the "merged crowns" failure mode; the principal qualitative regression is a slight increase in over-detection of small shrubs in the foreground of yards.
 
-### 3.4.3 Cross-comparison with YOLO
+### 3.5.3 Cross-comparison with YOLO
 
-The two branches exhibit complementary failure modes, summarised in Table 3.4. YOLO over-segments dense canopies; DeepForest under-segments them. YOLO is more sensitive to shadow false positives; DeepForest is less so. YOLO produces polygon masks; DeepForest produces only bounding boxes. The complementarity of the two branches is exactly the property that the Weighted-Box-Fusion ensemble of Section 2.7 is designed to exploit.
+The two branches exhibit complementary failure modes, summarised in Table 3.4. YOLO over-segments dense canopies; DeepForest under-segments them. YOLO is more sensitive to shadow false positives; DeepForest is less so. YOLO produces polygon masks; DeepForest produces only bounding boxes. The complementarity of the two branches is exactly the property that the Weighted-Box-Fusion ensemble of Section 2.8 is designed to exploit.
 
 **Table 3.4 — Qualitative comparison of YOLO and DeepForest branches.**
 
@@ -179,13 +240,15 @@ The two branches exhibit complementary failure modes, summarised in Table 3.4. Y
 | Failure mode | Over-segmentation | Under-segmentation (merging) |
 | Inference time / 1 600 × 1 100 image | ≈ 2.0 s | ≈ 5.5 s |
 
-## 3.5 SAM mask-refinement integration
+## 3.6 SAM 2 mask-refinement integration
 
-The Segment Anything Model branch was integrated into the system as a post-processing stage that converts DeepForest bounding boxes into polygon masks (Section 2.6). The integration was tested end-to-end on the version-1 validation tiles; the qualitative output is visibly tighter than either the raw DeepForest box or the YOLO polygon, particularly for isolated trees in low-density scenes where the SAM model can latch on to the well-defined crown boundary. In dense canopy scenes the SAM output occasionally bleeds into the neighbouring crown when the prompt box happens to span two adjacent trees; this failure mode is a direct consequence of the input prompt rather than of SAM itself, and would be mitigated by tightening the DeepForest box-regression before the SAM call.
+The SAM 2 [@SAM2_2024] branch was integrated into the system as a post-processing stage that converts DeepForest bounding boxes into polygon masks (Section 2.7). The integration was tested end-to-end on the version-1 validation tiles; the qualitative output is visibly tighter than either the raw DeepForest box or the YOLO polygon, particularly for isolated trees in low-density scenes where SAM 2 can latch on to the well-defined crown boundary. In dense canopy scenes the SAM 2 output occasionally bleeds into the neighbouring crown when the prompt box happens to span two adjacent trees; this failure mode is a direct consequence of the input prompt rather than of SAM 2 itself, and would be mitigated by tightening the DeepForest box-regression before the SAM 2 call.
 
-No fine-tuning of the SAM backbone was attempted: the entire point of including SAM was to demonstrate that a foundation model can deliver usable urban-tree polygon masks **without** any domain-specific training. The current implementation uses the ViT-B variant for tractable interactive inference; an ablation against ViT-L and ViT-H is reserved for future work.
+No fine-tuning of the SAM 2 backbone was attempted: the entire point of including SAM 2 was to demonstrate that a foundation model can deliver usable urban-tree polygon masks **without** any domain-specific training. The current implementation uses the Hiera-Base variant for tractable interactive inference; an ablation against the Hiera-Large variant is reserved for future work.
 
-## 3.6 Ensemble results and comparison with literature
+> **Figure 3.X (placeholder).** *Anuar: insert a representative Astana validation tile with DeepForest bounding-box prompts (blue) and the resulting SAM 2 polygon masks (green) overlaid on the source imagery. Place the source image in `figures/sam2_results.png` and replace this placeholder block with a regular Markdown image link.*
+
+## 3.7 Ensemble results and comparison with literature
 
 The Weighted-Box-Fusion ensemble of YOLO and DeepForest was evaluated on the version-1 validation tiles with $T_{\text{IoU}} = 0.55$ and equal weights for the two branches. The ensemble Box mAP@50 was approximately 0.51, an improvement of approximately 0.03 over the YOLO-only result and approximately 0.06 over the DeepForest-only result interpolated to the mAP@50 metric. The ensemble's principal benefit is a clear reduction of both the over-segmentation and the under-segmentation failure modes: a YOLO over-segmented pair of crowns is typically rejected when DeepForest detects the same area as a single crown, and a DeepForest merged pair is split when YOLO independently localises the two components.
 
@@ -199,6 +262,7 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 | YOLOv8x-seg v1 (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.265 | Same model, harder val (apples-to-apples) |
 | YOLOv8x-seg v2-fromscratch (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.319 | +20 % rel. over v1; merged data, COCO restart |
 | YOLOv8x-seg v2-finetune (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = **0.372** | **Best YOLO result**: v1.pt → fine-tune on new images only |
+| Mask R-CNN (this work) | Astana sat., v2 val (10 tiles) | *[Berik to fill]* | Two-stage architectural comparison vs YOLO on identical data |
 | DeepForest fine-tuned (this work) | Astana satellite | P ≈ 0.80, R ≈ 0.65 | Comparable to Sofia [@SofiaDeepForest2024] |
 | Ensemble YOLO + DF (this work) | Astana satellite | Box mAP@50 ≈ 0.51 (v1 val) | First Astana ensemble result |
 | YOLOv12m [@AbbasYOLO2025] | Public RGB sat. | mAP@50 = 0.908 | Different dataset, large train set |
@@ -209,25 +273,27 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 
 Two points are worth emphasising. First, the obtained YOLO v1 result is **in line with the off-the-shelf urban-DeepForest result** of the Ventura paper [@Ventura2024] but is **below the fine-tuned-DeepForest result of the same paper**, consistent with the fact that the present project is at an earlier stage of the dataset expansion (the Ventura paper uses several hundreds of annotated tiles; the present version-1 dataset uses sixteen). Second, the **Sofia result** [@SofiaDeepForest2024] — F1 ≈ 0.68 obtained on the smallest dataset of the entire urban-tree corpus (826 trees) — is a realistic target for the version-2 model once its training completes, and provides the most plausible geographic analogue to the Astana setting.
 
-## 3.7 Integrated pipeline
+## 3.8 Integrated pipeline
 
-### 3.7.1 Production configuration
+### 3.8.1 Production configuration
 
 The trained YOLO and DeepForest checkpoints were integrated into the FastAPI backend and the React frontend through the adapter interface of Chapter 2. The YOLO branch loads the version-2-finetune weights from `weights/yolo_satellite.pt` (a copy of `runs/segment/astana_tiled_x_v2_finetune/weights/best.pt`, MD5 `f88d0d3dc6d1609e17c7670639e38b24`); the DeepForest branch falls back to the public `weecology/deepforest-tree` weights when the optional fine-tuned `weights/deepforest_astana.pl` file is absent, so the system remains operational on machines that do not have the proprietary checkpoint.
 
-All inference results are persisted in the SQLite database described in Section 2.9. A re-start of the backend therefore preserves every snapshot, every inference run and every individual detection ever produced by the system, which is essential for the aggregate **city-map view** documented below.
+All inference results are persisted in the SQLite database described in Section 2.10. A re-start of the backend therefore preserves every snapshot, every inference run and every individual detection ever produced by the system, which is essential for the aggregate **city-map view** documented below.
 
-### 3.7.2 End-to-end demonstration
+### 3.8.2 End-to-end demonstration
 
 A typical interactive session proceeds as follows: the user selects a 1 km × 1 km area on the basemap at zoom 18, clicks *Capture from map*, and the backend stitches the ESRI tiles within approximately two seconds. The user then selects one of the three available models (YOLO, DeepForest, Ensemble), sets the confidence threshold (the default value is 0.25) and clicks *Run detection*. The system reports the number of detected trees, the average crown area, the green-coverage percentage and the total analysed area in hectares; the detections are rendered as semi-transparent polygons over the basemap. The full end-to-end response time for a 1 km × 1 km capture at zoom 18 (approximately 3 000 × 3 000 pixels, requiring 25 tiled inference passes) is approximately **18 seconds** on the laptop GPU — comfortably below the 30-second budget set by the requirements of Chapter 1.
 
-### 3.7.3 The city-map view as principal deliverable
+### 3.8.3 The city-map view as principal deliverable
 
 Beyond the per-image workflow described above, the application exposes a *city-map view* that visualises every detection of every snapshot ever processed by the system on a single Leaflet layer. Internally the view issues a single `GET /api/detections` request, which the backend translates into a single SQL query over the `detections` table joined with the `snapshots` table for the geographic bounds. The frontend then clusters the result at low zoom levels (using the same Leaflet cluster-marker plugin as standard GIS tools) and renders individual detections at high zoom levels.
 
 The city-map view is the principal demonstration deliverable of the application. A municipal employee can use it as the canonical inventory of Astana trees produced by the system: it grows organically as each new district is processed by the *Capture from map* flow, supports geographic filtering by drawing a sub-rectangle on the map, supports model and confidence filtering through the side panel, and supports per-snapshot deletion through a cascading database operation. The cap of 50 000 detections per request is a safety measure against accidental browser crashes; with the average density of approximately 70 trees per processed tile observed in Section 3.2, this cap is sufficient for an inventory of approximately 700 captured snapshots — well in excess of what the system is expected to handle in the present prototype scope.
 
-### 3.7.2 Export formats
+> **Figure 3.X (placeholder) — City-map view of the frontend.** *Take a screenshot of the city-map view at a moderate zoom level showing several processed districts of Astana with detected crowns rendered as a single Leaflet layer, the snapshot list in the side panel and the aggregate-statistics card on top. Save as `figures/frontend_city_map.png` and replace this placeholder block with a regular Markdown image link.*
+
+### 3.8.4 Export formats
 
 The three export formats produced by the system are illustrated by the following short examples.
 
@@ -266,7 +332,7 @@ id,lat,lng,confidence,crown_area_px,crown_area_m2
 
 The **standalone HTML** export embeds the Leaflet library from CDN and the detections inline as a GeoJSON feature collection, so that the resulting file can be opened in any modern browser without a server.
 
-## 3.8 Limitations
+## 3.9 Limitations
 
 The current implementation has a number of known limitations.
 
@@ -278,9 +344,9 @@ The current implementation has a number of known limitations.
 
 4. **DeepForest fine-tuning convention.** The current fine-tune is restarted from scratch on every epoch and produces four separate Lightning checkpoints (`lightning_logs/version_1` through `version_4`). A single multi-epoch fit with a cosine schedule and a held-out validation set would be cleaner; this refactor is straightforward and is planned for the next iteration.
 
-5. **No SAM-vs-fine-tuned-mask ablation.** The current implementation includes the SAM mask-refinement branch as a qualitative demonstration only. A quantitative ablation that compares the SAM-refined masks against the YOLO-produced masks on the same set of detections is required before any production use of the SAM output.
+5. **No SAM 2-vs-fine-tuned-mask ablation.** The current implementation includes the SAM 2 mask-refinement branch as a qualitative demonstration only. A quantitative ablation that compares the SAM 2-refined masks against the YOLO-produced masks and the Mask R-CNN-produced masks on the same set of detections is required before any production use of the SAM 2 output.
 
-6. **Single-laptop deployment only.** The current system was deployed and tested only on the development laptop. A dockerised version with separate backend, frontend and model-serving containers is required for any multi-user deployment. The SQLite database described in Section 2.9 would have to be promoted to PostgreSQL for any deployment with concurrent writers.
+6. **Single-laptop deployment only.** The current system was deployed and tested only on the development laptop. A dockerised version with separate backend, frontend and model-serving containers is required for any multi-user deployment. The SQLite database described in Section 2.10 would have to be promoted to PostgreSQL for any deployment with concurrent writers.
 
 Despite these limitations, the system as currently deployed already meets all six functional requirements of Section 1.6 and produces results that are qualitatively informative for the *Zelenstroy* end user.
 

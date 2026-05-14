@@ -176,10 +176,12 @@ def make_title_page(out: Path) -> None:
 
     # Title
     _centered_para(doc, "Topic:", size=12, bold=True, space_after=4)
-    _centered_para(doc, "Tree Detection for Astana —", size=18, bold=True,
+    _centered_para(doc, "Development of a Deep Learning Model for", size=16, bold=True,
                    space_after=2, line_spacing=1.2)
-    _centered_para(doc, "Deep Learning for Urban Green Space Mapping",
-                   size=18, bold=True, space_after=14, line_spacing=1.2)
+    _centered_para(doc, "Automated Tree Recognition and Green Space Mapping",
+                   size=16, bold=True, space_after=2, line_spacing=1.2)
+    _centered_para(doc, "in Urban Environments",
+                   size=16, bold=True, space_after=14, line_spacing=1.2)
 
     # Double horizontal rule
     _hr(_centered_para(doc, space_after=2))
@@ -201,11 +203,11 @@ def make_title_page(out: Path) -> None:
     _centered_para(doc, space_after=12)  # spacer
 
     # Program + supervisor
-    _centered_para(doc, "Educational Program: 6B06103 — Information Technologies",
+    _centered_para(doc, "Educational Program: 6B06101 — Computer Science",
                    size=11, space_after=4)
     _centered_para(doc, "Scientific Supervisor: Syndar Satbayev",
                    size=11, space_after=4)
-    _centered_para(doc, "School of Information Technologies, Astana IT University",
+    _centered_para(doc, "School of Artificial Intelligence and Data Science, Astana IT University",
                    size=11, italic=True, space_after=10)
 
     # Place + year
