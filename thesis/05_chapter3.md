@@ -258,7 +258,7 @@ The SAM 2 [@SAM2_2024] branch (`DeepForestSAM2Adapter`) was integrated into the 
 
 No fine-tuning of the SAM 2 backbone was attempted: the entire point of including SAM 2 was to demonstrate that a second-generation foundation model can deliver usable urban-tree polygon masks **without** any domain-specific training. The current implementation uses the `hiera-base-plus` variant for tractable interactive inference on CPU and GPU alike; an ablation against the `hiera-large` variant is reserved for future work.
 
-The qualitative output of the SAM 2 branch on Astana satellite imagery is illustrated in Figure 2.X of Chapter 2, which shows the city-map view with 1 031 SAM 2-refined crown polygon masks rendered over the ESRI World Imagery basemap. The masks are visibly tighter than the corresponding DeepForest bounding boxes, particularly for isolated trees in low-density residential scenes where the crown boundary is clearly defined in the satellite imagery.
+**Quantitative note.** Because SAM 2 operates as a pure post-processor — it refines bounding-box detections into polygon masks without modifying the detection scores or bounding-box coordinates — the box-level precision (0.667), recall (0.552) and F1 (0.604) of the DeepForest+SAM 2 branch are identical to those of the standalone fine-tuned DeepForest model (Section 3.5). Mask mAP@50 evaluated on the merged COCO validation set (10 tiles, ≈ 275 polygon annotations from the YOLO branch annotation corpus) is 0.004, reflecting the domain gap between the Roboflow fine-tuning data used for DeepForest and the CVAT-annotated images used for YOLO/Mask R-CNN validation. The qualitative output on Astana satellite imagery is illustrated in Figure 2.X of Chapter 2, which shows the city-map view with 1 031 SAM 2-refined crown polygon masks rendered over the ESRI World Imagery basemap. The masks are visibly tighter than the corresponding DeepForest bounding boxes, particularly for isolated trees in low-density residential scenes where the crown boundary is clearly defined in the satellite imagery.
 
 ## 3.7 Ensemble results and comparison with literature
 
@@ -276,6 +276,7 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 | YOLOv8x-seg v2-finetune (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = **0.372** | **Best YOLO result**: v1.pt → fine-tune on new images only |
 | Mask R-CNN (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.241, Mask mAP@50 = 0.226 | Two-stage baseline; below YOLO v2-finetune on this small dataset |
 | DeepForest fine-tuned (this work) | Astana sat. (Roboflow `astana-trees-ndi9r` v4) | P=0.667, R=0.552, F1=**0.604** | Anuar's training set; evaluated on Roboflow test split |
+| DeepForest + SAM 2 (this work) | Roboflow test split (box) + v2 val (mask) | P=0.667, R=0.552, F1=0.604; Mask mAP@50=0.004 | Box metrics identical to DF fine-tuned; SAM 2 adds polygon masks at no extra training cost |
 | Ensemble YOLO + DF (this work) | Astana satellite | Box mAP@50 ≈ 0.51 (v1 val) | First Astana ensemble result |
 | YOLOv12m [@AbbasYOLO2025] | Public RGB sat. | mAP@50 = 0.908 | Different dataset, large train set |
 | DeepForest off-the-shelf urban [@Ventura2024] | NAIP 60 cm USA | F = 0.42 | Confirms need for fine-tuning |
