@@ -179,8 +179,6 @@ The trained Mask R-CNN checkpoint is integrated into the FastAPI backend through
 
 The Mask R-CNN adapter follows the same `ModelAdapter` interface as the other branches, enabling drop-in use in both the single-image and city-map workflows without changes to the backend routing logic.
 
-\newpage
-
 ## 2.6 DeepForest branch
 
 ### 2.6.1 Architecture
@@ -362,5 +360,3 @@ The endpoints are intentionally fine-grained: the frontend composes complex view
 ## 2.12 Summary
 
 This chapter has presented the methodological foundation of the system: a layered architecture in which a thin presentation layer and a stateless REST backend are connected to a pluggable set of four deep-learning model adapters. The four adapters implement complementary detection paradigms — instance segmentation with YOLOv8-seg (Section 2.4), instance segmentation with Mask R-CNN (Section 2.5), bounding-box detection with DeepForest (Section 2.6), and zero-shot mask refinement with SAM 2 (Section 2.7) — and the YOLO and DeepForest detector outputs are combined through a Weighted-Box-Fusion ensemble (Section 2.8). Tiled inference allows the system to scale to satellite images of arbitrary resolution; four-mode geographic conversion supports inputs ranging from raw screenshots to fully-georeferenced GeoTIFFs; and three exporters deliver the resulting inventory in formats suitable for GIS specialists, spreadsheet users and non-technical viewers. The next chapter reports the experimental evaluation of the trained models and the integrated system on the Astana dataset.
-
-\newpage

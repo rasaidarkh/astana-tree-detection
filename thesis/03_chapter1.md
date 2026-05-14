@@ -159,5 +159,3 @@ Based on the analysis above, the problem solved in the present work can be state
 - compatibility with arbitrary geographic input modes so that the system can be used both with rigorous GeoTIFF deliverables and with informal screenshots supplied by a non-technical user.
 
 The remainder of the work is devoted to the design of a system that meets these requirements (Chapter 2) and to its experimental evaluation against the literature baselines summarised in Table 1.2 (Chapter 3).
-
-\newpage

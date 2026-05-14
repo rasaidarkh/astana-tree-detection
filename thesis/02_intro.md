@@ -69,5 +69,3 @@ The diploma project consists of an introduction, three chapters, a conclusion, a
 **Chapter 3** documents the experiments and reports the quantitative and qualitative results — training curves and validation metrics for each model, qualitative inspection of predictions, an ablation comparing the three models on the same data, the integrated pipeline as deployed in the prototype and the limitations of the current implementation.
 
 The conclusion summarises the results obtained, evaluates the achievement of each of the six objectives stated above, and outlines directions for future work.
-
-\newpage
