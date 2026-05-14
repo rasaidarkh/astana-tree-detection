@@ -180,6 +180,9 @@ def main() -> None:
             ["epoch", "train_loss_avg", "box_map_50", "mask_map_50", "lr"]
         )
 
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
     best_mask_map = -1.0
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -237,6 +240,11 @@ def main() -> None:
     log.info("Training done. Best mask_map_50=%.4f at %s", best_mask_map, output_path)
     log.info("Last checkpoint at %s", last_path)
     log.info("Metrics CSV at %s", metrics_csv)
+
+    if torch.cuda.is_available():
+        peak_gb = torch.cuda.max_memory_allocated() / 1e9
+        log.info("Peak VRAM allocated: %.2f GB", peak_gb)
+        (log_dir / "vram_peak.txt").write_text(f"{peak_gb:.2f} GB\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
