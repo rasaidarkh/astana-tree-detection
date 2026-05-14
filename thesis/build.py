@@ -115,7 +115,7 @@ def combine_markdown() -> tuple[Path, str]:
     files = sorted(
         p for p in HERE.iterdir()
         if (p.suffix == ".md"
-            and not p.name.startswith(("thesis_", "thesis."))
+            and not p.name.startswith(("thesis_", "thesis.", "maskrcnn"))
             and not p.name.startswith("00_"))
     )
     print(f"Reading {len(files)} content files:")
@@ -138,6 +138,7 @@ def render_docx(combined: str, out: Path) -> None:
         "--toc",
         "--toc-depth=2",
         "-M", "lang=en-US",
+        "--resource-path", str(HERE),
     ]
     pypandoc.convert_text(
         combined, "docx", format="md",

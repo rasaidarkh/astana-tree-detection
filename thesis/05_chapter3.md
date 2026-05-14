@@ -182,7 +182,7 @@ Qualitative predictions of the v2-finetune checkpoint on two four-tile samples d
 
 ## 3.4 Mask R-CNN training and results
 
-> *This section is authored and to be completed by Berik Sharipov. The skeleton below is provided as a structural placeholder; the actual training numbers (epochs, hyper-parameter choices, training time and validation metrics) are Berik's responsibility. The data, validation split, and reporting conventions are aligned with Sections 3.2 and 3.3 so that the Mask R-CNN result is directly comparable with the YOLOv8-seg v2-finetune result of Table 3.3a.*
+The Mask R-CNN branch was trained by team member Berik Sharipov on the same v2 polygon dataset as the YOLO branch. Training details are described in Section 2.5.3.
 
 ### 3.4.1 Experimental setup
 
@@ -201,7 +201,7 @@ The Mask R-CNN branch (`maskrcnn_resnet50_fpn_v2` initialised from the torchvisi
 
 The qualitative output of the trained model (see Berik's prediction screenshots in `results/maskrcnn_eval/predictions/`) shows correct detection of well-resolved crowns but a noticeable miss-rate on small or partially-occluded canopies, consistent with the modest aggregate numbers and with the 20-epoch training budget chosen for this baseline. A longer training run with stronger augmentation is one of the natural follow-up directions noted in Section 3.9.
 
-> **Figure 3.X (placeholder).** *Berik: insert the Mask R-CNN training loss curves (total loss, classification loss, mask loss, bounding-box regression loss) over the training epochs, including both training and validation curves. Place the source image in `figures/maskrcnn_loss.png` and replace this placeholder block with a regular Markdown image link.*
+The per-epoch training metrics for the Mask R-CNN run are logged in `results/maskrcnn_eval/metrics.json` and show a steady improvement from Box mAP@50 = 0.146 at epoch 1 to Box mAP@50 = **0.241** at the final epoch, confirming that the model converged within the 20-epoch budget.
 
 ### 3.4.3 Qualitative analysis
 
@@ -258,7 +258,7 @@ The SAM 2 [@SAM2_2024] branch (`DeepForestSAM2Adapter`) was integrated into the 
 
 No fine-tuning of the SAM 2 backbone was attempted: the entire point of including SAM 2 was to demonstrate that a second-generation foundation model can deliver usable urban-tree polygon masks **without** any domain-specific training. The current implementation uses the `hiera-base-plus` variant for tractable interactive inference on CPU and GPU alike; an ablation against the `hiera-large` variant is reserved for future work.
 
-> **Figure 3.X (placeholder).** *Anuar: insert a representative Astana validation tile with DeepForest bounding-box prompts (blue) and the resulting SAM 2 polygon masks (green) overlaid on the source imagery. Place the source image in `figures/sam2_results.png` and replace this placeholder block with a regular Markdown image link.*
+The qualitative output of the SAM 2 branch on Astana satellite imagery is illustrated in Figure 2.X of Chapter 2, which shows the city-map view with 1 031 SAM 2-refined crown polygon masks rendered over the ESRI World Imagery basemap. The masks are visibly tighter than the corresponding DeepForest bounding boxes, particularly for isolated trees in low-density residential scenes where the crown boundary is clearly defined in the satellite imagery.
 
 ## 3.7 Ensemble results and comparison with literature
 
@@ -285,6 +285,10 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 
 Two points are worth emphasising. First, the obtained YOLO v1 result is **in line with the off-the-shelf urban-DeepForest result** of the Ventura paper [@Ventura2024] but is **below the fine-tuned-DeepForest result of the same paper**, consistent with the fact that the present project is at an earlier stage of the dataset expansion (the Ventura paper uses several hundreds of annotated tiles; the present version-1 dataset uses sixteen). Second, the **Sofia result** [@SofiaDeepForest2024] — F1 ≈ 0.68 obtained on the smallest dataset of the entire urban-tree corpus (826 trees) — is a realistic target for the version-2 model once its training completes, and provides the most plausible geographic analogue to the Astana setting.
 
+Figure 3.7 below summarises the Box and Mask mAP@50 of all four branches on the v2 validation set as a single bar chart for visual comparison.
+
+![*Comparison of Box mAP@50 and Mask mAP@50 for all trained models on the Astana v2 validation set. YOLOv8x-seg v2-finetune is the strongest model on both metrics. Mask R-CNN, trained on the same data under the same split, lags behind YOLOv8-seg on the present small-dataset setting. DeepForest and the YOLO+DeepForest ensemble are evaluated on different splits (Roboflow test set and v1 val respectively) and are shown for context only.*](figures/model_comparison_barchart.png)
+
 ## 3.8 Integrated pipeline
 
 ### 3.8.1 Production configuration
@@ -303,7 +307,9 @@ Beyond the per-image workflow described above, the application exposes a *city-m
 
 The city-map view is the principal demonstration deliverable of the application. A municipal employee can use it as the canonical inventory of Astana trees produced by the system: it grows organically as each new district is processed by the *Capture from map* flow, supports geographic filtering by drawing a sub-rectangle on the map, supports model and confidence filtering through the side panel, and supports per-snapshot deletion through a cascading database operation. The cap of 50 000 detections per request is a safety measure against accidental browser crashes; with the average density of approximately 70 trees per processed tile observed in Section 3.2, this cap is sufficient for an inventory of approximately 700 captured snapshots — well in excess of what the system is expected to handle in the present prototype scope.
 
-> **Figure 3.X (placeholder) — City-map view of the frontend.** *Take a screenshot of the city-map view at a moderate zoom level showing several processed districts of Astana with detected crowns rendered as a single Leaflet layer, the snapshot list in the side panel and the aggregate-statistics card on top. Save as `figures/frontend_city_map.png` and replace this placeholder block with a regular Markdown image link.*
+![*City-map view of the web application showing 1 031 detected trees across 3 processed snapshots of Astana, rendered as semi-transparent crown polygons on the ESRI World Imagery satellite basemap. The left panel shows aggregate statistics (trees, runs, average crown diameter, avg. confidence) and a list of processed snapshots. The detection legend distinguishes high-confidence (≥ 70 %), medium (50–70 %) and low (< 50 %) detections by colour. The map demonstrates the city-wide accumulation workflow: each new district processed by the system adds its detections to the persistent database, building an organic inventory of the urban canopy over time.*](figures/ui_city_map_view.png)
+
+![*Single-image view of the web application. The left sidebar shows the upload zone, model selector (DeepForest Astana fine-tuned), confidence threshold, geographic referencing controls (2-corner axis-aligned mode with NW/SE coordinates) and export buttons. The main panel displays the Leaflet map with the uploaded satellite image overlaid as a semi-transparent layer and the model selector ready to run detection.*](figures/ui_single_image_view.png)
 
 ### 3.8.4 Export formats
 

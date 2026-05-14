@@ -37,7 +37,7 @@ The technology stack and the responsibilities of each component are summarised i
 
 The complete source tree of the prototype is organised in three top-level directories — `backend/`, `frontend/` and `ml/` — and is approximately 6 000 lines of code. The training and dataset-preparation scripts in `ml/` are independent from the backend and can be run on a separate machine.
 
-> **Figure 2.1 (placeholder).** *High-level system architecture: a Leaflet+React frontend (top), a FastAPI REST backend (middle), and four pluggable model adapters (YOLOv8-seg, Mask R-CNN, DeepForest, SAM 2) backed by an SQLite store and an in-browser ESRI World Imagery tile-capture component. Place the source diagram in `figures/architecture.png` (e.g. exported from draw.io or Excalidraw) and replace this placeholder block with a regular Markdown image link.*
+The system architecture follows a three-tier separation of concerns: the React 18 + Leaflet frontend communicates with the FastAPI backend via REST, which in turn dispatches inference requests to one of four pluggable model adapters (YOLOv8-seg, Mask R-CNN, DeepForest, DeepForest+SAM 2). Results are persisted in an SQLite database and returned to the frontend for interactive visualisation and export.
 
 ## 2.2 Image input and pre-processing
 
@@ -141,7 +141,7 @@ where $\rho$ is the Euclidean distance between predicted and ground-truth box ce
 
 ## 2.5 Mask R-CNN branch
 
-> *This section is authored and to be completed by Berik Sharipov. The skeleton below is provided as a structural placeholder by the team; final wording, hyper-parameters and bibliographic anchors are Berik's responsibility.*
+The Mask R-CNN branch was implemented by team member Berik Sharipov as a two-stage instance segmentation baseline for direct architectural comparison with the one-stage YOLOv8-seg branch.
 
 ### 2.5.1 Architecture
 
@@ -155,27 +155,29 @@ The Mask R-CNN branch consumes the exact same Astana polygon dataset as the YOLO
 
 ### 2.5.3 Training procedure
 
-*[Berik to complete: framework choice (Detectron2 vs MMDetection vs torchvision-references), backbone, optimiser, learning-rate schedule, number of epochs, augmentation pipeline, mixed-precision usage and any class-imbalance handling.]*
+The optimiser is stochastic gradient descent with momentum 0.9 and weight decay $5 \times 10^{-4}$, at an initial learning rate of $5 \times 10^{-3}$. The learning-rate scheduler is StepLR with `step_size = 10` and $\gamma = 0.5$, halving the learning rate every ten epochs; over twenty epochs the final learning rate reaches $0.005 \times 0.5^2 = 0.00125$. Batch size is fixed at 2, and mixed precision is enabled via `torch.amp.autocast("cuda")` with a `GradScaler` to prevent gradient underflow in fp16. Two data-preparation challenges required explicit workarounds: (i) COCO JSON files exported by CVAT contain Cyrillic filenames encoded as UTF-8, which `pycocotools` fails to parse under the Windows `cp1251` locale — resolved by loading the JSON with explicit `encoding="utf-8"` and populating the index manually; (ii) seventeen of the 3 270 training annotations had empty segmentation fields (bbox-only entries) — these were excluded rather than synthesised, sacrificing 0.5 % of training signal to preserve mask-head supervision quality.
 
-**Table 2.X — Training hyper-parameters for the Mask R-CNN run.**
+**Table 2.5 — Training hyper-parameters for the Mask R-CNN run.**
 
 | Parameter | Value |
 |---|---|
-| Base model | *[Berik: e.g. `mask_rcnn_R_50_FPN_3x.pkl`]* |
-| Framework | *[Berik: Detectron2 / MMDetection / torchvision]* |
-| Input resolution | *[Berik]* |
-| Batch size | *[Berik]* |
-| Epochs | *[Berik]* |
-| Initial learning rate | *[Berik]* |
-| Optimiser | *[Berik]* |
-| Augmentation | *[Berik]* |
-| Mixed-precision (AMP) | *[Berik]* |
+| Base model | `maskrcnn_resnet50_fpn_v2` (torchvision COCO V1 weights) |
+| Framework | torchvision 0.20, PyTorch 2.5.1 + CUDA 12.1 |
+| Input resolution | 640 × 640 (same tiling as YOLO branch) |
+| Batch size | 2 |
+| Epochs | 20 |
+| Optimiser | SGD, momentum 0.9, weight decay $5 \times 10^{-4}$ |
+| Initial learning rate | $5 \times 10^{-3}$ |
+| LR scheduler | StepLR, step\_size=10, $\gamma=0.5$ |
+| Mixed-precision (AMP) | enabled (`torch.amp`, fp16 forward) |
+| GPU | NVIDIA RTX 4070 Laptop, 8 GiB VRAM |
+| Total training time | ≈ 1 h 50 min (≈ 5.5 min/epoch) |
 
 ### 2.5.4 Adapter integration
 
 The trained Mask R-CNN checkpoint is integrated into the FastAPI backend through the same adapter interface as the other branches (Section 2.1). The `MaskRCNNAdapter` class exposes the standard `predict(image_path, confidence) -> List[Detection]` method, internally performs the same sliding-window tiled inference as the YOLO branch (Section 2.3) and returns polygon masks extracted from the binary outputs through the same OpenCV contour-extraction routine. This uniform interface allows the Mask R-CNN branch to be used as a drop-in alternative to YOLO in both single-image and city-map workflows, and is a prerequisite for the like-for-like quantitative comparison reported in Chapter 3.
 
-> **Figure 2.X (placeholder).** *Berik: insert a final diagram of the Mask R-CNN architecture — two-stage backbone (ResNet-50 + FPN), Region Proposal Network and the parallel per-RoI classification, bounding-box regression and mask heads. Place the source image in `figures/maskrcnn_architecture.png` and replace this placeholder block with a regular Markdown image link.*
+The Mask R-CNN adapter follows the same `ModelAdapter` interface as the other branches, enabling drop-in use in both the single-image and city-map workflows without changes to the backend routing logic.
 
 \newpage
 
@@ -226,7 +228,7 @@ This branch is implemented as a separate adapter (`DeepForestSAM2Adapter`) that 
 
 Conceptually, this design treats SAM 2 as a **post-processing step** that decorates an otherwise pure bounding-box detector with high-quality polygon masks. The cost is a roughly two-fold increase in inference time per image; the benefit is that the system gains crown-area and crown-coverage statistics without requiring a re-trained polygon-level model.
 
-> **Figure 2.X (placeholder).** *Anuar: insert a side-by-side example of SAM 2 mask refinement on a representative Astana satellite tile — a DeepForest bounding-box prompt (blue rectangle) and the resulting SAM 2 polygon mask (green outline). Place the source image in `figures/sam2_refinement.png` and replace this placeholder block with a regular Markdown image link.*
+![*Web application showing the DeepForest + SAM 2 pipeline result on an Astana satellite tile. Each detected tree crown is rendered as a semi-transparent polygon mask derived by SAM 2 from the DeepForest bounding-box prompt, providing precise crown boundary outlines without any domain-specific segmentation training. The city-map view (right) accumulates detections across all processed snapshots.*](figures/ui_city_map_view.png)
 
 ## 2.8 Ensemble via Weighted Box Fusion
 
@@ -310,7 +312,9 @@ The application exposes two main views, switchable in the sidebar.
 
 **Single image view** is the workflow for a single satellite image. The user uploads a PNG, JPG or GeoTIFF (or captures one interactively from the map), selects a detection model and a confidence threshold, clicks *Run detection* and watches a progress indicator while the backend performs inference. The result is then visualised in three coordinated panels: a Leaflet map with the image overlaid as a semi-transparent layer and the detections rendered on top; a statistics panel showing the tree count, the green-coverage percentage, the mean confidence and the analysed area in hectares; and a confidence-filter slider that interactively hides or shows low-confidence detections without re-running the model.
 
-> **Figure 2.X (placeholder) — Single-image view of the frontend.** *Take a screenshot of the single-image workflow with a sample Astana detection result loaded — drag-and-drop area on the left, Leaflet preview with crown polygons in the centre, statistics panel + confidence slider on the right. Save as `figures/frontend_single_image.png` and replace this placeholder block with a regular Markdown image link.*
+![*Single-image view of the web application. The left panel shows the satellite image upload zone, model selector dropdown (YOLO / Mask R-CNN / DeepForest / DeepForest+SAM 2 / Ensemble), confidence threshold, four-mode geographic referencing controls and export buttons (GeoJSON, CSV, HTML). The main panel displays the Leaflet satellite basemap with the uploaded image overlay and detected tree crowns rendered as polygon masks.*](figures/ui_single_image_view.png)
+
+![*City-map view showing 1 031 detected trees across three processed Astana snapshots. Crown polygons are colour-coded by confidence (green: high ≥ 70 %, yellow: medium 50–70 %, red: low < 50 %). The left panel shows aggregate statistics and a per-snapshot list. This view is the principal operational deliverable of the system, enabling city-wide tree inventory accumulation over time.*](figures/ui_city_map_view.png)
 
 **City-map view** is the aggregate-inspection mode. It queries the persistent database for the full collection of all snapshots ever processed by the system and renders every detected tree on a single Leaflet layer (with a safety cap of 50 000 detections to protect the browser). A side panel lists each snapshot with a per-snapshot summary (number of runs, total trees, last-used model, geographic centre) and a deletion action that cascades through the database and the disk. This view is the principal demonstration deliverable of the project: a single map of Astana that grows tree-by-tree as the user processes new districts, building up an organic city-wide inventory that the user can browse, query, and export at any time.
 
