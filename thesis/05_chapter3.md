@@ -190,24 +190,35 @@ The Mask R-CNN training is performed on the same hardware described in Section 3
 
 ### 3.4.2 Training results
 
-*[Berik to complete: report the training loss curves, wall-clock training time, best epoch and the final validation metrics. Use the same metric set as the YOLO results — Box Precision / Recall / mAP@50 / mAP@50:95 and Mask Precision / Recall / mAP@50 / mAP@50:95 — and report numbers on the same merged v2 validation set so that the result is directly comparable to v2-finetune.]*
+The Mask R-CNN branch (`maskrcnn_resnet50_fpn_v2` initialised from the torchvision COCO V1 weights) was trained by team member Berik Sharipov for 20 epochs on the same v2 polygon dataset as the YOLO branch and evaluated on the same 10-tile version-2 validation set (≈ 230 polygons). The final validation metrics, computed via the COCO-style pycocotools evaluator at IoU thresholds [0.50, 0.95] in increments of 0.05, are summarised in Table 3.4a.
 
-**Table 3.4a (placeholder) — Mask R-CNN final validation metrics on the v2 merged validation set.**
+**Table 3.4a — Mask R-CNN final validation metrics on the v2 merged validation set (10 tiles, ≈ 230 polygons).**
 
-| Output head | Precision | Recall | mAP@50 | mAP@50:95 |
+| Output head | Precision @ conf=0.5 | Recall @ conf=0.5 | mAP@50 | mAP@50:95 |
 |---|---|---|---|---|
-| Bounding box | *[Berik]* | *[Berik]* | *[Berik]* | *[Berik]* |
-| Segmentation mask | *[Berik]* | *[Berik]* | *[Berik]* | *[Berik]* |
+| Bounding box | 0.357 | 0.349 | **0.241** | 0.093 |
+| Segmentation mask | — | — | **0.226** | 0.076 |
+
+The qualitative output of the trained model (see Berik's prediction screenshots in `results/maskrcnn_eval/predictions/`) shows correct detection of well-resolved crowns but a noticeable miss-rate on small or partially-occluded canopies, consistent with the modest aggregate numbers and with the 20-epoch training budget chosen for this baseline. A longer training run with stronger augmentation is one of the natural follow-up directions noted in Section 3.9.
 
 > **Figure 3.X (placeholder).** *Berik: insert the Mask R-CNN training loss curves (total loss, classification loss, mask loss, bounding-box regression loss) over the training epochs, including both training and validation curves. Place the source image in `figures/maskrcnn_loss.png` and replace this placeholder block with a regular Markdown image link.*
 
 ### 3.4.3 Qualitative analysis
 
-*[Berik: a brief qualitative discussion comparable in scope to Section 3.3.4 — what failure modes does Mask R-CNN exhibit on Astana imagery, where does it differ qualitatively from YOLO, and what is the dominant precision-vs-recall trade-off observed. Sample annotated tiles from `runs/maskrcnn/predict/val_check/*.jpg` should be referenced once available.]*
+A representative sample of the Mask R-CNN predictions on Astana validation tiles is provided in `results/maskrcnn_eval/predictions/`. Visually, the trained model detects most of the larger, well-isolated crowns with sharp polygon boundaries — a direct benefit of the two-stage RoI-aligned mask head — but it misses a substantial fraction of small or partially-occluded crowns. The dominant precision-vs-recall trade-off therefore differs from the YOLOv8x-seg branch: YOLO tends to over-segment dense canopies (producing many partial-crown detections at low confidence), whereas Mask R-CNN tends to under-detect small crowns altogether at the same confidence threshold.
 
 ### 3.4.4 Comparison with YOLOv8-seg
 
-*[Berik: a final sub-section placing the Mask R-CNN numbers side-by-side with the v2-finetune YOLO numbers from Table 3.3a, and reflecting on whether the two-stage vs one-stage architectural choice yielded the differences predicted by the literature reviewed in Section 1.4 (e.g. higher localisation accuracy at the cost of inference time).]*
+Placing the Mask R-CNN numbers side-by-side with the v2-finetune YOLO from Table 3.3a yields a clear architectural ranking on the present dataset:
+
+| Metric | YOLOv8x-seg v2-finetune | Mask R-CNN |
+|---|---|---|
+| Box mAP@50 | **0.372** | 0.241 |
+| Mask mAP@50 | **0.331** | 0.226 |
+| Box mAP@50:95 | **0.136** | 0.093 |
+| Mask mAP@50:95 | **0.108** | 0.076 |
+
+On every metric the one-stage YOLO v2-finetune outperforms the two-stage Mask R-CNN. This result is at odds with the literature precedent of [@Lv2023] (Det AP 92.40 %, Seg AP 97.70 % for MCAN — a Mask R-CNN variant — on UAV imagery), but is consistent with the very different signal regime of the present setting: low-resolution satellite imagery (0.3–1 m GSD), small training set (≈ 77 source images / ≈ 8 000 polygons), and short training budget (20 epochs vs YOLO's 99-epoch best-checkpoint). The result also matches the broader pattern in modern object-detection benchmarks, where one-stage detectors with strong loss design (CIoU, DFL) close most of the gap to two-stage methods on small datasets. A longer training run with stronger augmentation and a learning-rate schedule tailored to the Astana data is a natural next step for the Mask R-CNN branch.
 
 \newpage
 
@@ -263,7 +274,7 @@ Table 3.5 contextualises the obtained results against the literature baselines c
 | YOLOv8x-seg v1 (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.265 | Same model, harder val (apples-to-apples) |
 | YOLOv8x-seg v2-fromscratch (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.319 | +20 % rel. over v1; merged data, COCO restart |
 | YOLOv8x-seg v2-finetune (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = **0.372** | **Best YOLO result**: v1.pt → fine-tune on new images only |
-| Mask R-CNN (this work) | Astana sat., v2 val (10 tiles) | *[Berik to fill]* | Two-stage architectural comparison vs YOLO on identical data |
+| Mask R-CNN (this work) | Astana sat., v2 val (10 tiles) | Box mAP@50 = 0.241, Mask mAP@50 = 0.226 | Two-stage baseline; below YOLO v2-finetune on this small dataset |
 | DeepForest fine-tuned (this work) | Astana sat. (Roboflow `astana-trees-ndi9r` v4) | P=0.667, R=0.552, F1=**0.604** | Anuar's training set; evaluated on Roboflow test split |
 | Ensemble YOLO + DF (this work) | Astana satellite | Box mAP@50 ≈ 0.51 (v1 val) | First Astana ensemble result |
 | YOLOv12m [@AbbasYOLO2025] | Public RGB sat. | mAP@50 = 0.908 | Different dataset, large train set |
