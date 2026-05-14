@@ -157,7 +157,7 @@ The Mask R-CNN branch consumes the exact same Astana polygon dataset as the YOLO
 
 The optimiser is stochastic gradient descent with momentum 0.9 and weight decay $5 \times 10^{-4}$, at an initial learning rate of $5 \times 10^{-3}$. The learning-rate scheduler is StepLR with `step_size = 10` and $\gamma = 0.5$, halving the learning rate every ten epochs; over twenty epochs the final learning rate reaches $0.005 \times 0.5^2 = 0.00125$. Batch size is fixed at 2, and mixed precision is enabled via `torch.amp.autocast("cuda")` with a `GradScaler` to prevent gradient underflow in fp16. Two data-preparation challenges required explicit workarounds: (i) COCO JSON files exported by CVAT contain Cyrillic filenames encoded as UTF-8, which `pycocotools` fails to parse under the Windows `cp1251` locale — resolved by loading the JSON with explicit `encoding="utf-8"` and populating the index manually; (ii) seventeen of the 3 270 training annotations had empty segmentation fields (bbox-only entries) — these were excluded rather than synthesised, sacrificing 0.5 % of training signal to preserve mask-head supervision quality.
 
-**Table 2.5 — Training hyper-parameters for the Mask R-CNN run.**
+**Table 2.3 — Training hyper-parameters for the Mask R-CNN run.**
 
 | Parameter | Value |
 |---|---|
@@ -338,7 +338,7 @@ The three modes operate on the same underlying detection list; switching between
 
 The backend exposes a complete REST API documented automatically by FastAPI's built-in OpenAPI integration at `/docs`. Table 2.3 summarises the endpoints used by the frontend and by the export workflows.
 
-**Table 2.3 — REST endpoints exposed by the backend.**
+**Table 2.4 — REST endpoints exposed by the backend.**
 
 | Method | Path | Purpose |
 |---|---|---|
