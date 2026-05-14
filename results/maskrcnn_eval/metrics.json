@@ -1,0 +1,33 @@
+{
+  "box": {
+    "mAP_50_95": 0.09318925587492603,
+    "mAP_50": 0.24109824663003723,
+    "mAP_75": 0.06525354602638382,
+    "mAP_small": 0.10913792459429762,
+    "mAP_medium": 0.08134867001046658,
+    "mAP_large": 0.0,
+    "AR_1": 0.013090909090909092,
+    "AR_10": 0.0749090909090909,
+    "AR_100": 0.15345454545454545,
+    "summary": " Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.093\n Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.241\n Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.065\n Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.109\n Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.081\n Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.013\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.075\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.153\n Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.157\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.146\n Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000\n"
+  },
+  "segm": {
+    "mAP_50_95": 0.07597672345976446,
+    "mAP_50": 0.22617975289522813,
+    "mAP_75": 0.027716875520503993,
+    "mAP_small": 0.09120103693723043,
+    "mAP_medium": 0.06451113489427418,
+    "mAP_large": 0.0,
+    "AR_1": 0.009818181818181818,
+    "AR_10": 0.06363636363636363,
+    "AR_100": 0.12836363636363637,
+    "summary": " Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.076\n Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.226\n Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.028\n Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.091\n Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.065\n Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.010\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.064\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.128\n Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.133\n Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.119\n Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000\n"
+  },
+  "box_precision_at_conf": 0.35687732342007433,
+  "box_recall_at_conf": 0.3490909090909091,
+  "confidence_threshold": 0.5,
+  "n_val_images": 10,
+  "tp": 96,
+  "fp": 173,
+  "fn": 179
+}
