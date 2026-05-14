@@ -23,6 +23,20 @@ from torchvision.transforms import functional as F
 log = logging.getLogger("astana-tree")
 
 
+def _has_valid_segmentation(ann: dict) -> bool:
+    """True if ann has a non-degenerate polygon list or non-empty RLE.
+
+    CVAT can export bbox-only annotations as ``segmentation=[]`` — those crash
+    pycocotools.frPyObjects and provide no mask supervision for Mask R-CNN.
+    """
+    seg = ann.get("segmentation")
+    if isinstance(seg, list):
+        return len(seg) > 0 and all(len(poly) >= 6 for poly in seg)
+    if isinstance(seg, dict):
+        return bool(seg.get("counts"))
+    return False
+
+
 class CocoMaskRCNNDataset(Dataset):
     """COCO instance-segmentation dataset for torchvision Mask R-CNN.
 
@@ -51,6 +65,22 @@ class CocoMaskRCNNDataset(Dataset):
         self.images_roots: list[Path] = [Path(r) for r in images_roots]
         self.transforms = transforms
 
+        # One-time scan: how many annotations will be filtered for not having
+        # a usable segmentation. Helpful at training start for noticing drift
+        # in upstream CVAT exports.
+        skipped = 0
+        total = 0
+        for img_id in self.image_ids:
+            for ann in self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id, iscrowd=None)):
+                total += 1
+                if not _has_valid_segmentation(ann):
+                    skipped += 1
+        if skipped > 0:
+            log.warning(
+                "Filtered %d/%d annotations with empty/invalid segmentation (%.1f%%)",
+                skipped, total, 100.0 * skipped / total,
+            )
+
     def __len__(self) -> int:
         return len(self.image_ids)
 
@@ -78,6 +108,9 @@ class CocoMaskRCNNDataset(Dataset):
 
         ann_ids = self.coco.getAnnIds(imgIds=image_id, iscrowd=None)
         anns = self.coco.loadAnns(ann_ids)
+        # Drop bbox-only / degenerate-polygon annotations — Mask R-CNN requires
+        # a usable mask for every box. See _has_valid_segmentation for criteria.
+        anns = [ann for ann in anns if _has_valid_segmentation(ann)]
 
         boxes_list: list[list[float]] = []
         masks_list: list[np.ndarray] = []
