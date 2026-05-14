@@ -380,8 +380,8 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 \providecommand{\ExtensionTok}[1]{#1}
 \providecommand{\RegionMarkerTok}[1]{#1}
 
-\widowpenalty=1000
-\clubpenalty=1000
+\widowpenalty=10000
+\clubpenalty=10000
 
 \begin{document}
 

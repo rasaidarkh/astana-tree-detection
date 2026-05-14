@@ -158,4 +158,4 @@ Based on the analysis above, the problem solved in the present work can be state
 - support for at least three export formats — GeoJSON, CSV and standalone HTML — to satisfy the interoperability requirement of Section 1.1;
 - compatibility with arbitrary geographic input modes so that the system can be used both with rigorous GeoTIFF deliverables and with informal screenshots supplied by a non-technical user.
 
-The remainder of the work is devoted to the design of a system that meets these requirements (Chapter 2) and to its experimental evaluation against the literature baselines summarised in Table 1.2 (Chapter 3).
+Chapter 2 presents the system design that meets these requirements, and Chapter 3 reports its experimental evaluation against the literature baselines of Table 1.2.
