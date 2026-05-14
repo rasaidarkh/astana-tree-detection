@@ -7,6 +7,7 @@ tuples in the torchvision detection format.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Callable, Optional
@@ -37,7 +38,15 @@ class CocoMaskRCNNDataset(Dataset):
         images_roots: list[str],
         transforms: Optional[Callable] = None,
     ):
-        self.coco = COCO(annotations_json)
+        # pycocotools.COCO(path) opens with locale encoding (cp1251 on RU Windows),
+        # which mojibakes Cyrillic file_name fields. Load JSON ourselves as UTF-8
+        # and populate the COCO object manually — works on every OS.
+        with open(annotations_json, "r", encoding="utf-8") as f:
+            dataset = json.load(f)
+        self.coco = COCO()
+        self.coco.dataset = dataset
+        self.coco.createIndex()
+
         self.image_ids: list[int] = sorted(self.coco.getImgIds())
         self.images_roots: list[Path] = [Path(r) for r in images_roots]
         self.transforms = transforms
