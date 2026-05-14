@@ -323,6 +323,9 @@ function DetectionControls({ canRun, status, progress, eta, onRun, model, setMod
             <option value="ensemble" disabled={!isModelAvailable("ensemble")}>
               Ensemble · YOLO + DeepForest{isModelAvailable("ensemble") ? "" : " (need both)"}
             </option>
+            <option value="deepforest_sam2" disabled={!isModelAvailable("deepforest_sam2")}>
+              DeepForest + SAM2 (crown masks)
+            </option>
           </select>
           <div className="select-chev"><Icon name="chevron" size={14} /></div>
         </div>

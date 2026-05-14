@@ -65,6 +65,7 @@ CITATIONS: dict[str, int] = {
     "Schmohl2022": 23,
     "Huerta2021": 24,
     "SAM2023": 25,
+    "SAM2024": 25,
     "WBF2021": 26,
     "FasterRCNN2015": 27,
     "MaskRCNN2017": 28,
@@ -110,7 +111,7 @@ def ensure_styles() -> None:
 
 
 def combine_markdown() -> tuple[Path, str]:
-    """Read 01..07 .md, replace citations, write thesis_full.md."""
+    """Read 00b/00c + 01..07 .md, replace citations, write thesis_full.md."""
     files = sorted(
         p for p in HERE.iterdir()
         if (p.suffix == ".md"

@@ -22,8 +22,8 @@ deepforest>=1.4      # pre-trained tree detection (Branch A)
 # --- Ensemble / post-processing ---
 ensemble-boxes>=1.0  # Weighted Box Fusion implementation
 
-# --- Optional: SAM refinement (Branch C, P2) ---
-# segment-anything @ git+https://github.com/facebookresearch/segment-anything.git
+# --- SAM2 (DeepForest post-processor) ---
+sam2>=1.0
 
 # --- ML utilities ---
 pandas>=2.1

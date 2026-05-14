@@ -76,6 +76,7 @@ def _configure_style(doc, name, *, size, bold=False, italic=False,
     style.font.size = Pt(size)
     style.font.bold = bold
     style.font.italic = italic
+    style.font.color.rgb = RGBColor(0, 0, 0)
     # Force font also at rPr level for older Word compatibility
     rPr = style.element.get_or_add_rPr()
     rFonts = rPr.find(qn("w:rFonts"))
@@ -84,6 +85,15 @@ def _configure_style(doc, name, *, size, bold=False, italic=False,
         rPr.insert(0, rFonts)
     for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
         rFonts.set(qn(attr), "Times New Roman")
+    # Force black color and remove theme color (Word overrides explicit color
+    # with theme color if themeColor attribute is present)
+    color_elem = rPr.find(qn("w:color"))
+    if color_elem is None:
+        color_elem = OxmlElement("w:color")
+        rPr.append(color_elem)
+    color_elem.set(qn("w:val"), "000000")
+    for attr in ("w:themeColor", "w:themeShade", "w:themeTint"):
+        color_elem.attrib.pop(qn(attr), None)
     pf = style.paragraph_format
     if align is not None:
         pf.alignment = align
