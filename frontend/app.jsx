@@ -32,6 +32,7 @@ const Icon = ({ name, size = 16, stroke = 1.75 }) => {
     alert: <><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.7L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0z" /></>,
     circle: <circle cx="12" cy="12" r="5" />,
     square: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -184,7 +185,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -220,7 +221,7 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           <div className="upload-hint">Source: Google Earth / SAS.Planet · Zoom 17–20</div>
         </div>
       ) : null}
-      {!image && !captureMode && (
+      {!image && !captureMode && !scanMode && !scanRunning && (
         <div className="capture-row">
           <button
             type="button"
@@ -242,6 +243,25 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           </div>
         </div>
       )}
+      {!image && !captureMode && !scanMode && !scanRunning && (
+        <div className="capture-row" style={{ marginTop: 6 }}>
+          <button
+            type="button"
+            className="btn-capture"
+            onClick={onStartScan}
+            disabled={uploading}
+            style={{ background: "linear-gradient(135deg,#0F6E56,#1a9170)" }}
+            title="Большой bbox → авто-сетка под-регионов на zoom 19 → predict каждого"
+          >
+            <Icon name="grid" size={14} />
+            <span>Auto-Zoom Scan</span>
+          </button>
+          <div className="capture-zoom">
+            <label>z</label>
+            <input type="number" value={19} disabled readOnly title="Фиксированный max-zoom для максимальной детализации" />
+          </div>
+        </div>
+      )}
       {!image && captureMode && (
         <div className="capture-active">
           <div className="capture-active-row">
@@ -251,6 +271,32 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           <button type="button" className="btn-capture-cancel" onClick={onCancelCapture}>
             Отмена
           </button>
+        </div>
+      )}
+      {!image && scanMode && !scanRunning && (
+        <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
+          <div className="capture-active-row">
+            <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
+            <span>Auto-Zoom Scan: нарисуй большой прямоугольник</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#666", margin: "4px 0 8px" }}>
+            Сервер сам дробит на сетку под-регионов на zoom 19 ({model || "yolo"}).
+            Лимит: 9 под-регионов за запрос.
+          </div>
+          <button type="button" className="btn-capture-cancel" onClick={onCancelScan}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {scanRunning && (
+        <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
+          <div className="capture-active-row">
+            <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
+            <span>{scanStatus || "Сканирую под-регионы…"}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+            Каждый под-регион качает ~100 тайлов и прогоняет модель — не закрывай вкладку.
+          </div>
         </div>
       )}
       {image && (
@@ -774,7 +820,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -960,7 +1006,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     if (!map) return;
 
     const container = map.getContainer();
-    if (!captureMode) {
+    const drawing = captureMode || scanMode;
+    if (!drawing) {
       container.classList.remove("capture-cursor");
       if (captureRectRef.current) {
         map.removeLayer(captureRectRef.current);
@@ -970,6 +1017,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     }
 
     container.classList.add("capture-cursor");
+    // Scan mode рисуем в зелёный (DeepForest-ish, отличает от обычного capture).
+    const rectColor = scanMode ? "#0F6E56" : "#EF9F27";
     let startLL = null;
 
     const onDown = (e) => {
@@ -981,7 +1030,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       }
       captureRectRef.current = L.rectangle(
         [startLL, startLL],
-        { color: "#EF9F27", weight: 2, fillColor: "#EF9F27", fillOpacity: 0.12, dashArray: "4 4" },
+        { color: rectColor, weight: 2, fillColor: rectColor, fillOpacity: 0.12, dashArray: "4 4" },
       ).addTo(map);
     };
     const onMove = (e) => {
@@ -1006,7 +1055,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
         }
         return;
       }
-      onCaptureBbox && onCaptureBbox({ nw, se });
+      if (scanMode && onScanBbox) onScanBbox({ nw, se });
+      else if (captureMode && onCaptureBbox) onCaptureBbox({ nw, se });
     };
 
     map.on("mousedown", onDown);
@@ -1018,7 +1068,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       map.off("mouseup", onUp);
       map.dragging.enable();
     };
-  }, [captureMode, onCaptureBbox]);
+  }, [captureMode, onCaptureBbox, scanMode, onScanBbox]);
 
   const zoomIn = () => mapInstance.current?.zoomIn();
   const zoomOut = () => mapInstance.current?.zoomOut();
@@ -1166,6 +1216,11 @@ function App() {
   const [overlayOpacity, setOverlayOpacity] = useState(0.8);
   const [captureMode, setCaptureMode] = useState(false);
   const [captureZoom, setCaptureZoom] = useState(18);
+  // Auto-Zoom Region Scan — параллельный режим к captureMode. На "Start" — войти,
+  // на рисование bbox — отправить scan, после возврата автоматически в city view.
+  const [scanMode, setScanMode] = useState(false);
+  const [scanRunning, setScanRunning] = useState(false);
+  const [scanStatus, setScanStatus] = useState(null);
 
   useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; }, [dark]);
 
@@ -1275,6 +1330,40 @@ function App() {
     }
   }, [captureZoom, showToast]);
 
+  // ============ Auto-Zoom Region Scan ============
+  // User draws a big rectangle; backend splits it into a grid of sub-regions
+  // at fixed zoom=19 and runs capture+predict per sub-region. Results land in
+  // the city aggregate DB, so после успеха просто переключаемся в city view.
+  const handleScanBbox = useCallback(async (bbox) => {
+    setScanMode(false);
+    setScanRunning(true);
+    setScanStatus("Запрашиваю сервер…");
+    try {
+      const res = await window.api.scanRegion({
+        nw: bbox.nw,
+        se: bbox.se,
+        zoom: 19,
+        model,
+        confidence: threshold,
+        maxSubregions: 9,
+      });
+      const okMsg = `Scan done · ${res.ok_count}/${res.sub_count} regions · ${res.total_trees} trees · ${(res.duration_ms / 1000).toFixed(1)} s`;
+      showToast(okMsg);
+      setScanStatus(okMsg);
+      // Прыгаем в city view — там видно все свежие snapshots на одной карте.
+      setViewMode("city");
+      await refreshAggregate();
+    } catch (e) {
+      console.error("Auto-Zoom Scan failed:", e);
+      setScanStatus(null);
+      showToast("Scan failed: " + e.message, "error");
+    } finally {
+      setScanRunning(false);
+      // Очищаем статус через пару секунд чтобы не висел в UI вечно.
+      setTimeout(() => setScanStatus(null), 4000);
+    }
+  }, [model, threshold, showToast, refreshAggregate]);
+
   // ============ Run detection ============
   const runDetection = useCallback(async () => {
     if (!imageId) {
@@ -1378,10 +1467,16 @@ function App() {
                 onClear={handleClear}
                 error={uploadError}
                 captureMode={captureMode}
-                onStartCapture={() => setCaptureMode(true)}
+                onStartCapture={() => { setScanMode(false); setCaptureMode(true); }}
                 onCancelCapture={() => setCaptureMode(false)}
                 captureZoom={captureZoom}
                 setCaptureZoom={setCaptureZoom}
+                scanMode={scanMode}
+                onStartScan={() => { setCaptureMode(false); setScanMode(true); }}
+                onCancelScan={() => setScanMode(false)}
+                scanRunning={scanRunning}
+                scanStatus={scanStatus}
+                model={model}
               />
               <DetectionControls
                 canRun={!!imageId}
@@ -1470,6 +1565,8 @@ function App() {
           setGeo={setGeo}
           captureMode={viewMode === "single" && captureMode}
           onCaptureBbox={handleCaptureBbox}
+          scanMode={viewMode === "single" && scanMode}
+          onScanBbox={handleScanBbox}
         />
         <Legend
           trees={viewMode === "city" ? aggregateTrees : trees}

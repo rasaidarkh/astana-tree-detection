@@ -33,6 +33,21 @@
       }));
     },
 
+    // Auto-Zoom Region Scan — большой bbox любого размера, сервер дробит
+    // на сетку под-регионов на фикс. zoom (по умолчанию 19) и прогоняет каждый.
+    // Под-снимки сохраняются как обычные snapshots — после возврата
+    // листинг /api/snapshots и /api/detections содержит свежие записи.
+    async scanRegion({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9 }) {
+      return _json(await fetch(`${BASE}/api/scan_region`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nw, se, zoom, model, confidence,
+          max_subregions: maxSubregions,
+        }),
+      }));
+    },
+
     imageUrl(imageId) {
       return `${BASE}/api/image/${imageId}`;
     },

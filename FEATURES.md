@@ -1,6 +1,6 @@
 # Astana Tree Detection — что уже реализовано
 
-Дайджест текущего функционала (последнее обновление: 2026-05-14).
+Дайджест текущего функционала (последнее обновление: 2026-05-16).
 Эта страница для других контрибьюторов и AI-ассистентов чтобы быстро вкатиться.
 
 Точку входа смотри в `README.md`. Конкретные эксперименты по YOLO — в `yolov train dataset/annotations_merged/README.md`.
@@ -31,7 +31,8 @@
 ### Реализованные модели
 | Adapter | Имя | Веса | Замечания |
 |---|---|---|---|
-| `YOLOAdapter` | `yolo` | `weights/yolo_satellite.pt` (v2-finetune, Box mAP50=0.372) | single-shot `imgsz=1024`. Тайлинг внутри адаптера не сделан — для огромных >2000 px снимков subopt. |
+| `YOLOAdapter` | `yolo` | `weights/yolo_satellite.pt` (v2-finetune, Box mAP50=0.372) | Sliding-window tiled inference (`tile_size=640`, `overlap=128`, `single_shot_limit=768`) + global NMS поверх overlap-зон. Совпадает с тренировочной геометрией. |
+| `MaskRCNNAdapter` | `maskrcnn` | `weights/maskrcnn_astana.pt` (опц., torchvision pretrained как fallback) | Тот же sliding-window tiled inference что у YOLO + global NMS. Berik's pipeline, ветка `feat/maskrcnn`. |
 | `DeepForestAdapter` | `deepforest` | `weights/deepforest_astana.pl` (опц.) + pretrained `weecology/deepforest-tree` (fallback) | graceful: если .pl нет, falls back на pretrained. Tiled inference через DF native (`predict_tile`, 400px patch). |
 | `EnsembleAdapter` | `ensemble` | оба выше | WBF (Weighted Box Fusion). |
 
@@ -48,12 +49,48 @@
 - Ограничение: 144 тайла на запрос (12×12 ≈ 3072×3072 px) — защита от DoS.
 - Серый-placeholder тайл при сетевой ошибке, без обвала всей склейки.
 
+### Auto-Zoom Region Scan (`backend/region_scan.py` + `POST /api/scan_region`)
+**Зачем:** пользователь рисует большой прямоугольник на Leaflet (например 1.5×1.5 км целого района). На том зуме, на котором рисует, кроны деревьев = 4–6 пикселей, и YOLO/Mask R-CNN ничего не находят — обучались на GSD ~0.5 м/px (zoom 18–19). Если же запросить весь bbox на zoom 19 одним кадром — упрётесь в MAX_TILES=144 (≈3000×3000 px).
+
+**Решение — три уровня тайлинга (см. `region_scan.py` docstring):**
+- **Layer 0** — `region_scan.split_bbox_to_subregions`: bbox + target_zoom → сетка NxN под-bbox-ов, каждый ≤ ~100 тайлов. Корень `n = ceil(sqrt(total_tiles / max_per_sub))`.
+- **Layer 1** — существующий `map_capture.capture_bbox` для каждого под-bbox: ESRI-тайлы → склейка → точный crop.
+- **Layer 2** — sliding-window 640+128 внутри адаптера (YOLO и Mask R-CNN), global NMS поверх overlap-зон.
+
+**Endpoint `POST /api/scan_region`:**
+```jsonc
+// Request
+{
+  "nw": {"lat": 51.165, "lng": 71.465},
+  "se": {"lat": 51.155, "lng": 71.480},
+  "zoom": 19,                  // optional, default 19, range 14..19
+  "model": "yolo",             // или maskrcnn / deepforest / ensemble / deepforest_sam2
+  "confidence": 0.25,
+  "max_subregions": 9          // optional, default 9 — защита от 30-минутных скан-сессий
+}
+// Response
+{
+  "sub_count": 4, "ok_count": 4, "total_trees": 287, "duration_ms": 42130,
+  "zoom": 19, "model": "yolo",
+  "bbox": {...},
+  "sub_regions": [
+    {"row":0,"col":0,"snapshot_id":"abc","job_id":"def","tree_count":71,"duration_ms":9800,"sub_bbox":{...}},
+    ...
+  ]
+}
+```
+
+Каждый успешный под-регион сохраняется как обычный `snapshot` + `run`, поэтому **в city-aggregate view (`/api/snapshots`, `/api/detections`) результаты появляются автоматически** — никакой отдельной таблицы scan-сессий нет. Если под-регион упал на capture или predict — endpoint не прерывается, просто в `sub_regions[i]` появится `"error"`. Frontend после успеха переключается в city view и обновляет агрегат.
+
+**UI:** кнопка `Auto-Zoom Scan` в Upload-секции (зелёная, рядом с `Capture from map`). Зум зафиксирован на 19, скан-режим рисует прямоугольник зелёным цветом (capture-mode остался оранжевым). Лимит 9 под-регионов ≈ 3×3 = ~1.5×1.5 км @ z19 за один запрос.
+
 ### REST endpoints
 | Метод | Путь | Назначение |
 |---|---|---|
 | `GET` | `/api/status` | Состояние сервера + агрегаты (snapshots / runs / total trees) |
 | `POST` | `/api/upload` | Загрузка PNG/JPG/TIFF/GeoTIFF. Возвращает `ImageMeta`. |
 | `POST` | `/api/capture_from_map` | `{nw, se, zoom}` → ImageMeta с bounds. |
+| `POST` | `/api/scan_region` | **Auto-Zoom Region Scan** — большой bbox любого размера → сетка под-регионов на zoom 19 → capture+predict каждого → snapshots в БД. |
 | `GET` | `/api/image/{id}` | Сам PNG для отображения. |
 | `GET` | `/api/image/{id}/meta` | Meta снимка. |
 | `POST` | `/api/predict` | Inference (model, confidence, geo). Сохраняет run+detections. |
@@ -147,7 +184,7 @@
 - **Bulk upload папки** GeoTIFF — UX заплатка, сейчас можно по одной.
 - **Compare mode** — две даты, diff деревьев.
 - **Click на snapshot в city list → load в single view** — навигация-удобство.
-- **Tiled inference в YOLOAdapter** — сейчас `imgsz=1024` single shot. Для огромных >2k px скриншотов кроны теряются. Рабочий workaround — backend получает screenshots не больше ~1700 px (от capture_from_map при zoom 18-19).
+- **Async/streaming прогресс для Auto-Zoom Scan** — сейчас endpoint синхронный, фронт ждёт ~30–60 сек блок-spinner'ом. Нормально для 9 под-регионов; для 25+ нужен WebSocket / SSE.
 
 ## Запуск локально
 

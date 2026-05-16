@@ -78,6 +78,8 @@ http://localhost:8000
 ### A. Capture from map (встроенный)
 В UI: кнопка **Capture from map** в зоне загрузки → рисуешь прямоугольник прямо на Leaflet-карте → бэк автоматом скачивает тайлы Esri World Imagery в этой области, склеивает и возвращает уже геопривязанный снимок. Минус: качество ограничено zoom 19 Esri.
 
+Для бо́льших участков (целый район/квартал) есть кнопка **Auto-Zoom Scan** — рисуешь любой большой прямоугольник, сервер сам дробит его на сетку до 9 под-регионов на фикс. zoom 19 и прогоняет каждый. Результаты сохраняются как отдельные snapshots и появляются в **City map** view (см. `FEATURES.md → Auto-Zoom Region Scan`).
+
 ### B. Скриншот + draggable corners
 Сделал скрин Google Maps / Google Earth → дропнул в UI → на карте появляются два маркера (NW/SE), тащишь их пока твой снимок не ляжет ровно поверх подложки. Координаты в полях обновляются live.
 
@@ -95,6 +97,8 @@ http://localhost:8000
 |---|---|---|
 | `GET`  | `/api/status` | Состояние сервера и моделей |
 | `POST` | `/api/upload` | Загрузить снимок (PNG/JPG/TIFF/GeoTIFF) |
+| `POST` | `/api/capture_from_map` | Скачать тайлы Esri для bbox → ImageMeta |
+| `POST` | `/api/scan_region` | Auto-Zoom Region Scan: bbox → grid под-регионов @ zoom 19 → predict каждого |
 | `POST` | `/api/predict` | Запустить детекцию: `{image_id, model, confidence, geo}` |
 | `GET`  | `/api/result/{job_id}` | Получить результат |
 | `POST` | `/api/export/{job_id}/{fmt}` | Экспорт: `geojson` · `csv` · `html` |

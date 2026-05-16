@@ -31,6 +31,7 @@ from .export import to_csv, to_geojson, to_standalone_html
 from .geo import GeoContext, annotate_detections, build_context, load_geotiff_meta
 from .map_capture import capture_bbox, save_capture
 from .models import ModelRegistry
+from .region_scan import DEFAULT_MAX_SUBREGIONS, plan_scan
 from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
 from .models.deepforest_sam2_adapter import DeepForestSAM2Adapter
@@ -54,6 +55,23 @@ class CaptureFromMapRequest(BaseModel):
     nw: LatLng
     se: LatLng
     zoom: int = Field(18, ge=1, le=19)
+
+
+class ScanRegionRequest(BaseModel):
+    """Auto-Zoom Region Scan request — см. region_scan.py.
+
+    Пользователь рисует прямоугольник любого размера, сервер сам выбирает
+    `zoom` (по умолчанию 19 — максимальный для Esri, ~0.3 м/px) и при
+    необходимости дробит bbox в сетку под-регионов. На каждом запускается
+    обычный capture+predict; результаты сохраняются как отдельные snapshots
+    в БД и автоматически появляются в city-aggregate view.
+    """
+    nw: LatLng
+    se: LatLng
+    zoom: int = Field(19, ge=14, le=19)
+    model: ModelKind = ModelKind.YOLO
+    confidence: float = Field(0.25, ge=0.0, le=1.0)
+    max_subregions: int = Field(DEFAULT_MAX_SUBREGIONS, ge=1, le=25)
 
 # ============ Setup ============
 
@@ -258,6 +276,172 @@ async def capture_from_map(req: CaptureFromMapRequest):
         req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom, w, h, size_bytes,
     )
     return meta
+
+
+@app.post("/api/scan_region")
+async def scan_region(req: ScanRegionRequest):
+    """Auto-Zoom Region Scan — большой bbox → сетка под-регионов на фикс. зуме,
+    каждая под-область прогоняется через тот же capture+predict pipeline.
+
+    Синхронный endpoint: возвращает только когда ВСЕ под-регионы обработаны.
+    UI показывает spinner; для 1.5×1.5 км @ z19 типичное время ~30–60 сек.
+
+    Под-регионы сохраняются в БД как отдельные snapshots — после завершения
+    они подтягиваются в city-aggregate view (`GET /api/snapshots`,
+    `GET /api/detections`) на общих основаниях.
+    """
+    adapter: Optional[ModelAdapter] = registry.get(req.model)
+    if adapter is None:
+        available = [k.value for k in registry.available()]
+        raise HTTPException(503, f"Model {req.model.value} not available. Available: {available}")
+
+    try:
+        subs = plan_scan(
+            req.nw.lat, req.nw.lng, req.se.lat, req.se.lng,
+            zoom=req.zoom,
+            max_subregions=req.max_subregions,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    log.info(
+        "scan_region: bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %d sub-region(s), model=%s",
+        req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
+        len(subs), req.model.value,
+    )
+
+    sub_results = []
+    total_trees = 0
+    t_total = time.perf_counter()
+
+    for sub in subs:
+        sub_label = f"r{sub.row}c{sub.col}"
+        try:
+            cap = await asyncio.to_thread(
+                capture_bbox,
+                sub.nw_lat, sub.nw_lng, sub.se_lat, sub.se_lng, req.zoom,
+            )
+        except ValueError as e:
+            log.warning("scan_region sub-%s capture rejected: %s", sub_label, e)
+            sub_results.append({
+                "row": sub.row, "col": sub.col,
+                "error": str(e),
+                "sub_bbox": {
+                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+                },
+            })
+            continue
+        except (urllib.error.URLError, urllib.error.HTTPError, IOError) as e:
+            log.warning("scan_region sub-%s tile fetch failed: %s", sub_label, e)
+            sub_results.append({
+                "row": sub.row, "col": sub.col,
+                "error": f"tile fetch failed: {e}",
+                "sub_bbox": {
+                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+                },
+            })
+            continue
+        except Exception as e:
+            log.exception("scan_region sub-%s capture failed unexpectedly", sub_label)
+            sub_results.append({
+                "row": sub.row, "col": sub.col,
+                "error": f"capture failed: {e}",
+                "sub_bbox": {
+                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+                },
+            })
+            continue
+
+        image_id = uuid.uuid4().hex[:12]
+        out_path = UPLOADS / f"{image_id}.png"
+        save_capture(cap, out_path)
+        size_bytes = out_path.stat().st_size
+        w, h = cap.image.size
+        bounds = Corners2(
+            nw=LatLng(lat=cap.nw_lat, lng=cap.nw_lng),
+            se=LatLng(lat=cap.se_lat, lng=cap.se_lng),
+        )
+        meta = ImageMeta(
+            image_id=image_id,
+            filename=f"scan_z{req.zoom}_{sub_label}.png",
+            width=w, height=h, size_bytes=size_bytes,
+            is_geotiff=False,
+            bounds=bounds,
+        )
+        db.save_snapshot(meta)
+
+        t_sub = time.perf_counter()
+        try:
+            detections = await asyncio.to_thread(
+                adapter.predict, str(out_path), confidence=req.confidence,
+            )
+        except Exception as e:
+            log.exception("scan_region sub-%s predict failed", sub_label)
+            sub_results.append({
+                "row": sub.row, "col": sub.col,
+                "snapshot_id": image_id,
+                "error": f"predict failed: {e}",
+                "sub_bbox": {
+                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+                },
+            })
+            continue
+
+        ctx = build_context(
+            width=w, height=h,
+            geo=GeoParams(mode=GeoMode.CORNERS_2, corners_2=bounds),
+            geotiff_path=None,
+        )
+        detections = annotate_detections(detections, ctx)
+        stats = _compute_stats(detections, meta, ctx)
+        duration_ms = int((time.perf_counter() - t_sub) * 1000)
+
+        job_id = uuid.uuid4().hex[:12]
+        result = PredictResult(
+            job_id=job_id, image_id=image_id, model=req.model,
+            detections=detections, duration_ms=duration_ms, stats=stats,
+        )
+        db.save_run(result, geo_mode=GeoMode.CORNERS_2.value, confidence=req.confidence)
+        total_trees += len(detections)
+        sub_results.append({
+            "row": sub.row, "col": sub.col,
+            "snapshot_id": image_id,
+            "job_id": job_id,
+            "tree_count": len(detections),
+            "duration_ms": duration_ms,
+            "sub_bbox": {
+                "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+                "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+            },
+        })
+        log.info(
+            "scan_region sub-%s: %d trees in %d ms (snapshot=%s, job=%s)",
+            sub_label, len(detections), duration_ms, image_id, job_id,
+        )
+
+    total_duration_ms = int((time.perf_counter() - t_total) * 1000)
+    ok_count = sum(1 for r in sub_results if "error" not in r)
+    log.info(
+        "scan_region done: %d/%d sub-regions ok, %d trees, %d ms total",
+        ok_count, len(sub_results), total_trees, total_duration_ms,
+    )
+    return {
+        "sub_count": len(sub_results),
+        "ok_count": ok_count,
+        "total_trees": total_trees,
+        "duration_ms": total_duration_ms,
+        "zoom": req.zoom,
+        "model": req.model.value,
+        "bbox": {
+            "nw": {"lat": req.nw.lat, "lng": req.nw.lng},
+            "se": {"lat": req.se.lat, "lng": req.se.lng},
+        },
+        "sub_regions": sub_results,
+    }
 
 
 @app.get("/api/image/{image_id}")
