@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from . import db
 from .export import to_csv, to_geojson, to_standalone_html
 from .geo import GeoContext, annotate_detections, build_context, load_geotiff_meta
-from .map_capture import capture_bbox, save_capture
+from .map_capture import DEFAULT_PROVIDER, TILE_PROVIDERS, capture_bbox, save_capture
 from .models import ModelRegistry
 from .region_scan import DEFAULT_MAX_SUBREGIONS, plan_scan
 from .models.base import ModelAdapter
@@ -54,7 +54,8 @@ from .schemas import (
 class CaptureFromMapRequest(BaseModel):
     nw: LatLng
     se: LatLng
-    zoom: int = Field(18, ge=1, le=19)
+    zoom: int = Field(18, ge=1, le=20)
+    provider: str = Field(DEFAULT_PROVIDER, description="Tile provider key: esri | google")
 
 
 class ScanRegionRequest(BaseModel):
@@ -65,13 +66,18 @@ class ScanRegionRequest(BaseModel):
     необходимости дробит bbox в сетку под-регионов. На каждом запускается
     обычный capture+predict; результаты сохраняются как отдельные snapshots
     в БД и автоматически появляются в city-aggregate view.
+
+    `provider` выбирает источник тайлов: `esri` (default, World Imagery)
+    или `google` (Maps satellite — та же image base что у Google Earth Pro,
+    ближе к тренировочному распределению).
     """
     nw: LatLng
     se: LatLng
-    zoom: int = Field(19, ge=14, le=19)
+    zoom: int = Field(19, ge=14, le=20)
     model: ModelKind = ModelKind.YOLO
     confidence: float = Field(0.25, ge=0.0, le=1.0)
     max_subregions: int = Field(DEFAULT_MAX_SUBREGIONS, ge=1, le=25)
+    provider: str = Field(DEFAULT_PROVIDER, description="Tile provider key: esri | google")
 
 # ============ Setup ============
 
@@ -177,6 +183,27 @@ _load_models()
 # ============ Routes: status ============
 
 
+@app.get("/api/providers")
+def list_providers() -> dict:
+    """Список поддерживаемых tile-провайдеров (id, label, url-шаблон, max_zoom).
+
+    Frontend использует чтобы построить provider-dropdown и синхронизировать
+    Leaflet base layer (тот же URL что и для backend capture — иначе on-screen
+    вид расходится с тем что модель видит)."""
+    return {
+        "default": DEFAULT_PROVIDER,
+        "providers": {
+            key: {
+                "label": cfg["label"],
+                "url": cfg["url"],
+                "max_zoom": cfg["max_zoom"],
+                "subdomains": cfg["subdomains"],
+            }
+            for key, cfg in TILE_PROVIDERS.items()
+        },
+    }
+
+
 @app.get("/api/status")
 def status() -> dict:
     agg = db.aggregate_stats()
@@ -239,6 +266,7 @@ async def capture_from_map(req: CaptureFromMapRequest):
         result = await asyncio.to_thread(
             capture_bbox,
             req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
+            provider=req.provider,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -260,7 +288,7 @@ async def capture_from_map(req: CaptureFromMapRequest):
 
     meta = ImageMeta(
         image_id=image_id,
-        filename=f"map_capture_z{req.zoom}.png",
+        filename=f"map_capture_{req.provider}_z{req.zoom}.png",
         width=w,
         height=h,
         size_bytes=size_bytes,
@@ -272,8 +300,8 @@ async def capture_from_map(req: CaptureFromMapRequest):
     )
     db.save_snapshot(meta)
     log.info(
-        "Captured from map: bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %dx%d (%d bytes)",
-        req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom, w, h, size_bytes,
+        "Captured from map: provider=%s bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %dx%d (%d bytes)",
+        req.provider, req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom, w, h, size_bytes,
     )
     return meta
 
@@ -294,6 +322,8 @@ async def scan_region(req: ScanRegionRequest):
     if adapter is None:
         available = [k.value for k in registry.available()]
         raise HTTPException(503, f"Model {req.model.value} not available. Available: {available}")
+    if req.provider not in TILE_PROVIDERS:
+        raise HTTPException(400, f"Unknown tile provider {req.provider!r}. Known: {sorted(TILE_PROVIDERS)}")
 
     try:
         subs = plan_scan(
@@ -305,8 +335,8 @@ async def scan_region(req: ScanRegionRequest):
         raise HTTPException(400, str(e))
 
     log.info(
-        "scan_region: bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %d sub-region(s), model=%s",
-        req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
+        "scan_region: provider=%s bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %d sub-region(s), model=%s",
+        req.provider, req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
         len(subs), req.model.value,
     )
 
@@ -320,6 +350,7 @@ async def scan_region(req: ScanRegionRequest):
             cap = await asyncio.to_thread(
                 capture_bbox,
                 sub.nw_lat, sub.nw_lng, sub.se_lat, sub.se_lng, req.zoom,
+                provider=req.provider,
             )
         except ValueError as e:
             log.warning("scan_region sub-%s capture rejected: %s", sub_label, e)
@@ -366,7 +397,7 @@ async def scan_region(req: ScanRegionRequest):
         )
         meta = ImageMeta(
             image_id=image_id,
-            filename=f"scan_z{req.zoom}_{sub_label}.png",
+            filename=f"scan_{req.provider}_z{req.zoom}_{sub_label}.png",
             width=w, height=h, size_bytes=size_bytes,
             is_geotiff=False,
             bounds=bounds,
@@ -435,6 +466,7 @@ async def scan_region(req: ScanRegionRequest):
         "total_trees": total_trees,
         "duration_ms": total_duration_ms,
         "zoom": req.zoom,
+        "provider": req.provider,
         "model": req.model.value,
         "bbox": {
             "nw": {"lat": req.nw.lat, "lng": req.nw.lng},

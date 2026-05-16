@@ -21,11 +21,46 @@ from PIL import Image
 
 TILE_SIZE = 256
 MAX_TILES = 144  # 12×12 ≈ 3072×3072 px — потолок чтобы не вешать сервер
-ESRI_URL = (
-    "https://server.arcgisonline.com/ArcGIS/rest/services/"
-    "World_Imagery/MapServer/tile/{z}/{y}/{x}"
-)
 USER_AGENT = "AstanaTreeDetection/1.0 (academic; AITU diploma project)"
+
+# Переключаемые источники спутниковых тайлов.
+#
+# Зачем несколько: YOLO/Mask R-CNN тренировались на Google Earth Pro
+# скриншотах. Esri World Imagery даёт другую цветопередачу + иногда
+# другую дату съёмки — модель видит domain shift, recall просаживается.
+# Google Satellite-тайлы — та же image base что у Google Earth Pro,
+# ближе к training distribution.
+#
+# `subdomains` — для load-balancing у провайдеров поддерживающих {s}
+# (Google использует mt0..mt3). У Esri одна точка, поле None.
+TILE_PROVIDERS = {
+    "esri": {
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/"
+               "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "label": "Esri World Imagery",
+        "max_zoom": 19,
+        "subdomains": None,
+    },
+    # Google's Maps tile API. Unofficial endpoint — академический prototype OK,
+    # production-volume пользоваться нельзя (TOS Google Maps Platform требует
+    # API ключ). Mt0..mt3 — Google's load-balancing CDN.
+    "google": {
+        "url": "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        "label": "Google Satellite (same imagery base as Google Earth Pro)",
+        "max_zoom": 20,
+        "subdomains": "0123",
+    },
+}
+DEFAULT_PROVIDER = "esri"
+
+
+def _build_tile_url(provider: str, z: int, x: int, y: int) -> str:
+    cfg = TILE_PROVIDERS[provider]
+    subs = cfg.get("subdomains")
+    if subs:
+        s = subs[(x + y) % len(subs)]
+        return cfg["url"].format(z=z, x=x, y=y, s=s)
+    return cfg["url"].format(z=z, x=x, y=y)
 
 
 @dataclass
@@ -47,12 +82,14 @@ def latlng_to_tile_xy(lat: float, lng: float, zoom: int) -> tuple[float, float]:
     return x, y
 
 
-def _fetch_tile(z: int, x: int, y: int) -> tuple[Image.Image, bool]:
+def _fetch_tile(
+    z: int, x: int, y: int, provider: str = DEFAULT_PROVIDER,
+) -> tuple[Image.Image, bool]:
     """Returns (image, ok). After 3 failed attempts returns a gray placeholder
     with ok=False so the caller can count failures and decide whether the
     stitched capture is still worth keeping (instead of silently feeding a
     mostly-gray image into the detector)."""
-    url = ESRI_URL.format(z=z, x=x, y=y)
+    url = _build_tile_url(provider, z, x, y)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for _ in range(3):
         try:
@@ -72,10 +109,16 @@ def capture_bbox(
     se_lng: float,
     zoom: int,
     max_workers: int = 8,
+    provider: str = DEFAULT_PROVIDER,
 ) -> CaptureResult:
     """Скачать тайлы, склеить, обрезать точно по bbox."""
-    if zoom < 1 or zoom > 19:
-        raise ValueError(f"Esri zoom must be 1..19, got {zoom}")
+    if provider not in TILE_PROVIDERS:
+        raise ValueError(
+            f"Unknown tile provider {provider!r}. Known: {sorted(TILE_PROVIDERS)}"
+        )
+    max_z = TILE_PROVIDERS[provider]["max_zoom"]
+    if zoom < 1 or zoom > max_z:
+        raise ValueError(f"{provider} zoom must be 1..{max_z}, got {zoom}")
     if nw_lat <= se_lat or nw_lng >= se_lng:
         raise ValueError(
             f"NW must be top-left of SE; got NW=({nw_lat},{nw_lng}) SE=({se_lat},{se_lng})"
@@ -97,7 +140,7 @@ def capture_bbox(
     # параллельно качаем все тайлы
     jobs = [(zoom, x, y) for y in range(y_min, y_max + 1) for x in range(x_min, x_max + 1)]
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        results = list(pool.map(lambda j: _fetch_tile(*j), jobs))
+        results = list(pool.map(lambda j: _fetch_tile(*j, provider=provider), jobs))
     tiles = [r[0] for r in results]
     failed_count = sum(1 for r in results if not r[1])
     if failed_count and failed_count / len(jobs) > 0.5:

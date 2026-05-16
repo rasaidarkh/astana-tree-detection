@@ -25,11 +25,11 @@
       return _json(await fetch(`${BASE}/api/upload`, { method: "POST", body: fd }));
     },
 
-    async captureFromMap({ nw, se, zoom = 18 }) {
+    async captureFromMap({ nw, se, zoom = 18, provider = "esri" }) {
       return _json(await fetch(`${BASE}/api/capture_from_map`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nw, se, zoom }),
+        body: JSON.stringify({ nw, se, zoom, provider }),
       }));
     },
 
@@ -37,15 +37,22 @@
     // на сетку под-регионов на фикс. zoom (по умолчанию 19) и прогоняет каждый.
     // Под-снимки сохраняются как обычные snapshots — после возврата
     // листинг /api/snapshots и /api/detections содержит свежие записи.
-    async scanRegion({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9 }) {
+    async scanRegion({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9, provider = "esri" }) {
       return _json(await fetch(`${BASE}/api/scan_region`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nw, se, zoom, model, confidence,
           max_subregions: maxSubregions,
+          provider,
         }),
       }));
+    },
+
+    // Список tile-провайдеров — фронт подтягивает один раз и строит
+    // dropdown + Leaflet base layer URL из того же источника что backend.
+    async providers() {
+      return _json(await fetch(`${BASE}/api/providers`));
     },
 
     imageUrl(imageId) {

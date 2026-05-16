@@ -28,7 +28,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .map_capture import MAX_TILES, latlng_to_tile_xy
+from .map_capture import MAX_TILES, TILE_PROVIDERS, latlng_to_tile_xy
 
 # Запас от MAX_TILES — оставляем место для краёв ceil(...) при дроблении
 # и не упираемся в потолок ровно. capture_bbox внутри посмотрит ещё раз.
@@ -96,8 +96,12 @@ def split_bbox_to_subregions(
     то же поведение что у capture_bbox, чтобы /api/scan_region и /api/capture_from_map
     давали одинаковые ошибки.
     """
-    if zoom < 1 or zoom > 19:
-        raise ValueError(f"Esri zoom must be 1..19, got {zoom}")
+    # Зум-границу берём по максимуму всех провайдеров (Esri=19, Google=20):
+    # модуль не знает какой provider будет использован, провайдер-специфичный
+    # check делает уже capture_bbox внутри Layer 1.
+    max_z = max(p["max_zoom"] for p in TILE_PROVIDERS.values())
+    if zoom < 1 or zoom > max_z:
+        raise ValueError(f"zoom must be 1..{max_z}, got {zoom}")
     if nw_lat <= se_lat or nw_lng >= se_lng:
         raise ValueError(
             f"NW must be top-left of SE; got NW=({nw_lat},{nw_lng}) SE=({se_lat},{se_lng})"

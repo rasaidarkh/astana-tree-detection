@@ -185,7 +185,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -222,13 +222,35 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
         </div>
       ) : null}
       {!image && !captureMode && !scanMode && !scanRunning && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, fontSize: 11, color: "#666" }}>
+          <span>Imagery:</span>
+          <select
+            value={tileProvider}
+            onChange={(e) => setTileProvider(e.target.value)}
+            className="select"
+            style={{ flex: 1, height: 28, fontSize: 11 }}
+            title="Источник тайлов для capture + Leaflet base layer. Google = ближе к training distribution YOLO/Mask R-CNN."
+          >
+            {providersMap
+              ? Object.entries(providersMap).map(([key, cfg]) => (
+                  <option key={key} value={key}>{cfg.label}</option>
+                ))
+              : (<>
+                  <option value="google">Google Satellite</option>
+                  <option value="esri">Esri World Imagery</option>
+                </>)
+            }
+          </select>
+        </div>
+      )}
+      {!image && !captureMode && !scanMode && !scanRunning && (
         <div className="capture-row">
           <button
             type="button"
             className="btn-capture"
             onClick={onStartCapture}
             disabled={uploading}
-            title="Нарисовать прямоугольник на карте, скачать тайлы Esri"
+            title={`Нарисовать прямоугольник на карте, скачать тайлы ${tileProvider}`}
           >
             <Icon name="target" size={14} />
             <span>Capture from map</span>
@@ -236,9 +258,9 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           <div className="capture-zoom">
             <label>Zoom</label>
             <input
-              type="number" min="14" max="19" step="1"
+              type="number" min="14" max="20" step="1"
               value={captureZoom}
-              onChange={(e) => setCaptureZoom(Math.max(14, Math.min(19, +e.target.value || 18)))}
+              onChange={(e) => setCaptureZoom(Math.max(14, Math.min(20, +e.target.value || 18)))}
             />
           </div>
         </div>
@@ -820,7 +842,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -851,14 +873,26 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
 
   useEffect(() => {
     if (!mapInstance.current) return;
-    const urls = {
-      satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      streets: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      clean: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    // Satellite URL берём из providersMap (если фронт уже получил список)
+    // или из локального fallback — гарантирует Leaflet base layer совпадает
+    // с тем, что backend качает для capture/scan.
+    const providerCfg = (providersMap && providersMap[tileProvider]) || null;
+    const satUrl = providerCfg
+      ? providerCfg.url.replace(/\{s\}/g, "{s}")  // Leaflet handles {s} via subdomains option
+      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+    const satOpts = providerCfg
+      ? { maxZoom: providerCfg.max_zoom || 19, subdomains: providerCfg.subdomains || "abc", attribution: "" }
+      : { maxZoom: 19, attribution: "" };
+
+    const layers = {
+      satellite: { url: satUrl, opts: satOpts },
+      streets:   { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", opts: { maxZoom: 19, attribution: "" } },
+      clean:     { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", opts: { maxZoom: 19, attribution: "" } },
     };
+    const pick = layers[baseLayer] || layers.satellite;
     if (tileLayerRef.current) mapInstance.current.removeLayer(tileLayerRef.current);
-    tileLayerRef.current = L.tileLayer(urls[baseLayer] || urls.satellite, { maxZoom: 19, attribution: "" }).addTo(mapInstance.current);
-  }, [baseLayer]);
+    tileLayerRef.current = L.tileLayer(pick.url, pick.opts).addTo(mapInstance.current);
+  }, [baseLayer, tileProvider, providersMap]);
 
   useEffect(() => {
     if (!layerRef.current || !mapInstance.current) return;
@@ -1221,6 +1255,18 @@ function App() {
   const [scanMode, setScanMode] = useState(false);
   const [scanRunning, setScanRunning] = useState(false);
   const [scanStatus, setScanStatus] = useState(null);
+  // Tile-провайдер для capture / scan / Leaflet base layer.
+  // Default = google (та же image base что Google Earth Pro = тренировочные
+  // данные YOLO/Mask R-CNN). Список грузим из /api/providers чтобы один
+  // источник правды о URL и max_zoom.
+  const [tileProvider, setTileProvider] = useState("google");
+  const [providersMap, setProvidersMap] = useState(null);
+
+  useEffect(() => {
+    window.api.providers()
+      .then((r) => setProvidersMap(r.providers))
+      .catch((e) => console.warn("Failed to load tile providers:", e));
+  }, []);
 
   useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; }, [dark]);
 
@@ -1305,6 +1351,7 @@ function App() {
         nw: bbox.nw,
         se: bbox.se,
         zoom: captureZoom,
+        provider: tileProvider,
       });
       setImage({
         ...meta,
@@ -1328,7 +1375,7 @@ function App() {
     } finally {
       setUploading(false);
     }
-  }, [captureZoom, showToast]);
+  }, [captureZoom, showToast, tileProvider]);
 
   // ============ Auto-Zoom Region Scan ============
   // User draws a big rectangle; backend splits it into a grid of sub-regions
@@ -1346,6 +1393,7 @@ function App() {
         model,
         confidence: threshold,
         maxSubregions: 9,
+        provider: tileProvider,
       });
       const okMsg = `Scan done · ${res.ok_count}/${res.sub_count} regions · ${res.total_trees} trees · ${(res.duration_ms / 1000).toFixed(1)} s`;
       showToast(okMsg);
@@ -1362,7 +1410,7 @@ function App() {
       // Очищаем статус через пару секунд чтобы не висел в UI вечно.
       setTimeout(() => setScanStatus(null), 4000);
     }
-  }, [model, threshold, showToast, refreshAggregate]);
+  }, [model, threshold, showToast, refreshAggregate, tileProvider]);
 
   // ============ Run detection ============
   const runDetection = useCallback(async () => {
@@ -1477,6 +1525,9 @@ function App() {
                 scanRunning={scanRunning}
                 scanStatus={scanStatus}
                 model={model}
+                tileProvider={tileProvider}
+                setTileProvider={setTileProvider}
+                providersMap={providersMap}
               />
               <DetectionControls
                 canRun={!!imageId}
@@ -1567,6 +1618,8 @@ function App() {
           onCaptureBbox={handleCaptureBbox}
           scanMode={viewMode === "single" && scanMode}
           onScanBbox={handleScanBbox}
+          tileProvider={tileProvider}
+          providersMap={providersMap}
         />
         <Legend
           trees={viewMode === "city" ? aggregateTrees : trees}

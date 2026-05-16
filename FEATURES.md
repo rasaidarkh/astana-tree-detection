@@ -45,9 +45,21 @@
   - `box_geo` — 4 угла bbox (NW, NE, SE, SW) в lat/lng → рисуется как полигон на Leaflet, корректен в `CORNERS_4` режиме тоже
 
 ### Map capture (`backend/map_capture.py`)
-- `POST /api/capture_from_map` — пользователь рисует прямоугольник на Leaflet, бэк скачивает Esri World Imagery тайлы для bbox, склеивает (ThreadPoolExecutor, 8 потоков), обрезает до точного pixel bbox, сохраняет как обычный upload.
+- `POST /api/capture_from_map` — пользователь рисует прямоугольник на Leaflet, бэк скачивает спутниковые тайлы для bbox, склеивает (ThreadPoolExecutor, 8 потоков), обрезает до точного pixel bbox, сохраняет как обычный upload.
 - Ограничение: 144 тайла на запрос (12×12 ≈ 3072×3072 px) — защита от DoS.
 - Серый-placeholder тайл при сетевой ошибке, без обвала всей склейки.
+
+### Switchable tile providers (`backend/map_capture.py::TILE_PROVIDERS` + `GET /api/providers`)
+**Зачем:** YOLO/Mask R-CNN тренировались на Google Earth Pro скриншотах. Esri даёт другую цветопередачу + иногда другую дату съёмки → domain shift → recall просаживается. Решение — переключаемый источник тайлов; для лучших результатов берём Google Satellite tiles (та же image base что использует Google Earth Pro).
+
+| Provider key | Endpoint | Max zoom | Замечание |
+|---|---|---|---|
+| `esri` | `server.arcgisonline.com/.../World_Imagery/...` | 19 | Бесплатный, без ключей. Стабильный. Default для backward compat. |
+| `google` | `mt{0-3}.google.com/vt/lyrs=s` | 20 | Та же image base что Google Earth Pro. Unofficial endpoint, для академического прототипа OK. |
+
+Endpoint `GET /api/providers` отдаёт список с URL-шаблонами и `max_zoom`; фронт строит из него провайдер-dropdown **и** Leaflet base layer (один источник правды — Leaflet на экране показывает ровно то же, что backend качает для capture).
+
+Параметр `provider` (default `esri`) принимается в `POST /api/capture_from_map` и `POST /api/scan_region`. Имя файла-снимка включает provider (`map_capture_google_z18.png`, `scan_google_z19_r0c0.png`) — видно в city-aggregate listings.
 
 ### Auto-Zoom Region Scan (`backend/region_scan.py` + `POST /api/scan_region`)
 **Зачем:** пользователь рисует большой прямоугольник на Leaflet (например 1.5×1.5 км целого района). На том зуме, на котором рисует, кроны деревьев = 4–6 пикселей, и YOLO/Mask R-CNN ничего не находят — обучались на GSD ~0.5 м/px (zoom 18–19). Если же запросить весь bbox на zoom 19 одним кадром — упрётесь в MAX_TILES=144 (≈3000×3000 px).
@@ -88,6 +100,7 @@
 | Метод | Путь | Назначение |
 |---|---|---|
 | `GET` | `/api/status` | Состояние сервера + агрегаты (snapshots / runs / total trees) |
+| `GET` | `/api/providers` | Список tile-провайдеров с URL/max_zoom для синхронизации Leaflet base layer. |
 | `POST` | `/api/upload` | Загрузка PNG/JPG/TIFF/GeoTIFF. Возвращает `ImageMeta`. |
 | `POST` | `/api/capture_from_map` | `{nw, se, zoom}` → ImageMeta с bounds. |
 | `POST` | `/api/scan_region` | **Auto-Zoom Region Scan** — большой bbox любого размера → сетка под-регионов на zoom 19 → capture+predict каждого → snapshots в БД. |
