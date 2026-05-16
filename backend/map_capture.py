@@ -47,23 +47,22 @@ def latlng_to_tile_xy(lat: float, lng: float, zoom: int) -> tuple[float, float]:
     return x, y
 
 
-def _fetch_tile(z: int, x: int, y: int) -> Image.Image:
+def _fetch_tile(z: int, x: int, y: int) -> tuple[Image.Image, bool]:
+    """Returns (image, ok). After 3 failed attempts returns a gray placeholder
+    with ok=False so the caller can count failures and decide whether the
+    stitched capture is still worth keeping (instead of silently feeding a
+    mostly-gray image into the detector)."""
     url = ESRI_URL.format(z=z, x=x, y=y)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    last_err: Optional[Exception] = None
     for _ in range(3):
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read()
-            return Image.open(BytesIO(data)).convert("RGB")
-        except Exception as e:
-            last_err = e
-    # после 3 фейлов — возвращаем серый тайл-заглушку, чтобы не валить весь capture
+            return Image.open(BytesIO(data)).convert("RGB"), True
+        except Exception:
+            continue
     placeholder = Image.new("RGB", (TILE_SIZE, TILE_SIZE), (60, 60, 60))
-    if last_err is not None:
-        # сохраним информацию в pixel(0,0) — на инференс не влияет
-        placeholder.putpixel((0, 0), (255, 0, 0))
-    return placeholder
+    return placeholder, False
 
 
 def capture_bbox(
@@ -98,7 +97,24 @@ def capture_bbox(
     # параллельно качаем все тайлы
     jobs = [(zoom, x, y) for y in range(y_min, y_max + 1) for x in range(x_min, x_max + 1)]
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        tiles = list(pool.map(lambda j: _fetch_tile(*j), jobs))
+        results = list(pool.map(lambda j: _fetch_tile(*j), jobs))
+    tiles = [r[0] for r in results]
+    failed_count = sum(1 for r in results if not r[1])
+    if failed_count and failed_count / len(jobs) > 0.5:
+        # More than half of the tiles fell back to gray placeholders — the
+        # stitched image would be useless input for the detector, so surface
+        # the error instead of returning a mostly-empty grid.
+        raise IOError(
+            f"Tile capture failed: {failed_count}/{len(jobs)} tiles unreachable "
+            f"(more than half — likely network outage or ESRI rate-limit). "
+            f"Retry later or use a smaller bbox."
+        )
+    if failed_count:
+        import logging
+        logging.getLogger("astana-tree").warning(
+            "capture_bbox: %d/%d tiles fell back to gray placeholder",
+            failed_count, len(jobs),
+        )
 
     canvas = Image.new("RGB", (cols * TILE_SIZE, rows * TILE_SIZE))
     for idx, tile in enumerate(tiles):

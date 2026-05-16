@@ -387,8 +387,13 @@ function DetectionControls({ canRun, status, progress, eta, onRun, model, setMod
 function GeoPanel({ geo, setGeo, image }) {
   const setMode = (mode) => setGeo({ ...geo, mode });
   const setCorner = (which, key, value) => {
+    const parsed = parseFloat(value);
+    // Keep the previous value if the user typed something non-numeric — the
+    // old `parseFloat(value) || 0` silently coerced invalid input to 0 and
+    // teleported the corner marker to (0, 0).
+    if (!Number.isFinite(parsed)) return;
     const corners = { ...(geo.corners_2 || { nw: { lat: 51.17, lng: 71.46 }, se: { lat: 51.15, lng: 71.49 } }) };
-    corners[which] = { ...corners[which], [key]: parseFloat(value) || 0 };
+    corners[which] = { ...corners[which], [key]: parsed };
     setGeo({ ...geo, corners_2: corners });
   };
 
@@ -1167,8 +1172,12 @@ function App() {
   // Загрузка статуса бэкенда + модели
   useEffect(() => {
     window.api.status().then(setModelStatus).catch((e) => {
-      console.warn("Backend status failed:", e);
-      setModelStatus({ models: {} });
+      console.error("Backend status failed:", e);
+      // Surface the error on the status object so the header / status panel
+      // can render a "Backend unreachable" banner instead of silently looking
+      // healthy when the API is actually down (which used to bite us during
+      // the demo: an empty-models response looked identical to "everything OK").
+      setModelStatus({ models: {}, _error: e?.message || String(e) });
     });
     refreshHistory();
   }, []);

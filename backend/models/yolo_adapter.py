@@ -93,4 +93,9 @@ def _mask_to_polygon(mask: np.ndarray, simplify_eps: float = 1.5) -> list[list[f
     if cv2.contourArea(largest) < 1:
         return None
     approx = cv2.approxPolyDP(largest, simplify_eps, closed=True)
+    if len(approx) < 3:
+        # Polygon with < 3 vertices is degenerate; downstream consumers
+        # (geo conversion, area heuristics, Leaflet rendering) assume a real
+        # closed polygon, so drop it.
+        return None
     return [[float(p[0][0]), float(p[0][1])] for p in approx]

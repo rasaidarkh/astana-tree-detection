@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ModelKind(str, Enum):
@@ -24,8 +24,11 @@ class GeoMode(str, Enum):
 
 
 class LatLng(BaseModel):
-    lat: float
-    lng: float
+    """Geographic point in WGS-84. Bounded to valid ranges — sending
+    lat=500 used to silently propagate through haversine/pixel-size and
+    produce nonsense geo-conversions."""
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lng: float = Field(..., ge=-180.0, le=180.0)
 
 
 class Corners4(BaseModel):
@@ -47,11 +50,22 @@ class GeoParams(BaseModel):
 
 
 class BBox(BaseModel):
-    """Pixel-space bbox: [x1, y1, x2, y2]."""
+    """Pixel-space bbox: [x1, y1, x2, y2]. Requires x1<=x2 and y1<=y2; a
+    flipped or degenerate box used to be silently accepted with area=0 and
+    then break downstream consumers (geo conversion, crown-area heuristics)."""
     x1: float
     y1: float
     x2: float
     y2: float
+
+    @model_validator(mode="after")
+    def _check_orientation(self) -> "BBox":
+        if self.x2 < self.x1 or self.y2 < self.y1:
+            raise ValueError(
+                f"BBox must satisfy x1<=x2 and y1<=y2; got "
+                f"({self.x1},{self.y1})-({self.x2},{self.y2})"
+            )
+        return self
 
     @property
     def cx(self) -> float:

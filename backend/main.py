@@ -9,9 +9,12 @@ API docs: http://localhost:8000/docs
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import time
+import urllib.error
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -63,6 +66,9 @@ UPLOADS = STORAGE / "uploads"
 RESULTS = STORAGE / "results"
 WEIGHTS = ROOT / "weights"
 FRONTEND = ROOT / "frontend"
+# Canonical resolved frontend root, used as the boundary for path-traversal
+# checks in serve_static (see below).
+FRONTEND_ROOT = FRONTEND.resolve()
 DB_PATH = STORAGE / "app.db"
 
 UPLOADS.mkdir(parents=True, exist_ok=True)
@@ -80,12 +86,23 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# CORS: restrict to local dev origins by default — `allow_origins=["*"]` plus
+# `allow_methods=["*"]` is an obvious CSRF vector the moment authentication is
+# added. Override via the ASTANA_CORS_ORIGINS env var (comma-separated) when
+# deploying behind a different domain.
+_DEFAULT_CORS = "http://localhost:8000,http://127.0.0.1:8000"
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get("ASTANA_CORS_ORIGINS", _DEFAULT_CORS).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+log.info("CORS allowed origins: %s", _cors_origins)
 
 # ============ Model registry (lazy) ============
 
@@ -137,7 +154,6 @@ def _load_models() -> None:
 _load_models()
 
 # ============ Persistent store via SQLite (see backend/db.py) ============
-# Старый in-memory job store удалён — состояние теперь полностью в storage/app.db.
 
 
 # ============ Routes: status ============
@@ -170,7 +186,10 @@ async def upload_image(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "Empty filename")
 
-    ext = Path(file.filename).suffix.lower()
+    # Sanitize: strip any path components (Windows / *nix) so a malicious
+    # filename like "../../etc/passwd" cannot end up displayed in the UI / DB.
+    safe_filename = Path(file.filename).name or "upload"
+    ext = Path(safe_filename).suffix.lower()
     if ext not in ALLOWED_EXTS:
         raise HTTPException(400, f"Unsupported extension {ext}. Allowed: {sorted(ALLOWED_EXTS)}")
 
@@ -182,30 +201,38 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(413, f"File too large ({len(contents)} bytes, max {MAX_UPLOAD_BYTES})")
     saved_path.write_bytes(contents)
 
-    meta = _build_meta(saved_path, image_id, file.filename, len(contents))
+    meta = _build_meta(saved_path, image_id, safe_filename, len(contents))
     db.save_snapshot(meta)
-    log.info("Uploaded %s → %s (%dx%d, %s)", file.filename, saved_path.name, meta.width, meta.height,
-             "GeoTIFF" if meta.is_geotiff else "regular")
+    log.info(
+        "Uploaded %s → %s (%dx%d, %s)",
+        safe_filename, saved_path.name, meta.width, meta.height,
+        "GeoTIFF" if meta.is_geotiff else "regular",
+    )
     return meta
 
 
 @app.post("/api/capture_from_map", response_model=ImageMeta)
-def capture_from_map(req: CaptureFromMapRequest):
+async def capture_from_map(req: CaptureFromMapRequest):
     """Скачивает Esri-тайлы для bbox, склеивает и сохраняет как обычный upload.
     Возвращает ImageMeta — клиент дальше идёт по обычному /api/predict."""
     try:
-        result = capture_bbox(
-            nw_lat=req.nw.lat,
-            nw_lng=req.nw.lng,
-            se_lat=req.se.lat,
-            se_lng=req.se.lng,
-            zoom=req.zoom,
+        # capture_bbox is sync + network-bound — off-load to the threadpool so
+        # the event loop is not blocked while tens of tiles download serially.
+        result = await asyncio.to_thread(
+            capture_bbox,
+            req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except (urllib.error.URLError, urllib.error.HTTPError, IOError) as e:
+        log.warning("capture_bbox network/tile-fetch error: %s", e)
+        raise HTTPException(502, f"Network error fetching tiles: {e}")
+    except MemoryError:
+        log.exception("capture_bbox out of memory while stitching")
+        raise HTTPException(507, "Out of memory while stitching tiles — reduce bbox or zoom level")
     except Exception as e:
-        log.exception("capture_bbox failed")
-        raise HTTPException(502, f"Tile fetch failed: {e}")
+        log.exception("capture_bbox failed (unexpected)")
+        raise HTTPException(500, f"Capture failed: {e}")
 
     image_id = uuid.uuid4().hex[:12]
     out_path = UPLOADS / f"{image_id}.png"
@@ -255,7 +282,7 @@ def get_image_meta(image_id: str):
 
 
 @app.post("/api/predict", response_model=PredictResult)
-def predict(req: PredictRequest):
+async def predict(req: PredictRequest):
     meta = db.load_snapshot(req.image_id)
     if not meta:
         raise HTTPException(404, f"Unknown image_id {req.image_id}. Сначала загрузи через /api/upload.")
@@ -272,7 +299,11 @@ def predict(req: PredictRequest):
 
     log.info("Running %s on %s (conf=%.2f)", adapter.kind.value, image_path, req.confidence)
     t0 = time.perf_counter()
-    detections = adapter.predict(image_path, confidence=req.confidence)
+    # Off-load the synchronous PyTorch/Ultralytics inference to a worker
+    # thread so the event loop stays responsive (status/aggregate calls).
+    detections = await asyncio.to_thread(
+        adapter.predict, image_path, confidence=req.confidence
+    )
     duration_ms = int((time.perf_counter() - t0) * 1000)
 
     ctx = build_context(
@@ -294,8 +325,10 @@ def predict(req: PredictRequest):
         stats=stats,
     )
     db.save_run(result, geo_mode=req.geo.mode.value, confidence=req.confidence)
-    log.info("Done %s: %d detections in %d ms (job=%s)", adapter.kind.value,
-             len(detections), duration_ms, job_id)
+    log.info(
+        "Done %s: %d detections in %d ms (job=%s)",
+        adapter.kind.value, len(detections), duration_ms, job_id,
+    )
     return result
 
 
@@ -408,12 +441,7 @@ def aggregate_detections(
     min_confidence: float = 0.0,
     limit: int = 50_000,
 ):
-    """Главный aggregate-запрос для городской карты.
-    Возвращает все детекции (с lat/lng) из текущего состояния БД, опционально:
-      - по географической рамке (nw_lat/lng + se_lat/lng),
-      - по модели (yolo|deepforest|ensemble),
-      - по порогу confidence.
-    По умолчанию — только последний прогон на каждый снимок (без дублей)."""
+    """Главный aggregate-запрос для городской карты."""
     bbox = None
     if all(v is not None for v in (nw_lat, nw_lng, se_lat, se_lng)):
         bbox = (nw_lat, nw_lng, se_lat, se_lng)
@@ -461,7 +489,21 @@ if FRONTEND.exists():
         # Защищаем API и docs
         if filename.startswith(("api/", "docs", "openapi.json", "redoc")):
             raise HTTPException(404, "Not found")
-        target = FRONTEND / filename
+        # Path-traversal guard: resolve the requested path and verify it
+        # stays inside FRONTEND. Otherwise a request like
+        # `GET /../../storage/app.db` would happily stream the SQLite DB.
+        try:
+            target = (FRONTEND / filename).resolve()
+        except (OSError, RuntimeError):
+            raise HTTPException(404, "Not found")
+        try:
+            target.relative_to(FRONTEND_ROOT)
+        except ValueError:
+            log.warning(
+                "Path traversal attempt blocked: requested=%r resolved=%s",
+                filename, target,
+            )
+            raise HTTPException(404, "Not found")
         if target.is_file():
             return FileResponse(target)
         raise HTTPException(404, f"File {filename} not found")
@@ -497,19 +539,36 @@ def _build_meta(path: Path, image_id: str, original_name: str, size_bytes: int) 
     )
 
 
+# Stable schema for stats: always return the same keys so the frontend can
+# safely call .toFixed() / arithmetic on the values without crashing on
+# `undefined`. Empty-detections runs now keep the same shape.
+_EMPTY_STATS: dict = {
+    "tree_count": 0,
+    "avg_confidence": None,
+    "min_confidence": None,
+    "max_confidence": None,
+    "avg_crown_area_px": None,
+    "coverage_pct": None,
+    "avg_crown_area_m2": None,
+    "total_crown_area_m2": None,
+    "analyzed_area_ha": None,
+}
+
+
 def _compute_stats(detections: list, meta: ImageMeta, ctx: GeoContext) -> dict:
+    stats: dict = dict(_EMPTY_STATS)
     if not detections:
-        return {"tree_count": 0}
+        return stats
 
     confs = [d.confidence for d in detections]
     crowns = [d.crown_area_px for d in detections if d.crown_area_px is not None]
 
-    stats: dict = {
+    stats.update({
         "tree_count": len(detections),
         "avg_confidence": round(sum(confs) / len(confs), 3),
         "min_confidence": round(min(confs), 3),
         "max_confidence": round(max(confs), 3),
-    }
+    })
 
     if crowns:
         total_crown_px = sum(crowns)

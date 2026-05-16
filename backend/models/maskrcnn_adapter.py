@@ -114,8 +114,11 @@ class MaskRCNNAdapter(ModelAdapter):
         if not Path(image_path).exists():
             raise FileNotFoundError(f"Cannot read image: {image_path}")
 
-        pil = Image.open(image_path).convert("RGB")
-        tensor = F.pil_to_tensor(pil).float() / 255.0
+        # Use a context manager so the source file handle is released even if
+        # .convert() or pil_to_tensor() raises later in the call chain.
+        with Image.open(image_path) as pil:
+            rgb = pil.convert("RGB")
+        tensor = F.pil_to_tensor(rgb).float() / 255.0
         tensor = tensor.unsqueeze(0).to(self._device)
 
         with torch.inference_mode():
@@ -161,4 +164,9 @@ def _mask_to_polygon(
     if cv2.contourArea(largest) < 1:
         return None
     approx = cv2.approxPolyDP(largest, simplify_eps, closed=True)
+    if len(approx) < 3:
+        # Polygon with < 3 vertices is degenerate — drop it instead of letting
+        # downstream consumers (geo conversion, Leaflet rendering) blow up on
+        # a 1- or 2-point "polygon".
+        return None
     return [[float(p[0][0]), float(p[0][1])] for p in approx]

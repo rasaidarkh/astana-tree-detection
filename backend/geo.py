@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -17,6 +18,8 @@ from typing import Optional
 import numpy as np
 
 from .schemas import Corners2, Corners4, Detection, GeoMode, GeoParams, ImageMeta
+
+log = logging.getLogger("astana-tree")
 
 
 @dataclass
@@ -49,8 +52,15 @@ def load_geotiff_meta(path: str | Path) -> ImageMeta:
                 nw={"lat": t, "lng": l},
                 se={"lat": b, "lng": r},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            # Don't swallow silently — without bounds the file still loads but
+            # the API will report bounds=None and the user has no idea the
+            # reprojection failed.
+            log.warning(
+                "GeoTIFF bounds reprojection to EPSG:4326 failed for %s (%s); "
+                "bounds left as None",
+                p, e,
+            )
 
         return ImageMeta(
             image_id=p.stem,
@@ -159,6 +169,11 @@ def annotate_detections(detections: list[Detection], ctx: GeoContext) -> list[De
             for px, py in det.mask_polygon:
                 plat, plng = pixel_to_gps(px, py, ctx)
                 if plat is None:
+                    log.debug(
+                        "Detection %s: polygon point (%.1f, %.1f) outside geo "
+                        "context (mode=%s) — mask_polygon_geo dropped",
+                        det.id, px, py, ctx.mode,
+                    )
                     geo_poly = []
                     break
                 geo_poly.append([plat, plng])

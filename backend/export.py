@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import io
 import json
 from datetime import datetime
@@ -65,6 +66,10 @@ def to_csv(detections: list[Detection]) -> str:
 
 def to_standalone_html(detections: list[Detection], title: str = "Astana Trees") -> str:
     """Self-contained HTML с Leaflet, без внешних зависимостей кроме CDN."""
+    # HTML-escape the title — it is interpolated directly into <title> below,
+    # so an uploaded filename containing `<script>…</script>` used to be
+    # executable in the exported file.
+    safe_title = html.escape(title)
     geo_features = []
     for det in detections:
         if det.lat is None or det.lng is None:
@@ -89,7 +94,7 @@ def to_standalone_html(detections: list[Detection], title: str = "Astana Trees")
 
     return f"""<!DOCTYPE html>
 <html><head>
-<meta charset="utf-8"><title>{title}</title>
+<meta charset="utf-8"><title>{safe_title}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   body,html{{margin:0;padding:0;height:100%;font-family:system-ui}}
