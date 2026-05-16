@@ -4,7 +4,15 @@ Pipeline:
   1. Load torchvision Mask R-CNN with COCO V1 backbone
   2. Replace box + mask heads under num_classes (default 2: background + tree)
   3. Optionally load fine-tuned state_dict from checkpoint_path
-  4. Inference returns Detection with bbox + polygon mask + confidence
+  4. Inference: single-shot for small images, sliding-window tiled inference
+     for large captures (matches the YOLO branch — same `tile_size=640` and
+     `overlap=128` as the training pipeline), with global NMS to remove
+     duplicate detections from tile-overlap regions.
+
+Without tiled inference the network resizes large city-block screenshots to
+its training scale, which crushes 20–40 px crowns down to ~7 px and triggers
+massive false-positives on bare grass / canopy clusters. See Ch.2.3 of the
+diploma for the original derivation.
 """
 
 from __future__ import annotations
@@ -22,6 +30,13 @@ from .base import ModelAdapter
 log = logging.getLogger("astana-tree")
 
 
+# Geometry — keep aligned with YOLO branch + training pipeline.
+DEFAULT_TILE_SIZE = 640
+DEFAULT_OVERLAP = 128
+SINGLE_SHOT_LIMIT = 768
+GLOBAL_NMS_IOU = 0.5
+
+
 class MaskRCNNAdapter(ModelAdapter):
     """Mask R-CNN ResNet50-FPN v2 adapter for instance segmentation of tree crowns."""
 
@@ -34,6 +49,9 @@ class MaskRCNNAdapter(ModelAdapter):
         device: Optional[str] = None,
         confidence_threshold: float = 0.5,
         mask_threshold: float = 0.5,
+        tile_size: int = DEFAULT_TILE_SIZE,
+        overlap: int = DEFAULT_OVERLAP,
+        single_shot_limit: int = SINGLE_SHOT_LIMIT,
         **kwargs,
     ):
         super().__init__(
@@ -47,6 +65,9 @@ class MaskRCNNAdapter(ModelAdapter):
         self._device = device
         self._confidence_threshold = confidence_threshold
         self._mask_threshold = mask_threshold
+        self._tile_size = tile_size
+        self._overlap = overlap
+        self._single_shot_limit = single_shot_limit
         self._model = None
 
     @staticmethod
@@ -106,19 +127,53 @@ class MaskRCNNAdapter(ModelAdapter):
         model.to(device)
         self._model = model
 
+    # ------------------------------------------------------------------
+    # Inference entry point — chooses between single-shot and tiled.
+    # ------------------------------------------------------------------
     def _predict_raw(self, image_path: str, confidence: float) -> list[Detection]:
-        import torch
         from PIL import Image
-        from torchvision.transforms import functional as F
 
         if not Path(image_path).exists():
             raise FileNotFoundError(f"Cannot read image: {image_path}")
 
-        # Use a context manager so the source file handle is released even if
-        # .convert() or pil_to_tensor() raises later in the call chain.
         with Image.open(image_path) as pil:
             rgb = pil.convert("RGB")
-        tensor = F.pil_to_tensor(rgb).float() / 255.0
+            w, h = rgb.size
+
+        if w <= self._single_shot_limit and h <= self._single_shot_limit:
+            return self._predict_on_pil(rgb, confidence, offset=(0, 0))
+
+        return self._predict_tiled(rgb, w, h, confidence)
+
+    def _predict_tiled(self, img_rgb, width: int, height: int, confidence: float) -> list[Detection]:
+        stride = self._tile_size - self._overlap
+
+        def _tile_origins(extent: int) -> list[int]:
+            if extent <= self._tile_size:
+                return [0]
+            starts = list(range(0, extent - self._tile_size + 1, stride))
+            last_aligned = extent - self._tile_size
+            if not starts or starts[-1] != last_aligned:
+                starts.append(last_aligned)
+            return starts
+
+        xs = _tile_origins(width)
+        ys = _tile_origins(height)
+
+        all_dets: list[Detection] = []
+        for y in ys:
+            for x in xs:
+                tile = img_rgb.crop((x, y, x + self._tile_size, y + self._tile_size))
+                all_dets.extend(self._predict_on_pil(tile, confidence, offset=(x, y)))
+
+        return _global_nms(all_dets, iou_threshold=GLOBAL_NMS_IOU)
+
+    def _predict_on_pil(self, pil_img, confidence: float, offset: tuple[int, int]) -> list[Detection]:
+        import torch
+        from torchvision.transforms import functional as F
+
+        ox, oy = offset
+        tensor = F.pil_to_tensor(pil_img).float() / 255.0
         tensor = tensor.unsqueeze(0).to(self._device)
 
         with torch.inference_mode():
@@ -135,14 +190,20 @@ class MaskRCNNAdapter(ModelAdapter):
         for box, score, mask in zip(boxes[keep], scores[keep], masks[keep]):
             x1, y1, x2, y2 = box
             binary_mask = (mask[0] > self._mask_threshold).astype(np.uint8)
-            polygon = _mask_to_polygon(binary_mask)
+            poly = _mask_to_polygon(binary_mask)
+            mask_polygon = (
+                [[px + ox, py + oy] for px, py in poly] if poly is not None else None
+            )
             detections.append(
                 Detection(
                     id=0,
-                    box=BBox(x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2)),
+                    box=BBox(
+                        x1=float(x1) + ox, y1=float(y1) + oy,
+                        x2=float(x2) + ox, y2=float(y2) + oy,
+                    ),
                     confidence=float(score),
                     label="tree",
-                    mask_polygon=polygon,
+                    mask_polygon=mask_polygon,
                     crown_area_px=float(binary_mask.sum()),
                 )
             )
@@ -170,3 +231,34 @@ def _mask_to_polygon(
         # a 1- or 2-point "polygon".
         return None
     return [[float(p[0][0]), float(p[0][1])] for p in approx]
+
+
+def _bbox_iou(a: BBox, b: BBox) -> float:
+    """Plain axis-aligned IoU on pixel-space BBox."""
+    x1 = max(a.x1, b.x1)
+    y1 = max(a.y1, b.y1)
+    x2 = min(a.x2, b.x2)
+    y2 = min(a.y2, b.y2)
+    iw = max(0.0, x2 - x1)
+    ih = max(0.0, y2 - y1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    ua = max(0.0, (a.x2 - a.x1)) * max(0.0, (a.y2 - a.y1))
+    ub = max(0.0, (b.x2 - b.x1)) * max(0.0, (b.y2 - b.y1))
+    union = ua + ub - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _global_nms(dets: list[Detection], iou_threshold: float = GLOBAL_NMS_IOU) -> list[Detection]:
+    """Greedy NMS поверх детекций из всех тайлов — нужен потому что одно и то
+    же дерево может появиться в двух соседних тайлах в overlap-зоне."""
+    if not dets:
+        return dets
+    sorted_dets = sorted(dets, key=lambda d: -d.confidence)
+    kept: list[Detection] = []
+    for d in sorted_dets:
+        if any(_bbox_iou(d.box, k.box) > iou_threshold for k in kept):
+            continue
+        kept.append(d)
+    return kept
