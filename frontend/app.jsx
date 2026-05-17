@@ -989,6 +989,15 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
   // Auto-Zoom Scan progress overlay: grid под-регионов + прогрессивные деревья.
   const scanGridRef = useRef(null);
   const scanTreesRef = useRef(null);
+  // Сколько деревьев УЖЕ нарисовано в scanTreesRef — на следующем sub_complete
+  // дорисуем только новые (от этого индекса до конца), не очищая старые. Это
+  // снимает O(N²)-фриз когда scan на ~6k-8k деревьев (Ботсад/большие парки):
+  // прошлая реализация клирила и перерисовывала ВСЕ деревья на каждый батч.
+  const scanTreesRenderedRef = useRef(0);
+  // Canvas-renderer для тысяч markers — Leaflet рисует SVG по дефолту, каждый
+  // circleMarker = отдельный DOM-нода. Canvas-renderer batch-рисует в один
+  // <canvas>, в 10-50x быстрее на >1000 markers.
+  const scanCanvasRendererRef = useRef(null);
   // KDE-плотность для displayMode="heat" — не layerGroup а сам L.heatLayer.
   const heatLayerRef = useRef(null);
 
@@ -1007,6 +1016,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     cornersLayerRef.current = L.layerGroup().addTo(map);
     scanGridRef.current = L.layerGroup().addTo(map);
     scanTreesRef.current = L.layerGroup().addTo(map);
+    // Один canvas-renderer для всех scan-tree markers — заметно быстрее SVG.
+    scanCanvasRendererRef.current = L.canvas({ padding: 0.5 });
 
     return () => { map.remove(); mapInstance.current = null; };
   }, []);
@@ -1053,20 +1064,37 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     // Heat-mode: вместо маркеров — KDE-плотность через leaflet.heat.
     // Confidence идёт как intensity weight, чтобы шумные low-conf детекции
     // не пересиливали уверенные high-conf в плотных кластерах.
-    if (displayMode === "heat" && typeof L.heatLayer === "function") {
-      const points = visible
-        .filter((t) => t.lat != null && t.lng != null)
-        .map((t) => [t.lat, t.lng, Math.max(0.1, t.confidence || 0.5)]);
-      if (points.length) {
-        heatLayerRef.current = L.heatLayer(points, {
-          radius: 18, blur: 22, maxZoom: 19, minOpacity: 0.35,
-          gradient: { 0.2: "#EF9F27", 0.5: "#5DCAA5", 0.8: "#0F6E56", 1.0: "#0A3F30" },
-        }).addTo(mapInstance.current);
-        try {
-          mapInstance.current.fitBounds(points.map(([la, ln]) => [la, ln]), { padding: [40, 40], maxZoom: 18 });
-        } catch {}
+    if (displayMode === "heat") {
+      if (typeof L.heatLayer !== "function") {
+        // CDN-плагин не подгрузился (заблокирован adblocker'ом / сеть упала /
+        // оффлайн). Молча fallback на точки чтобы юзер видел хоть что-то —
+        // но единожды воркаем в консоль для диагностики.
+        if (!window.__heatWarnLogged) {
+          console.warn("L.heatLayer is missing — leaflet.heat CDN не загрузился. Падаем в point-режим.");
+          window.__heatWarnLogged = true;
+        }
+      } else {
+        const points = visible
+          .filter((t) => t.lat != null && t.lng != null)
+          .map((t) => [t.lat, t.lng, Math.max(0.1, t.confidence || 0.5)]);
+        if (points.length) {
+          heatLayerRef.current = L.heatLayer(points, {
+            // Радиус увеличен для лучшей читаемости на city-aggregate
+            // (тысячи точек на большом zoom-out → 18px маловато было).
+            radius: 24, blur: 28, maxZoom: 20, minOpacity: 0.4,
+            gradient: { 0.2: "#EF9F27", 0.5: "#5DCAA5", 0.8: "#0F6E56", 1.0: "#0A3F30" },
+          }).addTo(mapInstance.current);
+        } else {
+          // Heat-mode выбран, но детекций нет — не дёргаем карту, юзер
+          // увидит просто пустую базовую карту с info-chip про 0 деревьев.
+          console.info("Heat mode: no detections to render");
+        }
+        // НЕ делаем fitBounds — это раздражает на city view, где юзер
+        // часто переключается между Point / BBox / Polygon / Heat для
+        // одной и той же области и каждый раз попадал бы в "перезум".
+        return;
       }
-      return;
+      // fallthrough: рендерим обычными markers если plugin не доступен
     }
 
     const popupHtml = (t, color) => (
@@ -1125,15 +1153,21 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     }
   }, [trees, filter, threshold, markerSize, displayMode]);
 
-  // Auto-Zoom Scan progress overlay — рисует сетку под-регионов с цветом
-  // по статусу + прогрессивные деревья по мере прихода sub_complete событий.
+  // Scan-grid: rectangles + лейблы + полигон-обёртка. Ровно ≤9 ректанглов,
+  // полностью переотрисовываем на каждом state-обновлении (дёшево).
+  // Отделён от tree-рендеринга чтобы не сбрасывать накопленные tree-маркеры.
   useEffect(() => {
-    if (!scanGridRef.current || !scanTreesRef.current || !mapInstance.current) return;
+    if (!scanGridRef.current || !mapInstance.current) return;
     scanGridRef.current.clearLayers();
-    scanTreesRef.current.clearLayers();
-    if (!scanProgress || !scanProgress.regions) return;
+    if (!scanProgress || !scanProgress.regions || scanProgress.regions.length === 0) {
+      // scanProgress = null → также сбросить tree-рендер счётчик.
+      if (!scanProgress) {
+        if (scanTreesRef.current) scanTreesRef.current.clearLayers();
+        scanTreesRenderedRef.current = 0;
+      }
+      return;
+    }
 
-    // Цвет/толщина по статусу — pulse-анимация для активных через className.
     const STATUS = {
       pending:    { color: "#9aa0a6", weight: 1.5, fillOpacity: 0.05, dashArray: "4 4", className: "" },
       capturing:  { color: "#3b82f6", weight: 2.5, fillOpacity: 0.10, dashArray: null,  className: "scan-region-pulse" },
@@ -1143,8 +1177,6 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       error:      { color: "#dc3545", weight: 2,   fillOpacity: 0.10, dashArray: "2 3", className: "" },
     };
 
-    // Если scan был по полигону — рисуем его поверх grid'а, чтобы было видно
-    // какая именно фигура определила фильтрацию детекций.
     if (scanProgress.polygon && scanProgress.polygon.length >= 3) {
       L.polygon(
         scanProgress.polygon.map((p) => [p.lat, p.lng]),
@@ -1158,17 +1190,15 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     scanProgress.regions.forEach((r) => {
       const s = STATUS[r.status] || STATUS.pending;
       const nw = r.sub_bbox.nw, se = r.sub_bbox.se;
-      const rect = L.rectangle(
+      L.rectangle(
         [[nw.lat, nw.lng], [se.lat, se.lng]],
         {
           color: s.color, weight: s.weight, fillColor: s.color,
           fillOpacity: s.fillOpacity, dashArray: s.dashArray || undefined,
-          className: s.className,
-          interactive: false,
+          className: s.className, interactive: false,
         },
       ).addTo(scanGridRef.current);
 
-      // Лейбл в углу: "r0c0 · capturing" / "r0c0 · 12 trees" / "r0c0 · err"
       let label = `r${r.row}c${r.col}`;
       if (r.status === "done") label += ` · ${r.tree_count} trees`;
       else if (r.status === "error") label += ` · err`;
@@ -1181,23 +1211,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       L.marker([nw.lat, nw.lng], { icon, interactive: false }).addTo(scanGridRef.current);
     });
 
-    // Прогрессивные деревья — рисуем как circleMarker, цвет по confidence.
-    // Простой dot — детальный displayMode (polygon/bbox) можно подключить позже.
-    (scanProgress.trees || []).forEach((t) => {
-      if (t.lat == null || t.lng == null) return;
-      const conf = t.confidence ?? 0;
-      const color = conf > 0.7 ? "#0F6E56" : conf > 0.5 ? "#5DCAA5" : "#EF9F27";
-      L.circleMarker([t.lat, t.lng], {
-        radius: 4, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.9,
-        className: "scan-tree-pop",
-        interactive: false,
-      }).addTo(scanTreesRef.current);
-    });
-
-    // Авто-zoom к первому событию plan-а — чтобы пользователь видел сетку
-    // целиком даже если изначально смотрел на другой район. Только один раз
-    // (когда regions появились впервые и trees ещё пуст).
-    if (scanProgress.regions.length && (scanProgress.trees || []).length === 0) {
+    // Авто-zoom только в самом начале scan'а (regions есть, trees ещё пусто).
+    if (scanProgress.regions.length && scanTreesRenderedRef.current === 0) {
       const all = scanProgress.regions.flatMap((r) => [
         [r.sub_bbox.nw.lat, r.sub_bbox.nw.lng],
         [r.sub_bbox.se.lat, r.sub_bbox.se.lng],
@@ -1205,6 +1220,37 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       try { mapInstance.current.fitBounds(all, { padding: [60, 60], maxZoom: 17 }); } catch {}
     }
   }, [scanProgress]);
+
+  // Scan-trees: differential append. Только новые деревья (от
+  // scanTreesRenderedRef.current до scanProgress.trees.length) добавляются
+  // в layer; старые остаются как есть. Canvas-renderer для производительности
+  // на больших сценах (>1000 markers).
+  useEffect(() => {
+    if (!scanTreesRef.current) return;
+    const trees = (scanProgress && scanProgress.trees) || [];
+    // Reset если scan очистился / стартовал новый (длина уменьшилась).
+    if (trees.length < scanTreesRenderedRef.current) {
+      scanTreesRef.current.clearLayers();
+      scanTreesRenderedRef.current = 0;
+    }
+    // Append только новый хвост.
+    for (let i = scanTreesRenderedRef.current; i < trees.length; i++) {
+      const t = trees[i];
+      if (t.lat == null || t.lng == null) continue;
+      const conf = t.confidence ?? 0;
+      const color = conf > 0.7 ? "#0F6E56" : conf > 0.5 ? "#5DCAA5" : "#EF9F27";
+      L.circleMarker([t.lat, t.lng], {
+        radius: 4, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.9,
+        // НЕ ставим className: "scan-tree-pop" на canvas-рендеренные —
+        // CSS-анимации к <canvas>-paths не применяются, плюс animation на
+        // тысячах markers сама по себе тормозит. Появление за счёт diff-add'а
+        // уже выглядит "живо".
+        interactive: false,
+        renderer: scanCanvasRendererRef.current,
+      }).addTo(scanTreesRef.current);
+    }
+    scanTreesRenderedRef.current = trees.length;
+  }, [scanProgress && scanProgress.trees && scanProgress.trees.length]);
 
   // Image overlay (real image)
   useEffect(() => {
