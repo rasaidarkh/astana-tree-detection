@@ -142,8 +142,24 @@ log.info("CORS allowed origins: %s", _cors_origins)
 registry = ModelRegistry()
 
 
+def _register_yolo_variant(weights_path: Path, kind: ModelKind, display_name: str) -> None:
+    """Регистрация YOLO variant под конкретным ModelKind. Используется для
+    debug-выбора между v2 / v3-run1 / v3-run2 / production. Override class
+    attributes `kind` + `name` на instance, чтобы один и тот же adapter-класс
+    мог появиться под разными ключами в registry."""
+    if not weights_path.exists():
+        log.info("YOLO variant %s weights missing at %s — skipping", kind.value, weights_path)
+        return
+    adapter = YOLOAdapter(weights_path=str(weights_path))
+    adapter.kind = kind
+    adapter.name = display_name
+    registry.register(adapter)
+    log.info("YOLO variant registered: %s -> %s", kind.value, weights_path.name)
+
+
 def _load_models() -> None:
     """Регистрируем все доступные адаптеры. Веса грузятся лениво при первом predict."""
+    # Production YOLO (whatever is at yolo_satellite.pt сейчас)
     yolo_path = WEIGHTS / "yolo_satellite.pt"
     if yolo_path.exists():
         yolo = YOLOAdapter(weights_path=str(yolo_path))
@@ -151,6 +167,24 @@ def _load_models() -> None:
         log.info("YOLO adapter registered: %s", yolo_path)
     else:
         log.warning("YOLO weights missing at %s — endpoint вернёт 503", yolo_path)
+
+    # Debug variants — позволяют пользователю переключаться между моделями для
+    # сравнения качества на конкретных сценах (например v3 даёт false positives
+    # на стадионных крышах а v2 не давала — можно сравнить side-by-side через
+    # выбор модели в UI). Все архивные веса остаются на диске.
+    _register_yolo_variant(
+        WEIGHTS / "archive" / "yolo" / "yolo_satellite_v2_finetune.pt",
+        ModelKind.YOLO_V2,
+        "YOLOv8-seg v2-finetune (conservative, pre-v3)",
+    )
+    # v3 run1 / run2 — ищем через glob так как имена включают метрики в названии.
+    for run_idx, kind, label in [
+        (1, ModelKind.YOLO_V3_RUN1, "YOLOv8-seg v3 run1 (v2 hyperparams, val=v3-only)"),
+        (2, ModelKind.YOLO_V3_RUN2, "YOLOv8-seg v3 run2 (cleaner aug, val=merged)"),
+    ]:
+        matches = sorted((WEIGHTS / "v3_runs").glob(f"v3_finetune_run{run_idx}_*.pt"))
+        if matches:
+            _register_yolo_variant(matches[0], kind, label)
 
     df_ckpt = WEIGHTS / "deepforest_astana.pl"
     df = DeepForestAdapter(checkpoint_path=str(df_ckpt) if df_ckpt.exists() else None)

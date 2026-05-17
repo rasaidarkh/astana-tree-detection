@@ -9,7 +9,10 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ModelKind(str, Enum):
-    YOLO = "yolo"
+    YOLO = "yolo"                            # current production
+    YOLO_V2 = "yolo_v2"                      # v2-finetune (pre-v3, conservative, fewer FP)
+    YOLO_V3_RUN1 = "yolo_v3_run1"            # v3 run1 (currently same as YOLO)
+    YOLO_V3_RUN2 = "yolo_v3_run2"            # v3 run2 (cleaner aug, plateau ep5)
     DEEPFOREST = "deepforest"
     ENSEMBLE = "ensemble"
     DEEPFOREST_SAM2 = "deepforest_sam2"
