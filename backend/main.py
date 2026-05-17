@@ -779,6 +779,26 @@ def history(limit: int = 20):
     return out
 
 
+class RenameRequest(BaseModel):
+    name: Optional[str] = Field(None, max_length=120)
+
+
+@app.patch("/api/scans/{session_id}")
+def rename_scan(session_id: str, req: RenameRequest):
+    ok = db.rename_scan_session(session_id, req.name)
+    if not ok:
+        raise HTTPException(404, f"Unknown scan session {session_id}")
+    return {"ok": True, "id": session_id, "name": req.name}
+
+
+@app.patch("/api/snapshots/{image_id}")
+def rename_snapshot(image_id: str, req: RenameRequest):
+    ok = db.rename_snapshot(image_id, req.name)
+    if not ok:
+        raise HTTPException(404, f"Unknown image_id {image_id}")
+    return {"ok": True, "image_id": image_id, "name": req.name}
+
+
 @app.get("/api/scans")
 def list_scans():
     """Список Auto-Zoom Scan-сессий — каждая = один большой scan_region,

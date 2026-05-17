@@ -106,84 +106,200 @@ function TopBar({ view, setView, onOpenSettings, settingsOpen, backendStatus, da
 }
 
 /* ==================================================================
-   StatsCard (top-left in map view)
+   LeftPanel — rich info panel in map view (replaces floating cards)
    ================================================================== */
-function StatsCard({ stats, onOpenDrawer }) {
-  const t = (stats && stats.total_trees) || 0;
-  const s = (stats && stats.snapshot_count) || 0;
-  const r = (stats && stats.run_count) || 0;
+function LeftPanel({
+  aggregateStats, scans, snapshots,
+  scanMode, polygonMode, onStartScan, onStartPolygon, onCancel,
+  pendingPolygon, onStartPolygonScan, onClearPolygon,
+  threshold, setThreshold, filter, setFilter,
+  visibleCount,
+  onOpenManager,
+}) {
+  const t = (aggregateStats && aggregateStats.total_trees) || 0;
+  const s = (aggregateStats && aggregateStats.snapshot_count) || 0;
+  const r = (aggregateStats && aggregateStats.run_count) || 0;
+  const avgConf = aggregateStats?.avg_confidence;
+  const avgCrown = aggregateStats?.avg_crown_m;
+  const totalScans = scans?.length || 0;
+
+  // Calculate aggregate canopy: sum of avg trees * avg crown — rough estimate
+  // for display only. Real coverage requires per-scan area which we don't
+  // aggregate yet. Show as "trees per scan" instead — more honest.
+  const treesPerScan = totalScans > 0 ? Math.round(t / totalScans) : 0;
+
+  const drawing = scanMode || polygonMode;
+  const hasPending = pendingPolygon && pendingPolygon.length >= 3;
+
   return (
-    <div className="float float-tl stats-card">
-      <div className="stats-eyebrow">Astana · city aggregate</div>
-      <div className="stats-headline">
-        {t.toLocaleString()}
-        <span className="unit">trees</span>
+    <aside className="left-panel">
+      <div className="lp-scroll">
+
+        {/* ── primary actions ── */}
+        {!drawing && !hasPending && (
+          <div className="lp-actions">
+            <button className="lp-action primary" onClick={onStartScan}>
+              <Icon name="grid" size={18} />
+              <span>Scan area</span>
+            </button>
+            <button className="lp-action" onClick={onStartPolygon}>
+              <Icon name="polygon" size={18} />
+              <span>Polygon</span>
+            </button>
+          </div>
+        )}
+        {drawing && !hasPending && (
+          <div className="lp-actions" style={{ flexDirection: "column" }}>
+            <div className="action-hint" style={{ background: "var(--accent-softer)", borderRadius: "var(--r-3)", width: "100%" }}>
+              <span className="pulse"></span>
+              <span>
+                {scanMode
+                  ? "Drag a rectangle on the map"
+                  : "Click to add vertices · double-click to finish · right-click to clear"}
+              </span>
+            </div>
+            <button className="lp-action" onClick={onCancel} style={{ width: "100%" }}>
+              <Icon name="x" size={14} />
+              <span>Cancel</span>
+            </button>
+          </div>
+        )}
+        {hasPending && (
+          <div className="lp-actions" style={{ flexDirection: "column" }}>
+            <div className="action-hint" style={{ background: "var(--accent-softer)", borderRadius: "var(--r-3)", width: "100%" }}>
+              <span className="pulse"></span>
+              <span>Polygon ready · <b>{pendingPolygon.length}</b> vertices</span>
+            </div>
+            <button className="lp-action primary" onClick={onStartPolygonScan} style={{ width: "100%", flexDirection: "row" }}>
+              <Icon name="play" size={14} />
+              <span>Start scan</span>
+            </button>
+            <button className="lp-action" onClick={onClearPolygon} style={{ width: "100%", flexDirection: "row" }}>
+              <Icon name="refresh" size={14} />
+              <span>Redraw</span>
+            </button>
+          </div>
+        )}
+
+        {/* ── hero stat ── */}
+        <div className="lp-hero">
+          <div className="lp-eyebrow">Astana · canopy aggregate</div>
+          <div className="lp-headline">
+            {t.toLocaleString()}
+            <span className="unit">trees</span>
+          </div>
+          <div className="lp-sub">across {totalScans} scan{totalScans === 1 ? "" : "s"} · {s} snapshot{s === 1 ? "" : "s"}</div>
+          <div className="lp-hero-row">
+            <span><b>{r}</b>runs</span>
+            <span><b>{treesPerScan}</b>avg / scan</span>
+            {visibleCount && visibleCount.total > 0 && (
+              <span><b>{visibleCount.visible.toLocaleString()}</b>visible</span>
+            )}
+          </div>
+        </div>
+
+        {/* ── secondary metrics ── */}
+        {(avgConf != null || avgCrown != null) && (
+          <div className="lp-metrics">
+            {avgConf != null && (
+              <div className="lp-metric">
+                <div className="lp-metric-v">
+                  {Math.round(avgConf * 100)}<span className="unit">%</span>
+                </div>
+                <div className="lp-metric-k">avg confidence</div>
+              </div>
+            )}
+            {avgCrown != null && (
+              <div className="lp-metric">
+                <div className="lp-metric-v">
+                  {avgCrown.toFixed(1)}<span className="unit">m</span>
+                </div>
+                <div className="lp-metric-k">avg crown</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── filters block ── */}
+        <div className="lp-section">
+          <div className="lp-section-head">
+            <div className="lp-section-title">Filters</div>
+          </div>
+          <div className="lp-filter-block">
+            <div className="field-label">
+              <span>Min confidence</span>
+              <span className="mono">{Math.round(threshold * 100)}%</span>
+            </div>
+            <input
+              type="range" min={0} max={1} step={0.05}
+              value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
+              className="range"
+            />
+            <div className="tier-chips" style={{ marginTop: 10 }}>
+              {[
+                { k: "high", label: "High",   color: "var(--conf-high)" },
+                { k: "med",  label: "Med",    color: "var(--conf-mid)"  },
+                { k: "low",  label: "Low",    color: "var(--conf-low)"  },
+              ].map((tt) => (
+                <button
+                  key={tt.k}
+                  className={`tier-chip ${filter[tt.k] ? "on" : ""}`}
+                  onClick={() => setFilter({ ...filter, [tt.k]: !filter[tt.k] })}
+                >
+                  <span className="dot" style={{ background: tt.color, opacity: filter[tt.k] ? 1 : 0.3 }}></span>
+                  <span>{tt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── recent activity ── */}
+        <div className="lp-section">
+          <div className="lp-section-head">
+            <div className="lp-section-title">Recent scans</div>
+            <button className="lp-section-action" onClick={onOpenManager}>
+              <span>Manage</span>
+              <Icon name="chevron" size={11} />
+            </button>
+          </div>
+          {(!scans || scans.length === 0) && (
+            <div className="list-empty" style={{ padding: "20px 8px", fontSize: 11.5 }}>
+              No scans yet — click <b>Scan area</b> above to start
+            </div>
+          )}
+          {scans && scans.slice(0, 6).map((s) => {
+            const date = s.created_at ? new Date(s.created_at) : null;
+            const ago = date ? timeAgo(date) : "";
+            const name = s.display_name || `Scan ${s.id.slice(0, 8)}`;
+            const dotColor = s.status === "completed" ? "var(--success)" : "var(--warning)";
+            return (
+              <div key={s.id} className="activity-row" onClick={onOpenManager}>
+                <span className="activity-dot" style={{ background: dotColor }}></span>
+                <div className="activity-body">
+                  <div className="activity-name">{name}</div>
+                  <div className="activity-meta">
+                    {(s.total_trees || 0).toLocaleString()} trees · {ago} · {s.model}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="stats-row">
-        <span><b>{s}</b> snapshots</span>
-        <span><b>{r}</b> runs</span>
-      </div>
-      <button className="stats-btn" onClick={onOpenDrawer}>
-        <Icon name="history" size={11} />
-        <span>View history</span>
-      </button>
-    </div>
+    </aside>
   );
 }
 
-/* ==================================================================
-   ScanActionStack (bottom-left in map view)
-   ================================================================== */
-function ScanActionStack({ scanMode, polygonMode, onStartScan, onStartPolygon, onCancel, pendingPolygon, onStartPolygonScan, onClearPolygon }) {
-  // 3 visual states: idle / drawing / pending-polygon
-  if (pendingPolygon && pendingPolygon.length >= 3) {
-    return (
-      <div className="float float-bl action-stack drawing">
-        <div className="action-hint">
-          <span className="pulse"></span>
-          <span>Polygon ready · <b>{pendingPolygon.length}</b> vertices</span>
-        </div>
-        <button className="action-btn primary" onClick={onStartPolygonScan}>
-          <span className="icon-wrap"><Icon name="play" size={13} /></span>
-          <span>Start scan</span>
-        </button>
-        <button className="action-btn" onClick={onClearPolygon}>
-          <span className="icon-wrap"><Icon name="refresh" size={13} /></span>
-          <span>Redraw</span>
-        </button>
-      </div>
-    );
-  }
-  if (scanMode || polygonMode) {
-    return (
-      <div className="float float-bl action-stack drawing">
-        <div className="action-hint">
-          <span className="pulse"></span>
-          <span>
-            {scanMode
-              ? "Drag a rectangle on the map"
-              : "Click to add vertices · double-click to finish · right-click to clear"}
-          </span>
-        </div>
-        <button className="action-btn" onClick={onCancel}>
-          <span className="icon-wrap"><Icon name="x" size={13} /></span>
-          <span>Cancel</span>
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="float float-bl action-stack">
-      <button className="action-btn primary" onClick={onStartScan}>
-        <span className="icon-wrap"><Icon name="grid" size={14} /></span>
-        <span>Scan area</span>
-      </button>
-      <button className="action-btn" onClick={onStartPolygon}>
-        <span className="icon-wrap"><Icon name="polygon" size={14} /></span>
-        <span>Polygon scan</span>
-      </button>
-    </div>
-  );
+function timeAgo(date) {
+  const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  const d = Math.floor(sec / 86400);
+  if (d < 7) return `${d}d ago`;
+  return date.toLocaleDateString();
 }
 
 /* ==================================================================
@@ -356,91 +472,258 @@ function Welcome({ onStart }) {
 }
 
 /* ==================================================================
-   Drawer (scans + snapshots history)
+   ManagerModal — full-feature management for scans + snapshots
+   With search, sort, inline rename, delete actions.
    ================================================================== */
-function HistoryDrawer({ open, onClose, scans, snapshots, onDeleteScan, onDeleteSnapshot, loading }) {
+function ManagerModal({
+  open, onClose,
+  scans, snapshots,
+  onDeleteScan, onDeleteSnapshot,
+  onRenameScan, onRenameSnapshot,
+  loading,
+}) {
+  const [tab, setTab] = useState("scans");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("date_desc");
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
+
+  const filterAndSort = (items, getDate, getTrees, getName) => {
+    let out = items.filter((it) => {
+      if (!query.trim()) return true;
+      const q = query.toLowerCase();
+      return (getName(it) || "").toLowerCase().includes(q)
+          || (it.id || it.image_id || "").toLowerCase().includes(q);
+    });
+    out.sort((a, b) => {
+      switch (sort) {
+        case "date_asc":   return new Date(getDate(a)) - new Date(getDate(b));
+        case "trees_desc": return (getTrees(b) || 0) - (getTrees(a) || 0);
+        case "trees_asc":  return (getTrees(a) || 0) - (getTrees(b) || 0);
+        case "name":       return (getName(a) || "").localeCompare(getName(b) || "");
+        case "date_desc":
+        default:           return new Date(getDate(b)) - new Date(getDate(a));
+      }
+    });
+    return out;
+  };
+
+  const visibleScans = filterAndSort(
+    scans || [], (s) => s.created_at, (s) => s.total_trees,
+    (s) => s.display_name || `Scan ${s.id.slice(0, 8)}`,
+  );
+  const visibleSnaps = filterAndSort(
+    snapshots || [], (s) => s.created_at, (s) => s.total_trees,
+    (s) => s.display_name || s.filename,
+  );
+
   return (
-    <>
-      <div className="drawer-overlay" onClick={onClose} />
-      <div className="drawer" role="dialog">
-        <div className="drawer-head">
-          <Icon name="history" size={16} />
-          <div className="drawer-title">History</div>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <Icon name="layers" size={16} />
+          <div className="modal-title">Library</div>
+          <div className="modal-tabs">
+            <button className={`modal-tab ${tab === "scans" ? "active" : ""}`} onClick={() => setTab("scans")}>
+              Scans · {scans?.length || 0}
+            </button>
+            <button className={`modal-tab ${tab === "snapshots" ? "active" : ""}`} onClick={() => setTab("snapshots")}>
+              Snapshots · {snapshots?.length || 0}
+            </button>
+          </div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={14} /></button>
         </div>
-        <div className="drawer-body">
-          <div className="section">
-            <div className="section-title">Area scans · {scans.length}</div>
-            {loading && <div className="list-empty">Loading…</div>}
-            {!loading && scans.length === 0 && (
-              <div className="list-empty">No scans yet. Close this panel and click <b>Scan area</b> to start.</div>
-            )}
-            {scans.map((s) => {
-              const date = s.created_at ? new Date(s.created_at) : null;
-              return (
-                <div key={s.id} className="list-item">
-                  <div className="list-item-row">
-                    <div className="list-item-name">
-                      Scan <span className="list-item-mono">{s.id.slice(0, 8)}</span>
-                      {s.polygon_json && <span className="tag gray" style={{ marginLeft: 6 }}>polygon</span>}
-                      {s.status === "running" && <span className="tag running" style={{ marginLeft: 6 }}>running</span>}
-                    </div>
-                  </div>
-                  <div className="list-item-meta">
-                    <span><b>{(s.total_trees || 0).toLocaleString()}</b> trees</span>
-                    <span><b>{s.ok_count}</b>/{s.sub_count} ok</span>
-                    <span>{s.provider} · z{s.zoom}</span>
-                    <span className="muted">{s.model}</span>
-                  </div>
-                  <div className="list-item-coords">
-                    {s.nw_lat.toFixed(5)}°, {s.nw_lng.toFixed(5)}° → {s.se_lat.toFixed(5)}°, {s.se_lng.toFixed(5)}°
-                  </div>
-                  {date && <div className="list-item-coords muted">{date.toLocaleString()}</div>}
-                  <div className="list-item-actions">
-                    <button className="ghost-btn danger" onClick={() => onDeleteScan(s.id, s.sub_count)}>
-                      <Icon name="trash" size={11} />
-                      <span>Delete scan</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
 
-          <div className="section">
-            <div className="section-title">Snapshots · {snapshots.length}</div>
-            {!loading && snapshots.length === 0 && (
-              <div className="list-empty">No individual snapshots.</div>
-            )}
-            {snapshots.map((s) => (
-              <div key={s.image_id} className="list-item">
-                <div className="list-item-row">
-                  <div className="list-item-name" title={s.filename}>{s.filename}</div>
+        <div className="modal-toolbar">
+          <input
+            className="search-input"
+            placeholder={tab === "scans" ? "Search by name or ID…" : "Search snapshots…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <select className="select-native" value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: 160 }}>
+            <option value="date_desc">Newest first</option>
+            <option value="date_asc">Oldest first</option>
+            <option value="trees_desc">Most trees</option>
+            <option value="trees_asc">Fewest trees</option>
+            <option value="name">Name (A–Z)</option>
+          </select>
+        </div>
+
+        <div className="modal-body">
+          {loading && <div className="empty-grid">Loading…</div>}
+
+          {!loading && tab === "scans" && (
+            <div className="card-grid">
+              {visibleScans.length === 0 && (
+                <div className="empty-grid">
+                  {query ? `No scans matching "${query}"` : (
+                    <>
+                      No scans yet. Close this modal and click <b>Scan area</b> to start.
+                    </>
+                  )}
                 </div>
-                <div className="list-item-meta">
-                  <span><b>{s.total_trees || 0}</b> trees</span>
-                  <span><b>{s.run_count}</b> run{s.run_count === 1 ? "" : "s"}</span>
-                  <span>{s.width}×{s.height}</span>
-                  {s.last_model && <span className="muted">{s.last_model}</span>}
+              )}
+              {visibleScans.map((s) => (
+                <ScanCard
+                  key={s.id} scan={s}
+                  onRename={(name) => onRenameScan(s.id, name)}
+                  onDelete={() => onDeleteScan(s.id, s.sub_count)}
+                />
+              ))}
+            </div>
+          )}
+
+          {!loading && tab === "snapshots" && (
+            <div className="card-grid">
+              {visibleSnaps.length === 0 && (
+                <div className="empty-grid">
+                  {query ? `No snapshots matching "${query}"` : "No snapshots yet."}
                 </div>
-                {s.nw_lat != null && (
-                  <div className="list-item-coords">
-                    N {s.nw_lat.toFixed(5)}° → S {s.se_lat.toFixed(5)}°
-                  </div>
-                )}
-                <div className="list-item-actions">
-                  <button className="ghost-btn danger" onClick={() => onDeleteSnapshot(s.image_id)}>
-                    <Icon name="trash" size={11} />
-                    <span>Delete</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              )}
+              {visibleSnaps.map((s) => (
+                <SnapshotCard
+                  key={s.image_id} snap={s}
+                  onRename={(name) => onRenameSnapshot(s.image_id, name)}
+                  onDelete={() => onDeleteSnapshot(s.image_id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+function EditableName({ value, fallback, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+  const ref = useRef(null);
+  useEffect(() => { setDraft(value || ""); }, [value]);
+  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select(); } }, [editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed !== (value || "")) onSave(trimmed || null);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        className="mgr-card-name editing"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") { setDraft(value || ""); setEditing(false); }
+        }}
+        maxLength={120}
+      />
+    );
+  }
+  return (
+    <div
+      className="mgr-card-name"
+      title={value || fallback}
+      onDoubleClick={() => setEditing(true)}
+      onClick={() => setEditing(true)}
+    >
+      {value || fallback}
+    </div>
+  );
+}
+
+function ScanCard({ scan, onRename, onDelete }) {
+  const date = scan.created_at ? new Date(scan.created_at) : null;
+  return (
+    <div className="mgr-card">
+      <div className="mgr-card-head">
+        <EditableName
+          value={scan.display_name}
+          fallback={`Scan ${scan.id.slice(0, 8)}`}
+          onSave={onRename}
+        />
+        {scan.polygon_json && <span className="tag gray">polygon</span>}
+        {scan.status === "running" && <span className="tag running">running</span>}
+      </div>
+      <div className="mgr-card-stats">
+        <div className="mgr-card-stat">
+          <div className="mgr-card-stat-v">{(scan.total_trees || 0).toLocaleString()}</div>
+          <div className="mgr-card-stat-k">Trees</div>
+        </div>
+        <div className="mgr-card-stat">
+          <div className="mgr-card-stat-v">{scan.ok_count}/{scan.sub_count}</div>
+          <div className="mgr-card-stat-k">Sub-regions</div>
+        </div>
+      </div>
+      <div className="mgr-card-meta">
+        <span className="tag-soft">{scan.provider}</span>
+        <span className="tag-soft">z{scan.zoom}</span>
+        <span className="tag-soft">{scan.model}</span>
+        {scan.duration_ms ? <span className="tag-soft">{(scan.duration_ms / 1000).toFixed(0)}s</span> : null}
+      </div>
+      <div className="mgr-card-coords">
+        {scan.nw_lat.toFixed(5)}°, {scan.nw_lng.toFixed(5)}° → {scan.se_lat.toFixed(5)}°, {scan.se_lng.toFixed(5)}°
+      </div>
+      {date && <div className="mgr-card-coords muted">{date.toLocaleString()}</div>}
+      <div className="mgr-card-actions">
+        <span className="mgr-card-mono" style={{ flex: 1 }}>{scan.id.slice(0, 12)}</span>
+        <button className="ghost-btn danger" onClick={onDelete}>
+          <Icon name="trash" size={11} /><span>Delete</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SnapshotCard({ snap, onRename, onDelete }) {
+  return (
+    <div className="mgr-card">
+      <div className="mgr-card-head">
+        <EditableName
+          value={snap.display_name}
+          fallback={snap.filename}
+          onSave={onRename}
+        />
+      </div>
+      <div className="mgr-card-stats">
+        <div className="mgr-card-stat">
+          <div className="mgr-card-stat-v">{(snap.total_trees || 0).toLocaleString()}</div>
+          <div className="mgr-card-stat-k">Trees</div>
+        </div>
+        <div className="mgr-card-stat">
+          <div className="mgr-card-stat-v">{snap.run_count || 0}</div>
+          <div className="mgr-card-stat-k">Runs</div>
+        </div>
+      </div>
+      <div className="mgr-card-meta">
+        <span className="tag-soft">{snap.width}×{snap.height}</span>
+        {snap.last_model && <span className="tag-soft">{snap.last_model}</span>}
+        {snap.is_geotiff && <span className="tag-soft">GeoTIFF</span>}
+      </div>
+      {snap.nw_lat != null && (
+        <div className="mgr-card-coords">
+          N {snap.nw_lat.toFixed(5)}° → S {snap.se_lat.toFixed(5)}°
+        </div>
+      )}
+      <div className="mgr-card-actions">
+        <span className="mgr-card-mono" style={{ flex: 1 }}>{snap.image_id.slice(0, 12)}</span>
+        <button className="ghost-btn danger" onClick={onDelete}>
+          <Icon name="trash" size={11} /><span>Delete</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1200,7 +1483,7 @@ function App() {
   const [overlayOpacity, setOverlayOpacity] = useState(0.85);
 
   // ---- ui ----
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [toastKind, setToastKind] = useState(null);
 
@@ -1360,6 +1643,15 @@ function App() {
     catch (e) { showToast("Delete failed: " + e.message, "error"); }
   }, [refreshAggregate, showToast]);
 
+  const handleRenameScan = useCallback(async (id, name) => {
+    try { await window.api.renameScan(id, name); await refreshAggregate(); }
+    catch (e) { showToast("Rename failed: " + e.message, "error"); }
+  }, [refreshAggregate, showToast]);
+  const handleRenameSnapshot = useCallback(async (id, name) => {
+    try { await window.api.renameSnapshot(id, name); await refreshAggregate(); }
+    catch (e) { showToast("Rename failed: " + e.message, "error"); }
+  }, [refreshAggregate, showToast]);
+
   // -------- image flow --------
   const handleImageUpload = useCallback(async (file) => {
     if (!file) return;
@@ -1482,6 +1774,24 @@ function App() {
           />
         )}
 
+        {view === "map" && (
+          <LeftPanel
+            aggregateStats={aggregateStats}
+            scans={scans}
+            snapshots={snapshots}
+            scanMode={scanMode} polygonMode={polygonMode}
+            onStartScan={startScanRect} onStartPolygon={startScanPoly}
+            onCancel={cancelDraw}
+            pendingPolygon={pendingPolygon}
+            onStartPolygonScan={handleStartPolygonScan}
+            onClearPolygon={handleClearPolygon}
+            threshold={threshold} setThreshold={setThreshold}
+            filter={filter} setFilter={setFilter}
+            visibleCount={visibleCount}
+            onOpenManager={() => setManagerOpen(true)}
+          />
+        )}
+
         <div className="canvas">
           <MapHost
             view={view}
@@ -1502,19 +1812,6 @@ function App() {
             <>
               {isEmpty && <Welcome onStart={startScanRect} />}
 
-              {!isEmpty && <StatsCard stats={aggregateStats} onOpenDrawer={() => setDrawerOpen(true)} />}
-
-              {!scanRunning && (
-                <ScanActionStack
-                  scanMode={scanMode} polygonMode={polygonMode}
-                  onStartScan={startScanRect} onStartPolygon={startScanPoly}
-                  onCancel={cancelDraw}
-                  pendingPolygon={pendingPolygon}
-                  onStartPolygonScan={handleStartPolygonScan}
-                  onClearPolygon={handleClearPolygon}
-                />
-              )}
-
               {hasTrees && (
                 <DisplayStrip
                   displayMode={displayMode} setDisplayMode={setDisplayMode}
@@ -1527,13 +1824,15 @@ function App() {
 
               <ScanProgressCard scanProgress={scanProgress} onCancel={cancelScan} />
 
-              <HistoryDrawer
-                open={drawerOpen}
-                onClose={() => setDrawerOpen(false)}
+              <ManagerModal
+                open={managerOpen}
+                onClose={() => setManagerOpen(false)}
                 scans={scans}
                 snapshots={snapshots}
                 onDeleteScan={handleDeleteScan}
                 onDeleteSnapshot={handleDeleteSnapshot}
+                onRenameScan={handleRenameScan}
+                onRenameSnapshot={handleRenameSnapshot}
                 loading={aggLoading}
               />
             </>

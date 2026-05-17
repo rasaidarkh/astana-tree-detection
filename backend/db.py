@@ -102,15 +102,20 @@ def init_db(path: Path) -> None:
         CREATE INDEX IF NOT EXISTS idx_det_latlng       ON detections(lat, lng);
         CREATE INDEX IF NOT EXISTS idx_scans_created    ON scan_sessions(created_at);
         """)
-        # Идемпотентная миграция: добавляем scan_session_id к существующим
-        # runs без потери данных. SQLite не имеет IF NOT EXISTS для ADD COLUMN,
-        # поэтому проверяем через pragma_table_info.
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
-        if "scan_session_id" not in cols:
+        # Идемпотентные миграции через PRAGMA table_info — SQLite не имеет
+        # ALTER TABLE ADD COLUMN IF NOT EXISTS, поэтому проверяем существование.
+        run_cols = [r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
+        if "scan_session_id" not in run_cols:
             conn.execute(
                 "ALTER TABLE runs ADD COLUMN scan_session_id TEXT REFERENCES scan_sessions(id) ON DELETE SET NULL"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_scan_session ON runs(scan_session_id)")
+        snap_cols = [r["name"] for r in conn.execute("PRAGMA table_info(snapshots)").fetchall()]
+        if "display_name" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN display_name TEXT")
+        scan_cols = [r["name"] for r in conn.execute("PRAGMA table_info(scan_sessions)").fetchall()]
+        if "display_name" not in scan_cols:
+            conn.execute("ALTER TABLE scan_sessions ADD COLUMN display_name TEXT")
         conn.commit()
 
 
@@ -216,6 +221,27 @@ def delete_snapshot(image_id: str) -> bool:
     """CASCADE удалит runs и detections."""
     with _lock, _connect() as conn:
         cur = conn.execute("DELETE FROM snapshots WHERE image_id = ?", (image_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def rename_snapshot(image_id: str, name: Optional[str]) -> bool:
+    """Юзерский display_name (или None для сброса к filename-fallback)."""
+    with _lock, _connect() as conn:
+        cur = conn.execute(
+            "UPDATE snapshots SET display_name = ? WHERE image_id = ?",
+            (name.strip() if name and name.strip() else None, image_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def rename_scan_session(session_id: str, name: Optional[str]) -> bool:
+    with _lock, _connect() as conn:
+        cur = conn.execute(
+            "UPDATE scan_sessions SET display_name = ? WHERE id = ?",
+            (name.strip() if name and name.strip() else None, session_id),
+        )
         conn.commit()
         return cur.rowcount > 0
 
