@@ -57,14 +57,18 @@
     //   {type:"sub_error", row, col, stage, error, ...}
     //   {type:"done", total_trees, duration_ms}
     //   {type:"fatal", error}
-    async scanRegionStream({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9, provider = "esri" }, onEvent, { signal } = {}) {
+    async scanRegionStream({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9, provider = "esri", polygon = null }, onEvent, { signal } = {}) {
+      const body = {
+        nw, se, zoom, model, confidence,
+        max_subregions: maxSubregions, provider,
+      };
+      // polygon = [{lat, lng}, ...] ≥ 3 точек. Бэк делает point-in-polygon
+      // фильтр после annotate_detections.
+      if (polygon && polygon.length >= 3) body.polygon = polygon;
       const resp = await fetch(`${BASE}/api/scan_region/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nw, se, zoom, model, confidence,
-          max_subregions: maxSubregions, provider,
-        }),
+        body: JSON.stringify(body),
         signal,
       });
       if (!resp.ok) {
@@ -200,6 +204,18 @@
   api.deleteSnapshot = async function (imageId) {
     const r = await fetch(`${BASE}/api/snapshots/${imageId}`, { method: "DELETE" });
     if (!r.ok) throw new Error(`DELETE snapshot HTTP ${r.status}`);
+    return await r.json();
+  };
+
+  // ============ Scan sessions ============
+  api.listScans = async function () {
+    const r = await fetch(`${BASE}/api/scans`);
+    if (!r.ok) throw new Error(`/api/scans HTTP ${r.status}`);
+    return await r.json();
+  };
+  api.deleteScan = async function (scanId) {
+    const r = await fetch(`${BASE}/api/scans/${scanId}`, { method: "DELETE" });
+    if (!r.ok) throw new Error(`DELETE scan HTTP ${r.status}`);
     return await r.json();
   };
 

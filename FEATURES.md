@@ -105,6 +105,39 @@ Event types: `plan` (single, в начале — список всех под-bb
 
 **MAX_TILES env override.** Дефолт `MAX_TILES=400` (≈20×20 ≈ 5120×5120 px ≈ 75 МБ raw RGB). Это **наш** server-side cap (не лимит провайдера) — защита от OOM в параллели с инференсом. Override: `ASTANA_MAX_TILES=600 uvicorn ...`. Оба провайдера (Esri, Google) физически выдержат и 1000+ тайлов; ограничивает только наш сервер.
 
+### Scan sessions (`backend/db.py::scan_sessions` + `/api/scans`)
+Один Auto-Zoom Scan = одна запись `scan_sessions` + N `runs` с `runs.scan_session_id` FK. Это даёт:
+- **Удалить весь scan одной кнопкой** — `DELETE /api/scans/{id}` каскадом убирает все sub-region snapshots, их runs + detections, и PNG-файлы с диска.
+- **History сканов** — `GET /api/scans` возвращает list с bbox, zoom, provider, model, ok_count/sub_count, total_trees, duration, status (`running`/`completed`).
+- UI компонент `ScansList` в city view над snapshot-листом — каждый scan показан с monospace-ID и delete-кнопкой.
+
+Sub-region `runs` всё равно остаются обычными runs (видны в `/api/snapshots`, `/api/history`, агрегируются в city view) — `scan_session_id` это просто tagging.
+
+### Polygon scan (`POST /api/scan_region` с `polygon` field)
+Альтернатива bbox-сканированию: пользователь обводит произвольный полигон (парк, район, линия реки), бэк всё равно делит axis-aligned обёртку в Layer 0-сетку, прогоняет каждый sub-region обычным capture+predict, **затем фильтрует детекции через `shapely.Polygon.contains(Point)`** — оставляет только те, центр которых внутри настоящего полигона.
+
+Request:
+```jsonc
+POST /api/scan_region/stream
+{
+  "nw": {...}, "se": {...},  // axis-aligned bbox полигона
+  "zoom": 19, "model": "yolo", "provider": "google",
+  "polygon": [
+    {"lat": 51.165, "lng": 71.468},
+    {"lat": 51.163, "lng": 71.472},
+    {"lat": 51.160, "lng": 71.470}
+    // ≥3 точек
+  ]
+}
+```
+
+UX: кнопка `Polygon Scan` в Upload-секции — клик добавляет вершину, double-click замыкает полигон и запускает scan. Превью полигона рисуется live во время кликов (точки на вершинах + пунктирная линия → залитая dashed-полигона при ≥3 вершинах). После старта scan'а полигон-обводка остаётся видимой поверх grid'а под-регионов, чтобы было видно какая именно фигура определила фильтрацию.
+
+Невалидный самопересекающийся полигон чинится через `buffer(0)` (стандартный shapely-трюк); если и это не помогает — фильтр пропускается с warning'ом и scan делается как обычный bbox.
+
+### Heat-map display mode (`L.heatLayer` via leaflet.heat plugin)
+Четвёртая опция в "Detection Display" сегментированном control'е (Point / BBox / Polygon / **Heat**). KDE-плотность точек, веса = confidence (низкие-conf не пересиливают высокие в плотных кластерах). Gradient amber → green → dark-green, radius=18, blur=22. Особенно хорошо смотрится в city-aggregate view при 1000+ деревьях — заметны "горячие" парки и тенистые улицы. Plugin: `leaflet.heat@0.2.0` (~5 KB).
+
 ### REST endpoints
 | Метод | Путь | Назначение |
 |---|---|---|
@@ -113,7 +146,9 @@ Event types: `plan` (single, в начале — список всех под-bb
 | `POST` | `/api/upload` | Загрузка PNG/JPG/TIFF/GeoTIFF. Возвращает `ImageMeta`. |
 | `POST` | `/api/capture_from_map` | `{nw, se, zoom}` → ImageMeta с bounds. |
 | `POST` | `/api/scan_region` | **Auto-Zoom Region Scan** — большой bbox любого размера → сетка под-регионов на zoom 19 → capture+predict каждого → snapshots в БД. |
-| `POST` | `/api/scan_region/stream` | Streaming NDJSON-вариант — прогрессивные события (plan / capturing / predicting / sub_complete / done) по мере обработки каждого под-региона. |
+| `POST` | `/api/scan_region/stream` | Streaming NDJSON-вариант — прогрессивные события (plan / capturing / predicting / sub_complete / done) по мере обработки каждого под-региона. Принимает опциональный `polygon` для point-in-polygon фильтрации. |
+| `GET` | `/api/scans` | Список scan-сессий с агрегатами (ok_count, sub_count, total_trees, duration_ms, status). |
+| `DELETE` | `/api/scans/{id}` | Каскадом: scan-session + все её sub-region snapshots + runs + detections + PNG-файлы. |
 | `GET` | `/api/image/{id}` | Сам PNG для отображения. |
 | `GET` | `/api/image/{id}/meta` | Meta снимка. |
 | `POST` | `/api/predict` | Inference (model, confidence, geo). Сохраняет run+detections. |

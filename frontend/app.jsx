@@ -82,6 +82,63 @@ function ViewModeSwitch({ mode, setMode, agg }) {
 }
 
 // ============ SNAPSHOTS LIST (city view) ============
+// ============ SCANS LIST (city view) ============
+function ScansList({ scans, onDelete, loading }) {
+  if (loading || !scans || scans.length === 0) return null;
+  return (
+    <div className="section">
+      <div className="section-label">
+        <Icon name="grid" size={13} />
+        <span>Auto-Zoom Scans</span>
+        <span className="badge-count">{scans.length}</span>
+      </div>
+      <ul className="snap-list">
+        {scans.map((s) => {
+          // status: 'running' (если упало посередине без finalize) / 'completed'
+          // — даём пользователю визуально различать "висит" от "ok".
+          const created = s.created_at ? new Date(s.created_at) : null;
+          const dateStr = created ? created.toLocaleString() : "";
+          const isRunning = s.status === "running";
+          return (
+            <li key={s.id} className="snap-item">
+              <div className="snap-row">
+                <div className="snap-name" title={s.id}>
+                  Scan <span style={{ fontFamily: "ui-monospace, Menlo, monospace", opacity: 0.7 }}>{s.id.slice(0, 8)}</span>
+                  {isRunning && <span style={{ color: "#f59e0b", marginLeft: 6, fontSize: 10 }}>● running</span>}
+                  {s.polygon_json && <span title="Polygon scan" style={{ marginLeft: 6 }}>🔷</span>}
+                </div>
+                <button
+                  className="snap-del"
+                  onClick={() => onDelete(s.id, s.sub_count)}
+                  title="Удалить scan-сессию + ВСЕ её sub-snapshots + детекции (cascade)"
+                >
+                  <Icon name="x" size={11} />
+                </button>
+              </div>
+              <div className="snap-meta">
+                <span>{s.provider}</span>
+                <span>·</span>
+                <span>z{s.zoom}</span>
+                <span>·</span>
+                <span className="snap-model">{s.model}</span>
+                <span>·</span>
+                <span>{s.ok_count}/{s.sub_count} ok</span>
+                <span>·</span>
+                <span className="snap-trees">{s.total_trees.toLocaleString()} trees</span>
+              </div>
+              <div className="snap-coords">
+                N {s.nw_lat.toFixed(5)}° → S {s.se_lat.toFixed(5)}°
+                {s.duration_ms ? ` · ${(s.duration_ms / 1000).toFixed(0)}s` : ""}
+              </div>
+              {dateStr && <div className="snap-coords" style={{ opacity: 0.6 }}>{dateStr}</div>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function SnapshotsList({ snapshots, onDelete, loading }) {
   return (
     <div className="section">
@@ -185,7 +242,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress, polygonMode, onStartPolygon, onCancelPolygon }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -265,7 +322,7 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           </div>
         </div>
       )}
-      {!image && !captureMode && !scanMode && !scanRunning && (
+      {!image && !captureMode && !scanMode && !polygonMode && !scanRunning && (
         <div className="capture-row" style={{ marginTop: 6 }}>
           <button
             type="button"
@@ -282,6 +339,21 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
             <label>z</label>
             <input type="number" value={19} disabled readOnly title="Фиксированный max-zoom для максимальной детализации" />
           </div>
+        </div>
+      )}
+      {!image && !captureMode && !scanMode && !polygonMode && !scanRunning && (
+        <div className="capture-row" style={{ marginTop: 6 }}>
+          <button
+            type="button"
+            className="btn-capture"
+            onClick={onStartPolygon}
+            disabled={uploading}
+            style={{ background: "linear-gradient(135deg,#5DCAA5,#0F6E56)", flex: 1 }}
+            title="Кликай по карте чтобы рисовать произвольный полигон. Двойной клик = замкнуть и запустить scan."
+          >
+            <Icon name="leaf" size={14} />
+            <span>Polygon Scan</span>
+          </button>
         </div>
       )}
       {!image && captureMode && (
@@ -306,6 +378,21 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
             Лимит: 9 под-регионов за запрос.
           </div>
           <button type="button" className="btn-capture-cancel" onClick={onCancelScan}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {!image && polygonMode && !scanRunning && (
+        <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
+          <div className="capture-active-row">
+            <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
+            <span>Polygon Scan: клик = вершина, double-click = замкнуть</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#666", margin: "4px 0 8px" }}>
+            Bbox-сетка строится по axis-aligned обёртке полигона, потом детекции
+            фильтруются point-in-polygon ({model || "yolo"} · z19 · ≤9 sub-regions).
+          </div>
+          <button type="button" className="btn-capture-cancel" onClick={onCancelPolygon}>
             Отмена
           </button>
         </div>
@@ -770,6 +857,16 @@ function MapLayersPanel({ baseLayer, setBaseLayer, showOverlay, setShowOverlay, 
               <Icon name="leaf" size={12} />
               <span>Polygon</span>
             </button>
+            <button
+              type="button"
+              className={`dms-opt ${displayMode === "heat" ? "active" : ""}`}
+              onClick={() => hasTrees && setDisplayMode("heat")}
+              disabled={!hasTrees}
+              title="KDE-style density heatmap (хорошо смотрится в city view на 1000+ деревьях)"
+            >
+              <Icon name="globe" size={12} />
+              <span>Heat</span>
+            </button>
           </div>
           {displayMode === "polygon" && hasTrees && !hasMasks && (
             <div className="dms-hint">No masks in current detection — falling back to points. Run YOLO or Ensemble to get polygons.</div>
@@ -887,7 +984,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress, polygonMode, onPolygonComplete }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -901,6 +998,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
   // Auto-Zoom Scan progress overlay: grid под-регионов + прогрессивные деревья.
   const scanGridRef = useRef(null);
   const scanTreesRef = useRef(null);
+  // KDE-плотность для displayMode="heat" — не layerGroup а сам L.heatLayer.
+  const heatLayerRef = useRef(null);
 
   useEffect(() => {
     if (mapInstance.current || !mapRef.current) return;
@@ -947,6 +1046,11 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
   useEffect(() => {
     if (!layerRef.current || !mapInstance.current) return;
     layerRef.current.clearLayers();
+    // Старый heat-layer, если был — снимаем (новый создаётся ниже, если режим heat).
+    if (heatLayerRef.current) {
+      mapInstance.current.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
     if (!trees) return;
     const visible = trees.filter((t) => {
       if (t.confidence < threshold) return false;
@@ -954,6 +1058,25 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       if (t.confidence > 0.5) return filter.med;
       return filter.low;
     });
+
+    // Heat-mode: вместо маркеров — KDE-плотность через leaflet.heat.
+    // Confidence идёт как intensity weight, чтобы шумные low-conf детекции
+    // не пересиливали уверенные high-conf в плотных кластерах.
+    if (displayMode === "heat" && typeof L.heatLayer === "function") {
+      const points = visible
+        .filter((t) => t.lat != null && t.lng != null)
+        .map((t) => [t.lat, t.lng, Math.max(0.1, t.confidence || 0.5)]);
+      if (points.length) {
+        heatLayerRef.current = L.heatLayer(points, {
+          radius: 18, blur: 22, maxZoom: 19, minOpacity: 0.35,
+          gradient: { 0.2: "#EF9F27", 0.5: "#5DCAA5", 0.8: "#0F6E56", 1.0: "#0A3F30" },
+        }).addTo(mapInstance.current);
+        try {
+          mapInstance.current.fitBounds(points.map(([la, ln]) => [la, ln]), { padding: [40, 40], maxZoom: 18 });
+        } catch {}
+      }
+      return;
+    }
 
     const popupHtml = (t, color) => (
       `<div class="tree-popup">
@@ -1028,6 +1151,18 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       done:       { color: "#0F6E56", weight: 2,   fillOpacity: 0.15, dashArray: null,  className: "" },
       error:      { color: "#dc3545", weight: 2,   fillOpacity: 0.10, dashArray: "2 3", className: "" },
     };
+
+    // Если scan был по полигону — рисуем его поверх grid'а, чтобы было видно
+    // какая именно фигура определила фильтрацию детекций.
+    if (scanProgress.polygon && scanProgress.polygon.length >= 3) {
+      L.polygon(
+        scanProgress.polygon.map((p) => [p.lat, p.lng]),
+        {
+          color: "#0F6E56", weight: 2.5, fillColor: "#0F6E56",
+          fillOpacity: 0.03, dashArray: "6 3", interactive: false,
+        },
+      ).addTo(scanGridRef.current);
+    }
 
     scanProgress.regions.forEach((r) => {
       const s = STATUS[r.status] || STATUS.pending;
@@ -1223,6 +1358,84 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     };
   }, [captureMode, onCaptureBbox, scanMode, onScanBbox]);
 
+  // Polygon-scan draw mode: клик добавляет вершину, double-click замыкает
+  // и шлёт callback с массивом точек. Esc отменяет (управляется родителем,
+  // тут только обработка кликов).
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+    const container = map.getContainer();
+    if (!polygonMode) {
+      container.classList.remove("capture-cursor");
+      return;
+    }
+    container.classList.add("capture-cursor");
+
+    let vertices = [];
+    let polyPreview = null;
+    let lineDots = [];
+    const POLY_COLOR = "#0F6E56";
+
+    const redraw = () => {
+      if (polyPreview) { map.removeLayer(polyPreview); polyPreview = null; }
+      lineDots.forEach((m) => map.removeLayer(m));
+      lineDots = [];
+      if (vertices.length === 0) return;
+      // Точки для каждой вершины
+      vertices.forEach((v, i) => {
+        const dot = L.circleMarker(v, {
+          radius: 5, color: "#fff", weight: 2,
+          fillColor: POLY_COLOR, fillOpacity: 1, interactive: false,
+        }).addTo(map);
+        lineDots.push(dot);
+      });
+      if (vertices.length >= 2) {
+        polyPreview = L.polyline(vertices, {
+          color: POLY_COLOR, weight: 2.5, dashArray: "4 4", interactive: false,
+        }).addTo(map);
+      }
+      if (vertices.length >= 3) {
+        // Превью замкнутого полигона полупрозрачной заливкой.
+        if (polyPreview) { map.removeLayer(polyPreview); }
+        polyPreview = L.polygon(vertices, {
+          color: POLY_COLOR, weight: 2.5, fillColor: POLY_COLOR,
+          fillOpacity: 0.12, dashArray: "4 4", interactive: false,
+        }).addTo(map);
+      }
+    };
+
+    const onClick = (e) => {
+      vertices.push([e.latlng.lat, e.latlng.lng]);
+      redraw();
+    };
+    const onDblClick = (e) => {
+      if (vertices.length < 3) return;
+      L.DomEvent.stopPropagation(e);
+      // Замыкаем и отдаём родителю — он посчитает bbox + вызовет scan.
+      const poly = vertices.slice();
+      // Cleanup preview
+      if (polyPreview) map.removeLayer(polyPreview);
+      lineDots.forEach((m) => map.removeLayer(m));
+      vertices = [];
+      polyPreview = null;
+      lineDots = [];
+      onPolygonComplete && onPolygonComplete(poly);
+    };
+
+    map.on("click", onClick);
+    map.on("dblclick", onDblClick);
+    map.doubleClickZoom.disable();  // иначе dblclick зумит сразу
+
+    return () => {
+      map.off("click", onClick);
+      map.off("dblclick", onDblClick);
+      map.doubleClickZoom.enable();
+      if (polyPreview) map.removeLayer(polyPreview);
+      lineDots.forEach((m) => map.removeLayer(m));
+      container.classList.remove("capture-cursor");
+    };
+  }, [polygonMode, onPolygonComplete]);
+
   const zoomIn = () => mapInstance.current?.zoomIn();
   const zoomOut = () => mapInstance.current?.zoomOut();
   const reset = () => mapInstance.current?.setView(ASTANA_CENTER, 14);
@@ -1331,6 +1544,7 @@ function App() {
   // "single" — workflow одного снимка, как было; "city" — aggregate map по всем сохранённым.
   const [viewMode, setViewMode] = useState("single");
   const [snapshots, setSnapshots] = useState([]);
+  const [scans, setScans] = useState([]);
   const [aggregateTrees, setAggregateTrees] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({ snapshot_count: 0, run_count: 0, total_trees: 0 });
   const [aggLoading, setAggLoading] = useState(false);
@@ -1338,14 +1552,16 @@ function App() {
   const refreshAggregate = useCallback(async () => {
     setAggLoading(true);
     try {
-      const [snaps, dets, stats] = await Promise.all([
+      const [snaps, dets, stats, scanList] = await Promise.all([
         window.api.listSnapshots(),
         window.api.getDetections({ limit: 50000 }),
         window.api.aggregateStats(),
+        window.api.listScans(),
       ]);
       setSnapshots(snaps);
       setAggregateTrees(window.api.adaptAggregateDetections(dets.detections));
       setAggregateStats(stats);
+      setScans(scanList);
     } catch (e) {
       console.error("Aggregate refresh failed:", e);
     } finally {
@@ -1366,12 +1582,27 @@ function App() {
       console.error("Delete failed:", e);
     }
   }, [refreshAggregate]);
+
+  const handleDeleteScan = useCallback(async (scanId, sub_count) => {
+    if (!confirm(`Удалить scan-сессию ${scanId}? Каскадом уйдут ${sub_count || "все"} sub-region snapshots + их детекции.`)) return;
+    try {
+      const res = await window.api.deleteScan(scanId);
+      await refreshAggregate();
+      console.info("Scan deleted:", res);
+    } catch (e) {
+      console.error("Delete scan failed:", e);
+    }
+  }, [refreshAggregate]);
   const [overlayOpacity, setOverlayOpacity] = useState(0.8);
   const [captureMode, setCaptureMode] = useState(false);
   const [captureZoom, setCaptureZoom] = useState(18);
   // Auto-Zoom Region Scan — параллельный режим к captureMode. На "Start" — войти,
   // на рисование bbox — отправить scan, после возврата автоматически в city view.
   const [scanMode, setScanMode] = useState(false);
+  // Polygon scan mode — параллельный к scanMode (rectangle). User кликает по
+  // карте N раз, добавляя вершины, double-click замыкает полигон, после чего
+  // фронт считает axis-aligned bbox и шлёт scan вместе с polygon array.
+  const [polygonMode, setPolygonMode] = useState(false);
   const [scanRunning, setScanRunning] = useState(false);
   const [scanStatus, setScanStatus] = useState(null);
   // Streaming-прогресс scan: { regions: [{row, col, status: pending|capturing|predicting|done|error, sub_bbox, tree_count, error}], trees: [adapted detections so far], done: bool, total: {ok, total_trees, duration_ms} }
@@ -1508,17 +1739,19 @@ function App() {
   //     (progressive рендеринг на карте без ожидания всего скана)
   //   - "sub_error" → status=error + сообщение
   //   - "done" → итог + soft-переход в city view
-  const handleScanBbox = useCallback(async (bbox) => {
+  const handleScanBbox = useCallback(async (bbox, polygon = null) => {
     setScanMode(false);
+    setPolygonMode(false);
     setScanRunning(true);
-    setScanStatus("Запрашиваю план…");
-    setScanProgress({ regions: [], trees: [], done: false, total: null });
+    setScanStatus(polygon ? "Запрашиваю план (polygon scan)…" : "Запрашиваю план…");
+    setScanProgress({ regions: [], trees: [], done: false, total: null, polygon });
     try {
       await window.api.scanRegionStream(
         {
           nw: bbox.nw, se: bbox.se, zoom: 19,
           model, confidence: threshold,
           maxSubregions: 9, provider: tileProvider,
+          polygon: polygon || undefined,
         },
         (ev) => {
           if (ev.type === "plan") {
@@ -1604,6 +1837,20 @@ function App() {
       }, 5000);
     }
   }, [model, threshold, showToast, refreshAggregate, tileProvider]);
+
+  // Polygon-scan завершение: считаем axis-aligned bbox (NW=top-left,
+  // SE=bottom-right) и вызываем handleScanBbox с polygon-array.
+  const handlePolygonComplete = useCallback((polygon) => {
+    if (!polygon || polygon.length < 3) return;
+    const lats = polygon.map(([lat]) => lat);
+    const lngs = polygon.map(([, lng]) => lng);
+    const bbox = {
+      nw: { lat: Math.max(...lats), lng: Math.min(...lngs) },
+      se: { lat: Math.min(...lats), lng: Math.max(...lngs) },
+    };
+    const polyPoints = polygon.map(([lat, lng]) => ({ lat, lng }));
+    handleScanBbox(bbox, polyPoints);
+  }, [handleScanBbox]);
 
   // ============ Run detection ============
   const runDetection = useCallback(async () => {
@@ -1713,7 +1960,7 @@ function App() {
                 captureZoom={captureZoom}
                 setCaptureZoom={setCaptureZoom}
                 scanMode={scanMode}
-                onStartScan={() => { setCaptureMode(false); setScanMode(true); }}
+                onStartScan={() => { setCaptureMode(false); setPolygonMode(false); setScanMode(true); }}
                 onCancelScan={() => setScanMode(false)}
                 scanRunning={scanRunning}
                 scanStatus={scanStatus}
@@ -1722,6 +1969,9 @@ function App() {
                 setTileProvider={setTileProvider}
                 providersMap={providersMap}
                 scanProgress={scanProgress}
+                polygonMode={polygonMode}
+                onStartPolygon={() => { setCaptureMode(false); setScanMode(false); setPolygonMode(true); }}
+                onCancelPolygon={() => setPolygonMode(false)}
               />
               <DetectionControls
                 canRun={!!imageId}
@@ -1751,6 +2001,11 @@ function App() {
           ) : (
             <>
               <AggregateStatsPanel stats={aggregateStats} />
+              <ScansList
+                scans={scans}
+                onDelete={handleDeleteScan}
+                loading={aggLoading}
+              />
               <SnapshotsList
                 snapshots={snapshots}
                 onDelete={handleDeleteSnapshot}
@@ -1815,6 +2070,8 @@ function App() {
           tileProvider={tileProvider}
           providersMap={providersMap}
           scanProgress={scanProgress}
+          polygonMode={viewMode === "single" && polygonMode}
+          onPolygonComplete={handlePolygonComplete}
         />
         <Legend
           trees={viewMode === "city" ? aggregateTrees : trees}

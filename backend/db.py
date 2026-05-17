@@ -74,11 +74,43 @@ def init_db(path: Path) -> None:
           box_geo           TEXT,
           FOREIGN KEY (job_id) REFERENCES runs(job_id) ON DELETE CASCADE
         );
+        -- Auto-Zoom Scan-сессии: одно "большое" сканирование = N sub-region snapshots.
+        -- runs ссылается через nullable scan_session_id (старые runs остаются NULL).
+        -- polygon_json содержит вершины пользовательского полигона если scan был
+        -- по полигону (а не по простому axis-aligned bbox).
+        CREATE TABLE IF NOT EXISTS scan_sessions (
+          id            TEXT PRIMARY KEY,
+          nw_lat        REAL NOT NULL,
+          nw_lng        REAL NOT NULL,
+          se_lat        REAL NOT NULL,
+          se_lng        REAL NOT NULL,
+          zoom          INTEGER NOT NULL,
+          provider      TEXT NOT NULL,
+          model         TEXT NOT NULL,
+          polygon_json  TEXT,
+          status        TEXT NOT NULL DEFAULT 'running',
+          sub_count     INTEGER NOT NULL DEFAULT 0,
+          ok_count      INTEGER NOT NULL DEFAULT 0,
+          total_trees   INTEGER NOT NULL DEFAULT 0,
+          duration_ms   INTEGER NOT NULL DEFAULT 0,
+          created_at    TEXT NOT NULL,
+          completed_at  TEXT
+        );
         CREATE INDEX IF NOT EXISTS idx_runs_image_id    ON runs(image_id);
         CREATE INDEX IF NOT EXISTS idx_runs_created_at  ON runs(created_at);
         CREATE INDEX IF NOT EXISTS idx_det_job          ON detections(job_id);
         CREATE INDEX IF NOT EXISTS idx_det_latlng       ON detections(lat, lng);
+        CREATE INDEX IF NOT EXISTS idx_scans_created    ON scan_sessions(created_at);
         """)
+        # Идемпотентная миграция: добавляем scan_session_id к существующим
+        # runs без потери данных. SQLite не имеет IF NOT EXISTS для ADD COLUMN,
+        # поэтому проверяем через pragma_table_info.
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
+        if "scan_session_id" not in cols:
+            conn.execute(
+                "ALTER TABLE runs ADD COLUMN scan_session_id TEXT REFERENCES scan_sessions(id) ON DELETE SET NULL"
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_scan_session ON runs(scan_session_id)")
         conn.commit()
 
 
@@ -190,20 +222,21 @@ def delete_snapshot(image_id: str) -> bool:
 
 # ============ Runs / Detections ============
 
-def save_run(result: PredictResult, geo_mode: str, confidence: float) -> None:
+def save_run(result: PredictResult, geo_mode: str, confidence: float, scan_session_id: Optional[str] = None) -> None:
     with _lock, _connect() as conn:
         conn.execute(
             """
             INSERT INTO runs
               (job_id, image_id, model, confidence, geo_mode, duration_ms,
-               tree_count, stats_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               tree_count, stats_json, created_at, scan_session_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 result.job_id, result.image_id, result.model.value, confidence,
                 geo_mode, result.duration_ms, len(result.detections),
                 json.dumps(result.stats, ensure_ascii=False),
                 _now(),
+                scan_session_id,
             ),
         )
         for det in result.detections:
@@ -279,6 +312,95 @@ def _row_to_detection(r: sqlite3.Row) -> Detection:
         mask_polygon_geo=json.loads(r["mask_polygon_geo"]) if r["mask_polygon_geo"] else None,
         box_geo=json.loads(r["box_geo"]) if r["box_geo"] else None,
     )
+
+
+# ============ Scan sessions ============
+
+def create_scan_session(
+    session_id: str,
+    nw_lat: float, nw_lng: float, se_lat: float, se_lng: float,
+    zoom: int, provider: str, model: str,
+    sub_count: int,
+    polygon: Optional[list] = None,
+) -> None:
+    """Создаёт запись scan-сессии при старте /api/scan_region(_stream).
+    `polygon` — список [lat,lng] вершин (если scan по полигону, иначе None)."""
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO scan_sessions
+              (id, nw_lat, nw_lng, se_lat, se_lng, zoom, provider, model,
+               polygon_json, status, sub_count, ok_count, total_trees,
+               duration_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, 0, 0, 0, ?)
+            """,
+            (
+                session_id, nw_lat, nw_lng, se_lat, se_lng, zoom, provider, model,
+                json.dumps(polygon) if polygon else None,
+                sub_count,
+                _now(),
+            ),
+        )
+        conn.commit()
+
+
+def finalize_scan_session(
+    session_id: str, ok_count: int, total_trees: int, duration_ms: int,
+    status: str = "completed",
+) -> None:
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            UPDATE scan_sessions
+            SET status = ?, ok_count = ?, total_trees = ?, duration_ms = ?,
+                completed_at = ?
+            WHERE id = ?
+            """,
+            (status, ok_count, total_trees, duration_ms, _now(), session_id),
+        )
+        conn.commit()
+
+
+def list_scan_sessions() -> list[dict]:
+    """Все scan-сессии новые-вперёд + агрегаты из runs (на случай если что-то
+    проскочило мимо finalize)."""
+    sql = """
+        SELECT s.*,
+               COUNT(DISTINCT r.job_id)        AS actual_run_count,
+               COALESCE(SUM(r.tree_count), 0)  AS actual_trees
+        FROM scan_sessions s
+        LEFT JOIN runs r ON r.scan_session_id = s.id
+        GROUP BY s.id
+        ORDER BY s.created_at DESC
+    """
+    with _lock, _connect() as conn:
+        return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def get_scan_session_image_ids(session_id: str) -> list[str]:
+    """image_id-ы всех snapshots внутри сессии — нужно чтобы удалить файлы
+    с диска при cascade-delete."""
+    with _lock, _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT image_id FROM runs WHERE scan_session_id = ?",
+            (session_id,),
+        ).fetchall()
+    return [r["image_id"] for r in rows]
+
+
+def delete_scan_session(session_id: str) -> tuple[bool, list[str]]:
+    """Удаляет сессию + ВСЕ её sub-snapshots (cascade: runs → detections).
+    Возвращает (existed, [image_id, ...]) — image_id-ы для удаления файлов
+    с диска (БД-каскад сам файлы не трогает)."""
+    image_ids = get_scan_session_image_ids(session_id)
+    with _lock, _connect() as conn:
+        # Сначала прибиваем snapshots — runs/detections уйдут каскадом через
+        # snapshot FK. После — пустая scan_session.
+        for img_id in image_ids:
+            conn.execute("DELETE FROM snapshots WHERE image_id = ?", (img_id,))
+        cur = conn.execute("DELETE FROM scan_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        return cur.rowcount > 0, image_ids
 
 
 # ============ Aggregate view ============

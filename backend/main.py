@@ -78,6 +78,15 @@ class ScanRegionRequest(BaseModel):
     confidence: float = Field(0.25, ge=0.0, le=1.0)
     max_subregions: int = Field(DEFAULT_MAX_SUBREGIONS, ge=1, le=25)
     provider: str = Field(DEFAULT_PROVIDER, description="Tile provider key: esri | google")
+    # Опциональный пользовательский полигон. Если задан — bbox (nw/se) должен
+    # быть его axis-aligned bounding rectangle (фронт вычисляет и шлёт оба).
+    # Бэк делит bbox в Layer 0 как обычно, а потом фильтрует детекции:
+    # оставляет только те, центр которых внутри полигона. Это даёт UX
+    # "обведи парк / квартал / линию реки" без переписывания region_scan.
+    polygon: Optional[list[LatLng]] = Field(
+        default=None,
+        description="≥3 точки; если задан — детекции фильтруются point-in-polygon",
+    )
 
 # ============ Setup ============
 
@@ -325,6 +334,29 @@ def _scan_region_setup(req: ScanRegionRequest):
     return adapter, subs
 
 
+def _make_polygon_filter(polygon_points):
+    """Возвращает predicate `inside(lat, lng) -> bool` или None если полигона нет.
+
+    Используем shapely Polygon: внутри есть готовая point-in-polygon реализация
+    (ray-casting + STR-tree оптимизация для batch вызовов). Опасный момент —
+    shapely работает в декартовых координатах, поэтому передаём lng,lat как
+    x,y. На масштабе одного scan-bbox-а (≤2-3 км) искажения от проекции
+    пренебрежимо малы (Астана = ~51° широты).
+    """
+    if not polygon_points or len(polygon_points) < 3:
+        return None
+    from shapely.geometry import Point, Polygon
+    poly = Polygon([(p.lng, p.lat) for p in polygon_points])
+    if not poly.is_valid:
+        # Самопересекающийся полигон — пробуем починить через buffer(0),
+        # стандартный shapely-трюк для self-intersection-фиксов.
+        poly = poly.buffer(0)
+        if not poly.is_valid:
+            log.warning("Polygon invalid after buffer(0) — пропускаем фильтрацию")
+            return None
+    return lambda lat, lng: poly.contains(Point(lng, lat))
+
+
 async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, subs: list):
     """Async generator yielding scan-progress events.
 
@@ -333,7 +365,7 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
     каждое событие в NDJSON и шлёт клиенту по мере появления.
 
     Event types:
-      * `plan`        — список под-регионов которые сервер будет посещать.
+      * `plan`        — список под-регионов которые сервер будет посещать + scan_session_id.
       * `capturing`   — старт скачивания тайлов под-региона.
       * `capture_done`— тайлы склеены + сохранён snapshot (без detections).
       * `predicting`  — старт инференса модели.
@@ -341,6 +373,21 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
       * `sub_error`   — fail (capture или predict) — scan продолжается.
       * `done`        — итог всего scan'а.
     """
+    # Создаём scan-сессию в БД — все sub-region runs привяжутся к ней,
+    # пользователь сможет удалить весь скан одной кнопкой.
+    scan_session_id = uuid.uuid4().hex[:12]
+    polygon_payload = (
+        [[p.lat, p.lng] for p in req.polygon] if getattr(req, "polygon", None) else None
+    )
+    inside_polygon = _make_polygon_filter(getattr(req, "polygon", None))
+    db.create_scan_session(
+        session_id=scan_session_id,
+        nw_lat=req.nw.lat, nw_lng=req.nw.lng,
+        se_lat=req.se.lat, se_lng=req.se.lng,
+        zoom=req.zoom, provider=req.provider, model=req.model.value,
+        sub_count=len(subs), polygon=polygon_payload,
+    )
+
     sub_bbox_payload = [
         {
             "row": s.row, "col": s.col,
@@ -351,11 +398,13 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
     ]
     yield {
         "type": "plan",
+        "scan_session_id": scan_session_id,
         "sub_count": len(subs),
         "sub_regions": sub_bbox_payload,
         "zoom": req.zoom,
         "provider": req.provider,
         "model": req.model.value,
+        "polygon": polygon_payload,
         "bbox": {
             "nw": {"lat": req.nw.lat, "lng": req.nw.lng},
             "se": {"lat": req.se.lat, "lng": req.se.lng},
@@ -438,6 +487,19 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
             geotiff_path=None,
         )
         detections = annotate_detections(detections, ctx)
+        # Point-in-polygon фильтрация — если scan был по полигону, отрезаем
+        # детекции центры которых выпали за реальные границы. Делается ПОСЛЕ
+        # annotate_detections потому что нужны lat/lng.
+        if inside_polygon is not None:
+            before_n = len(detections)
+            detections = [
+                d for d in detections
+                if d.lat is None or d.lng is None or inside_polygon(d.lat, d.lng)
+            ]
+            log.info(
+                "scan_region sub-%s polygon-filter: %d → %d detections",
+                sub_label, before_n, len(detections),
+            )
         stats = _compute_stats(detections, meta, ctx)
         duration_ms = int((time.perf_counter() - t_sub) * 1000)
         job_id = uuid.uuid4().hex[:12]
@@ -445,7 +507,10 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
             job_id=job_id, image_id=image_id, model=req.model,
             detections=detections, duration_ms=duration_ms, stats=stats,
         )
-        db.save_run(result, geo_mode=GeoMode.CORNERS_2.value, confidence=req.confidence)
+        db.save_run(
+            result, geo_mode=GeoMode.CORNERS_2.value,
+            confidence=req.confidence, scan_session_id=scan_session_id,
+        )
         total_trees += len(detections)
         # Сериализуем детекции в plain dict — Pydantic models не serializable
         # из StreamingResponse без model_dump().
@@ -465,9 +530,18 @@ async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, sub
         )
 
     total_duration_ms = int((time.perf_counter() - t_total) * 1000)
+    # ok_count = успешные sub_complete; восстанавливаем через прямой подсчёт
+    # runs привязанных к этой сессии (они были INSERT-нуты ровно для успехов).
+    ok_count = len(db.get_scan_session_image_ids(scan_session_id))
+    db.finalize_scan_session(
+        scan_session_id, ok_count=ok_count, total_trees=total_trees,
+        duration_ms=total_duration_ms, status="completed",
+    )
     yield {
         "type": "done",
+        "scan_session_id": scan_session_id,
         "sub_count": len(subs),
+        "ok_count": ok_count,
         "total_trees": total_trees,
         "duration_ms": total_duration_ms,
     }
@@ -703,6 +777,42 @@ def history(limit: int = 20):
             coverage_pct=stats.get("coverage_pct"),
         ))
     return out
+
+
+@app.get("/api/scans")
+def list_scans():
+    """Список Auto-Zoom Scan-сессий — каждая = один большой scan_region,
+    раскрученный в N sub-region snapshots с tagging через runs.scan_session_id.
+    """
+    return db.list_scan_sessions()
+
+
+@app.delete("/api/scans/{session_id}")
+def delete_scan_session(session_id: str):
+    """Каскадом удаляет всю scan-сессию: сначала её snapshots (а с ними
+    runs+detections через FK CASCADE), потом запись scan_sessions, потом
+    файлы snapshots с диска."""
+    existed, image_ids = db.delete_scan_session(session_id)
+    if not existed:
+        raise HTTPException(404, f"Unknown scan session {session_id}")
+    files_removed = 0
+    for img_id in image_ids:
+        for p in UPLOADS.glob(f"{img_id}.*"):
+            try:
+                p.unlink()
+                files_removed += 1
+            except Exception as e:
+                log.warning("Failed to remove %s: %s", p, e)
+    log.info(
+        "Deleted scan session %s (snapshots=%d, files=%d)",
+        session_id, len(image_ids), files_removed,
+    )
+    return {
+        "deleted": True,
+        "scan_session_id": session_id,
+        "snapshots_deleted": len(image_ids),
+        "files_removed": files_removed,
+    }
 
 
 @app.get("/api/snapshots")
