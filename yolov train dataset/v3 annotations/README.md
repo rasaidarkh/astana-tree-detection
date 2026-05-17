@@ -156,17 +156,112 @@ python -m ml.train_maskrcnn \
 дополнительную строчку для ablation-таблицы диплома (fine-tune vs scratch
 на одной модели = ML-методология).
 
-### Anuar — DeepForest + SAM 2
+### Anuar — DeepForest fine-tune на merged v1+v2+v3
 
-DF не тренировался на нашем датасете (использует pretrained NEON). Для v3
-у тебя два варианта:
+DeepForest это **детектор** (только bbox-ы, без сегментации). У него
+свой формат тренировочного файла — CSV, не COCO. Поэтому нужна
+**конверсия polygon → bbox**: берём `bbox` поле из COCO-аннотации (xywh)
+и переводим в xyxy → пишем в CSV `image_path,xmin,ymin,xmax,ymax,label`.
 
-1. **Оставить как есть** — DeepForest как был, fallback на pretrained
-   `weecology/deepforest-tree`. Тестируй inference на v3 val вместе с
-   остальными для comparison table.
-2. **Fine-tune DF на v3** — если хочешь. У DF свой формат, см.
-   `deepforest.main.deepforest.create_trainer()`. Не наша часть пайплайна,
-   но если соберёшь — добавим в ablation.
+Скрипт уже готов в `ml/coco_to_deepforest_csv.py`. polygon-сегментация
+просто игнорируется (DF её не использует).
+
+```bash
+# Шаги 1-2 — тот же сплит + merge что у Берика:
+python ml/split_coco.py \
+    --input  "yolov train dataset/v3 annotations/annotations/instances_default.json" \
+    --train  "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
+    --val    "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
+    --val-count 5 --seed 42
+
+python ml/merge_coco.py \
+    --inputs "yolov train dataset/annotations_merged/instances_Train.json" \
+             "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
+    --output "yolov train dataset/v3_merged/instances_Train.json"
+python ml/merge_coco.py \
+    --inputs "yolov train dataset/annotations_merged/instances_Validation.json" \
+             "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
+    --output "yolov train dataset/v3_merged/instances_Validation.json"
+
+# Собрать все PNG в одну папку — DF резолвит image_path относительно root_dir:
+mkdir -p "yolov train dataset/v3_merged/images"
+cp -n "yolov train dataset/фотографии/"*.png             "yolov train dataset/v3_merged/images/"
+cp -n "yolov train dataset/новые фотографии/"*.png       "yolov train dataset/v3_merged/images/"
+cp -n "yolov train dataset/v3 фотографии для finetune/"*.png "yolov train dataset/v3_merged/images/"
+
+# 3. Конверсия COCO → DeepForest CSV (polygon → bbox)
+python ml/coco_to_deepforest_csv.py \
+    --train-coco "yolov train dataset/v3_merged/instances_Train.json" \
+    --val-coco   "yolov train dataset/v3_merged/instances_Validation.json" \
+    --root-dir   "yolov train dataset/v3_merged/images" \
+    --output-dir "yolov train dataset/v3_deepforest"
+
+# 4. Fine-tune DeepForest от pretrained NEON backbone.
+# DeepForest нет готового train-скрипта в нашем repo — пишется ad-hoc,
+# minimal-пример внизу. Сохрани его как ml/train_deepforest.py.
+
+python ml/train_deepforest.py \
+    --train-csv "yolov train dataset/v3_deepforest/train.csv" \
+    --val-csv   "yolov train dataset/v3_deepforest/val.csv" \
+    --root-dir  "yolov train dataset/v3_merged/images" \
+    --output    "weights/deepforest_astana.pl" \
+    --epochs 30 --batch-size 1
+```
+
+**Минимальный `ml/train_deepforest.py` (под который параметры выше) —
+напиши примерно так:**
+
+```python
+# ml/train_deepforest.py
+import argparse
+from pathlib import Path
+from deepforest import main as df_main
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--train-csv", required=True)
+    p.add_argument("--val-csv", required=True)
+    p.add_argument("--root-dir", required=True)
+    p.add_argument("--output", default="weights/deepforest_astana.pl")
+    p.add_argument("--epochs", type=int, default=30)
+    p.add_argument("--batch-size", type=int, default=1)
+    p.add_argument("--lr", type=float, default=0.001)
+    a = p.parse_args()
+
+    m = df_main.deepforest()
+    m.load_model(model_name="weecology/deepforest-tree", revision="main")
+
+    m.config["train"]["csv_file"] = a.train_csv
+    m.config["train"]["root_dir"] = a.root_dir
+    m.config["train"]["lr"] = a.lr
+    m.config["validation"]["csv_file"] = a.val_csv
+    m.config["validation"]["root_dir"] = a.root_dir
+    m.config["batch_size"] = a.batch_size
+    m.config["train"]["epochs"] = a.epochs
+
+    m.create_trainer()
+    m.trainer.fit(m)
+
+    Path(a.output).parent.mkdir(parents=True, exist_ok=True)
+    m.save_model(a.output)
+    print(f"saved → {a.output}")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Что важно для Anuar:**
+- DeepForest использует RetinaNet backbone, `score_thresh=0.1` default,
+  `patch_size=400` (это всё в `venv/Lib/site-packages/deepforest/conf/config.yaml`).
+- Веса сохраняй как `.pl` (PyTorch Lightning checkpoint) — это формат
+  который ожидает наш `DeepForestAdapter` через `torch.load → state_dict`.
+- Tiled inference (`patch_size=400`, `patch_overlap=0.05`) уже встроено в
+  DF — после fine-tune он будет работать на больших Astana-снимках
+  правильно через `model.predict_tile()`.
+- **SAM 2** это inference-time refiner крон, не train-time компонент.
+  После fine-tune DF, SAM 2 продолжает работать с новым DF-bbox-ом тем
+  же способом (см. `backend/models/deepforest_sam2_adapter.py`). Не нужно
+  трогать SAM 2 для v3.
 
 ## Eval baseline (общая точка отсчёта)
 
