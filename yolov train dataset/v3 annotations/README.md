@@ -9,292 +9,157 @@
 > (`mt0.google.com/vt/lyrs=s`), а **все** наши training data (v1, v2, v3)
 > сняты с Google Earth Pro. Это другой rendering pipeline и иногда другая
 > дата съёмки. Train ≠ deploy distribution. Чтобы закрыть этот gap — нужен
-> отдельный v4 батч из сервиса (можно прямо в UI наш через Auto-Zoom Scan
-> и сохранение PNG-ов). Не делаем сейчас, помним.
+> отдельный v4 батч из самого сервиса (можно прямо в UI наш через Auto-Zoom
+> Scan и сохранение PNG-ов). Не делаем сейчас, помним.
 
 ## Версии датасета — что куда
 
 | Папка | Файлы | Train / Val | Источник | Кто использует |
 |---|---|---|---|---|
 | `annotations/` | `instances_Train.json`, `instances_Validation.json` | 16 + 5 | v1 CVAT export (2026-04, Earth Pro) | legacy, не трогаем |
-| `annotations_merged/` | `instances_Train.json`, `instances_Validation.json` | 44 + 10 | v1 + v2 merge (2026-05, Earth Pro) | **production v2 train target** |
-| `v3 annotations/annotations/` | `instances_default.json` | 24 (нужно сплитнуть) | **v3** (2026-05-17, Earth Pro) | **этот батч** |
+| `annotations_merged/` | `instances_Train.json`, `instances_Validation.json` | 44 + 10 | v1 + v2 merge (2026-05, Earth Pro) | production v2 train target |
+| `v3 annotations/annotations/` | `instances_default.json` | 24 images, ~1900 polygons (idle, разметка обновляется) | v3 (2026-05-17+, Earth Pro) | **этот батч** |
 
 PNG-файлы:
-- v1: `../фотографии/Снимок экрана 2026-04-01 *.png` (в git, 20 файлов)
-- v2: `../новые фотографии/Снимок экрана 2026-05-10 *.png` (в git, 33 размеченных + 24 unlabeled)
-- **v3: `../v3 фотографии для finetune/Снимок экрана 2026-05-17 *.png`** (в git, **24 кадра, идёт разметка**)
+- v1: `../фотографии/Снимок экрана 2026-04-01 *.png` (в git)
+- v2: `../новые фотографии/Снимок экрана 2026-05-10 *.png` (в git)
+- v3: `../v3 фотографии для finetune/Снимок экрана 2026-05-17 *.png` (в git)
 
 Категория всегда одна: `Дерево` (id=1), Cyrillic в JSON — читай UTF-8.
 
-## Статус v3 разметки
+> **Update history** — разметка v3 обновляется по мере того как команда
+> добавляет polygons. Файл `instances_default.json` перетирается, git
+> diff покажет рост числа annotations. Перед тренировкой обнови ветку
+> (`git pull`) чтобы взять последнюю версию.
 
-⚠️ **Разметка ещё не закончена.** На момент 2026-05-17 размечено 24 PNG из ~50
-запланированных. Команда добавит ещё кадры в течение недели — следи за этой
-папкой. Текущий `instances_default.json` содержит то что готово; финальная
-версия будет с full coverage.
+---
 
-Когда придут новые кадры: они появятся в `v3 фотографии для finetune/` +
-обновлённый `instances_default.json` в этой папке. Гитом отслеживается всё.
+## Идея для всех трёх веток
 
-## Что делать (по моделям)
+Все три модели тренируются на **одном и том же merged-датасете**: v1+v2+v3.
+Валидация — на одном merged-val. Это даёт честное сравнение mAP в diploma
+ablation table (Chapter 4).
 
-### Rasul — YOLOv8-seg v3-finetune
+**Pipeline для подготовки данных одинаков для всех:**
 
-Fine-tune от v2 production-весов на **merged v2+v3** datasete. Не from-scratch —
-v2 best.pt уже учила distribution-у крон Астаны, v3 это smooth domain adapt.
+1. `ml/split_coco.py` — разделить v3 COCO 80/20 (val ≈ 5 кадров, seed=42)
+2. `ml/merge_coco.py` — слить v2-merged + v3 → объединённый train/val
+3. Дальше формат расходится:
+   - **YOLO** → `ml/coco_to_yolo_seg.py` → `ml/tile_dataset.py` (640/128)
+   - **Mask R-CNN** → читает COCO напрямую через `CocoMaskRCNNDataset`
+   - **DeepForest** → `ml/coco_to_deepforest_csv.py` (polygon ignored, берём bbox)
 
-```bash
-# 0. venv с GPU torch (см. docs/ml-setup.md если CUDA не работает)
-.\venv\Scripts\activate
+Команды для каждого шага — в docstring соответствующего скрипта (`--help`).
 
-# 1. Сплит v3 на 80/20 (используем seed=42 для воспроизводимости)
-python ml/split_coco.py \
-    --input  "yolov train dataset/v3 annotations/annotations/instances_default.json" \
-    --train  "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --val    "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --val-count 5 --seed 42
+---
 
-# 2. Merge v2 + v3 (train и val отдельно)
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Train.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --output "yolov train dataset/v3_merged/instances_Train.json"
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Validation.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --output "yolov train dataset/v3_merged/instances_Validation.json"
+## По командам — что и откуда стартовать
 
-# 3. Собрать все PNG в одну папку (coco_to_yolo_seg.py принимает один --images-dir)
-mkdir -p "yolov train dataset/v3_merged/images"
-cp -n "yolov train dataset/фотографии/"*.png             "yolov train dataset/v3_merged/images/"
-cp -n "yolov train dataset/новые фотографии/"*.png       "yolov train dataset/v3_merged/images/"
-cp -n "yolov train dataset/v3 фотографии для finetune/"*.png "yolov train dataset/v3_merged/images/"
+### Rasul · YOLOv8-seg
 
-# 4. COCO → YOLOv8-seg
-python ml/coco_to_yolo_seg.py \
-    --train-coco "yolov train dataset/v3_merged/instances_Train.json" \
-    --val-coco   "yolov train dataset/v3_merged/instances_Validation.json" \
-    --images-dir "yolov train dataset/v3_merged/images" \
-    --output     "yolov train dataset/v3_yolo"
+**Стартовая точка:** `weights/yolo_satellite.pt` это **v2-finetune** (md5
+`f88d0d3dc6d1609e17c7670639e38b24`, runs/segment/astana_tiled_x_v2_finetune/).
+Не v2-fromscratch, не v1, не yolov8x-seg.pt pretrained. Это та модель которая
+сейчас в production.
 
-# 5. Tiled 640+128 overlap (matching v2 геометрию)
-python ml/tile_dataset.py \
-    --input  "yolov train dataset/v3_yolo" \
-    --output "yolov train dataset/v3_yolo_tiled" \
-    --tile-size 640 --overlap 128 --min-area 25
+**Что делать:** fine-tune от v2-finetune весов на merged v1+v2+v3. Тот же
+`ml/train_yolo.py --weights weights/yolo_satellite.pt`. Параметры обучения
+(epochs/patience/imgsz) подбирать ad-hoc — обычно finetune сходится быстрее
+чем fromscratch, начни с 100 эпох / patience 30 и смотри на curves.
 
-# 6. Fine-tune от v2 production-весов (НЕ от yolov8x-seg.pt — это терять v2 опыт)
-python ml/train_yolo.py \
-    --data    "yolov train dataset/v3_yolo_tiled/dataset.yaml" \
-    --weights "weights/yolo_satellite.pt" \
-    --imgsz 640 --batch 8 \
-    --epochs 200 --patience 50 --device 0 \
-    --name astana_tiled_x_v3_finetune
-```
+После тренировки производственные веса лежат в `runs/segment/<name>/weights/best.pt`
+— скопировать в `weights/yolo_satellite.pt` чтобы backend подхватил.
 
-Шаги 1-5 идемпотентны (можно перезапускать). Результат → `runs/segment/astana_tiled_x_v3_finetune/`.
-После тренировки скопировать `weights/best.pt` → `weights/yolo_satellite.pt` чтобы backend подхватил.
+### Berik · Mask R-CNN
 
-### Berik — Mask R-CNN от-нуля на merged v2+v3
+**Стартовая точка на выбор:**
+- `weights/maskrcnn_astana.pt` если уже есть (это твоя предыдущая v1+v2 fine-tune
+  если она была), → **fine-tune от неё**.
+- Или torchvision COCO V1 backbone (default в `MaskRCNNAdapter.build_model`) →
+  **train from scratch на v1+v2+v3**.
 
-v3 это **просто больше данных в том же распределении** (Earth Pro). Текущий
-`weights/maskrcnn_astana.pt` (если есть) тренирован на v1+v2 = той же
-distribution. Делать from-scratch retrain не обязательно — fine-tune от
-существующего тоже сработает. Но **рекомендуется from-scratch** по простой
-причине: ты на v3 ещё не делал ни одного train run, baseline-таблица для
-диплома будет чище если все три (v1, v2, v3) пройдены одной рукой за один
-заход с pretrained COCO V1 backbone. Меньше шансов что reviewer спросит
-"а почему именно эта стартовая точка?"
+Обе опции валидные. Тренируешь обе — получаешь дополнительную строку в
+ablation-таблице (fine-tune vs scratch), это сильная diploma-методология.
+Тренируешь одну — это тоже ок, просто выбери ту которая логичнее с твоей
+позиции (если уже есть рабочий v1+v2 checkpoint = fine-tune быстрее).
 
-```bash
-# Шаги 1-2 те же что выше (сплит v3 + merge COCO):
-python ml/split_coco.py \
-    --input  "yolov train dataset/v3 annotations/annotations/instances_default.json" \
-    --train  "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --val    "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --val-count 5 --seed 42
+Скрипт твой: `ml/train_maskrcnn.py`. Параметры по умолчанию (epochs=50,
+batch=2, lr=0.005, SGD+StepLR) проверены, подходят под 8 GB VRAM.
 
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Train.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --output "yolov train dataset/v3_merged/instances_Train.json"
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Validation.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --output "yolov train dataset/v3_merged/instances_Validation.json"
+`CocoMaskRCNNDataset` принимает COCO JSON напрямую — ничего не конвертируй,
+просто укажи `--train-json` и `--val-json` от merge'нутого датасета и
+`--images-roots` через все три photo папки.
 
-# Mask R-CNN читает COCO напрямую через CocoMaskRCNNDataset — НЕ нужны YOLO-форматные
-# tiling-шаги (это специфика Ultralytics). Просто передай ему путь к JSON-ам и
-# несколько --images-roots, dataset.py сам ищет PNG по filename.
+### Anuar · DeepForest (+ SAM 2)
 
-python -m ml.train_maskrcnn \
-    --train-json "yolov train dataset/v3_merged/instances_Train.json" \
-    --val-json   "yolov train dataset/v3_merged/instances_Validation.json" \
-    --images-roots \
-        "yolov train dataset/фотографии" \
-        "yolov train dataset/новые фотографии" \
-        "yolov train dataset/v3 фотографии для finetune" \
-    --output     "weights/maskrcnn_astana.pt" \
-    --epochs 50 --batch-size 2 --lr 0.005 \
-    --log-dir lightning_logs/maskrcnn_v3
-```
+**Стартовая точка:** твой собственный `~150-image fine-tuned DF checkpoint`
+(`weights/deepforest_astana.pl` если он там, иначе там где у тебя локально).
+**Не pretrained NEON** — у тебя уже есть гораздо более релевантный baseline.
 
-**Почему from-scratch в данном случае:**
-1. У тебя ещё не было train run на v3 → чистый baseline без зависимости
-   от прошлого checkpoint'а.
-2. torchvision COCO V1 backbone уже даёт generic-инициализацию (миллионы
-   аннотаций из MS COCO), не нужен ни v1 ни v2 prior.
-3. 63 train + 15 val (v2+v3 merge) достаточно чтобы вытянуть от-нуля за
-   ~50 эпох — у нас же не миллион кадров чтобы экономить compute через
-   fine-tune.
+**Что делать:** fine-tune от твоего существующего DF на merged v1+v2+v3.
+Не от pretrained — у тебя 150 кадров уже scoped на Астану, prior сильно
+ближе чем NEON-овский американский лес.
 
-Альтернатива: **fine-tune от существующего `weights/maskrcnn_astana.pt`**
-если он уже есть. Тоже валидный путь, обычно сходится быстрее (~30 эпох
-вместо 50). Если хочешь, сделай оба ран'а в разные имена
-(`maskrcnn_v3_scratch.pt` и `maskrcnn_v3_finetune.pt`) — получишь
-дополнительную строчку для ablation-таблицы диплома (fine-tune vs scratch
-на одной модели = ML-методология).
+**Конверсия данных:** DeepForest это detection-only (без сегментации), у
+него свой CSV-формат (`image_path,xmin,ymin,xmax,ymax,label`). Polygon
+из COCO игнорируется, берём только bbox-поле. Конвертер сделан —
+`ml/coco_to_deepforest_csv.py --help` для деталей.
 
-### Anuar — DeepForest fine-tune на merged v1+v2+v3
-
-DeepForest это **детектор** (только bbox-ы, без сегментации). У него
-свой формат тренировочного файла — CSV, не COCO. Поэтому нужна
-**конверсия polygon → bbox**: берём `bbox` поле из COCO-аннотации (xywh)
-и переводим в xyxy → пишем в CSV `image_path,xmin,ymin,xmax,ymax,label`.
-
-Скрипт уже готов в `ml/coco_to_deepforest_csv.py`. polygon-сегментация
-просто игнорируется (DF её не использует).
-
-```bash
-# Шаги 1-2 — тот же сплит + merge что у Берика:
-python ml/split_coco.py \
-    --input  "yolov train dataset/v3 annotations/annotations/instances_default.json" \
-    --train  "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --val    "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --val-count 5 --seed 42
-
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Train.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Train.json" \
-    --output "yolov train dataset/v3_merged/instances_Train.json"
-python ml/merge_coco.py \
-    --inputs "yolov train dataset/annotations_merged/instances_Validation.json" \
-             "yolov train dataset/v3 annotations/annotations/instances_Validation.json" \
-    --output "yolov train dataset/v3_merged/instances_Validation.json"
-
-# Собрать все PNG в одну папку — DF резолвит image_path относительно root_dir:
-mkdir -p "yolov train dataset/v3_merged/images"
-cp -n "yolov train dataset/фотографии/"*.png             "yolov train dataset/v3_merged/images/"
-cp -n "yolov train dataset/новые фотографии/"*.png       "yolov train dataset/v3_merged/images/"
-cp -n "yolov train dataset/v3 фотографии для finetune/"*.png "yolov train dataset/v3_merged/images/"
-
-# 3. Конверсия COCO → DeepForest CSV (polygon → bbox)
-python ml/coco_to_deepforest_csv.py \
-    --train-coco "yolov train dataset/v3_merged/instances_Train.json" \
-    --val-coco   "yolov train dataset/v3_merged/instances_Validation.json" \
-    --root-dir   "yolov train dataset/v3_merged/images" \
-    --output-dir "yolov train dataset/v3_deepforest"
-
-# 4. Fine-tune DeepForest от pretrained NEON backbone.
-# DeepForest нет готового train-скрипта в нашем repo — пишется ad-hoc,
-# minimal-пример внизу. Сохрани его как ml/train_deepforest.py.
-
-python ml/train_deepforest.py \
-    --train-csv "yolov train dataset/v3_deepforest/train.csv" \
-    --val-csv   "yolov train dataset/v3_deepforest/val.csv" \
-    --root-dir  "yolov train dataset/v3_merged/images" \
-    --output    "weights/deepforest_astana.pl" \
-    --epochs 30 --batch-size 1
-```
-
-**Минимальный `ml/train_deepforest.py` (под который параметры выше) —
-напиши примерно так:**
-
+**Тренировка:** в repo нет готового `ml/train_deepforest.py` (мы его не
+делали, у тебя пайплайн был свой). Канонический способ — через DF API:
 ```python
-# ml/train_deepforest.py
-import argparse
-from pathlib import Path
-from deepforest import main as df_main
-
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--train-csv", required=True)
-    p.add_argument("--val-csv", required=True)
-    p.add_argument("--root-dir", required=True)
-    p.add_argument("--output", default="weights/deepforest_astana.pl")
-    p.add_argument("--epochs", type=int, default=30)
-    p.add_argument("--batch-size", type=int, default=1)
-    p.add_argument("--lr", type=float, default=0.001)
-    a = p.parse_args()
-
-    m = df_main.deepforest()
-    m.load_model(model_name="weecology/deepforest-tree", revision="main")
-
-    m.config["train"]["csv_file"] = a.train_csv
-    m.config["train"]["root_dir"] = a.root_dir
-    m.config["train"]["lr"] = a.lr
-    m.config["validation"]["csv_file"] = a.val_csv
-    m.config["validation"]["root_dir"] = a.root_dir
-    m.config["batch_size"] = a.batch_size
-    m.config["train"]["epochs"] = a.epochs
-
-    m.create_trainer()
-    m.trainer.fit(m)
-
-    Path(a.output).parent.mkdir(parents=True, exist_ok=True)
-    m.save_model(a.output)
-    print(f"saved → {a.output}")
-
-if __name__ == "__main__":
-    main()
+m = df_main.deepforest()
+# Загрузить твой существующий .pl, не pretrained
+m.load_from_checkpoint("weights/deepforest_astana.pl")  # или твой path
+m.config["train"]["csv_file"] = "yolov train dataset/v3_deepforest/train.csv"
+m.config["train"]["root_dir"] = "yolov train dataset/v3_merged/images"
+m.config["validation"]["csv_file"] = "yolov train dataset/v3_deepforest/val.csv"
+m.create_trainer()
+m.trainer.fit(m)
+m.save_model("weights/deepforest_astana.pl")
 ```
 
-**Что важно для Anuar:**
-- DeepForest использует RetinaNet backbone, `score_thresh=0.1` default,
-  `patch_size=400` (это всё в `venv/Lib/site-packages/deepforest/conf/config.yaml`).
-- Веса сохраняй как `.pl` (PyTorch Lightning checkpoint) — это формат
-  который ожидает наш `DeepForestAdapter` через `torch.load → state_dict`.
-- Tiled inference (`patch_size=400`, `patch_overlap=0.05`) уже встроено в
-  DF — после fine-tune он будет работать на больших Astana-снимках
-  правильно через `model.predict_tile()`.
-- **SAM 2** это inference-time refiner крон, не train-time компонент.
-  После fine-tune DF, SAM 2 продолжает работать с новым DF-bbox-ом тем
-  же способом (см. `backend/models/deepforest_sam2_adapter.py`). Не нужно
-  трогать SAM 2 для v3.
+Если хочешь я могу сделать work-ready `ml/train_deepforest.py` — попроси,
+сделаю по твоим параметрам.
+
+**SAM 2 не трогать** — это inference-time refiner, не train-time компонент.
+После fine-tune DF он продолжает работать с новыми DF-bbox-ами тем же
+способом (см. `backend/models/deepforest_sam2_adapter.py`).
+
+---
 
 ## Eval baseline (общая точка отсчёта)
 
-Все три модели сравниваются на **одном merged-val** (`v3_merged/instances_Validation.json`,
-15 image / ~726 polygons после полной разметки v3). Хранится в коммитах после
-финализации v3 разметки.
+Все три модели сравниваются на **одном merged-val** (v1+v2+v3, ≈ 15 image
+/ ~700+ polygons после финализации v3 разметки).
 
-Текущий baseline (на чистом v1+v2 merged-val, до v3):
+Текущий v1+v2 baseline (для отсчёта):
 
 | Модель | Box mAP@50 | Mask mAP@50 | Weights |
 |---|---|---|---|
 | YOLO v1 (yolov8x, 397 ep) | 0.265 | 0.240 | `runs/segment/astana_tiled_x_max/` |
 | YOLO v2 from-scratch (204 ep) | 0.319 | 0.288 | `runs/segment/astana_tiled_x_v2_fromscratch/` |
 | **YOLO v2 fine-tune (173 ep) — production** | **0.372** | **0.331** | `runs/segment/astana_tiled_x_v2_finetune/` |
-| Mask R-CNN (50 ep, v1+v2) | TBD | target ≥ 0.45 | `weights/maskrcnn_astana.pt` |
-| DeepForest (pretrained NEON) | TBD | — | hub: `weecology/deepforest-tree` |
+| Mask R-CNN (v1+v2, 50 ep) | TBD | target ≥ 0.45 | `weights/maskrcnn_astana.pt` |
+| DeepForest (Anuar's 150-img fine-tune) | TBD | — | `weights/deepforest_astana.pl` |
 
-После того как все натренируются на v3 datasete — заполнить таблицу в
-`docs/maskrcnn.md` и в дипломе (Chapter 4 / Ablation).
+После v3 тренировок таблица расширяется до v3-строк в той же структуре.
+Mask без значения у DF — он detection-only.
 
-## Гитнор-правила
+---
+
+## .gitignore (для справки)
 
 ```
-# Generated artifacts (regenerate via scripts above):
+# Generated artifacts (regenerate via scripts):
 v3_merged/
 v3_yolo/
 v3_yolo_tiled/
+v3_deepforest/
 
 # Splits inside v3 annotations/ (regenerated by split_coco.py):
 v3 annotations/annotations/instances_Train.json
 v3 annotations/annotations/instances_Validation.json
-
-# Original v3 photos + instances_default.json — committed.
 ```
 
-См. корневой `.gitignore`.
+Оригинальные PNG + `instances_default.json` — committed. См. корневой `.gitignore`.
