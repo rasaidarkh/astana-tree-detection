@@ -242,7 +242,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress, polygonMode, onStartPolygon, onCancelPolygon }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress, polygonMode, onStartPolygon, onCancelPolygon, pendingPolygon, onStartPolygonScan, onClearPolygon }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -382,19 +382,49 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           </button>
         </div>
       )}
-      {!image && polygonMode && !scanRunning && (
+      {!image && polygonMode && !scanRunning && !pendingPolygon && (
         <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
           <div className="capture-active-row">
             <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
             <span>Polygon Scan: клик = вершина, double-click = замкнуть</span>
           </div>
           <div style={{ fontSize: 11, color: "#666", margin: "4px 0 8px" }}>
-            Bbox-сетка строится по axis-aligned обёртке полигона, потом детекции
-            фильтруются point-in-polygon ({model || "yolo"} · z19 · ≤9 sub-regions).
+            <b>Right-click</b> в любой момент — очистить и начать заново.
+            Bbox-сетка строится по axis-aligned обёртке, детекции фильтруются
+            point-in-polygon ({model || "yolo"} · z19 · ≤9 sub-regions).
           </div>
           <button type="button" className="btn-capture-cancel" onClick={onCancelPolygon}>
             Отмена
           </button>
+        </div>
+      )}
+      {!image && polygonMode && !scanRunning && pendingPolygon && pendingPolygon.length >= 3 && (
+        <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
+          <div className="capture-active-row">
+            <span style={{
+              display: "inline-block", width: 10, height: 10,
+              background: "#0F6E56", borderRadius: 2, marginRight: 4,
+            }}></span>
+            <span>Polygon ready · {pendingPolygon.length} vertices</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#666", margin: "4px 0 8px" }}>
+            Готов к запуску. Right-click на карте или Clear ниже = перерисовать.
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              onClick={onStartPolygonScan}
+              className="btn-capture"
+              style={{ flex: 1, background: "linear-gradient(135deg,#0F6E56,#1a9170)" }}
+              title="Запустить scan по нарисованному полигону"
+            >
+              <Icon name="play" size={12} />
+              <span>Start Polygon Scan</span>
+            </button>
+            <button type="button" className="btn-capture-cancel" onClick={onClearPolygon}>
+              Clear
+            </button>
+          </div>
         </div>
       )}
       {scanRunning && (
@@ -984,7 +1014,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress, polygonMode, onPolygonComplete }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress, polygonMode, onPolygonComplete, pendingPolygon, onPolygonReset }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -1358,9 +1388,10 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     };
   }, [captureMode, onCaptureBbox, scanMode, onScanBbox]);
 
-  // Polygon-scan draw mode: клик добавляет вершину, double-click замыкает
-  // и шлёт callback с массивом точек. Esc отменяет (управляется родителем,
-  // тут только обработка кликов).
+  // Polygon-scan draw mode: клик добавляет вершину, double-click "закрывает"
+  // полигон (отдаётся родителю в pendingPolygon, но scan НЕ запускается —
+  // юзер увидит превью + явные кнопки Start/Clear). Right-click чистит всё.
+  // Esc обрабатывается выше через setPolygonMode(false).
   useEffect(() => {
     const map = mapInstance.current;
     if (!map) return;
@@ -1375,66 +1406,75 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     let polyPreview = null;
     let lineDots = [];
     const POLY_COLOR = "#0F6E56";
+    // Если pendingPolygon уже выставлен в App — закидываем его как
+    // initial state, чтобы дорисовка после reset работала корректно.
+    if (pendingPolygon && pendingPolygon.length >= 3) {
+      vertices = pendingPolygon.slice();
+    }
 
     const redraw = () => {
       if (polyPreview) { map.removeLayer(polyPreview); polyPreview = null; }
       lineDots.forEach((m) => map.removeLayer(m));
       lineDots = [];
       if (vertices.length === 0) return;
-      // Точки для каждой вершины
-      vertices.forEach((v, i) => {
+      vertices.forEach((v) => {
         const dot = L.circleMarker(v, {
           radius: 5, color: "#fff", weight: 2,
           fillColor: POLY_COLOR, fillOpacity: 1, interactive: false,
         }).addTo(map);
         lineDots.push(dot);
       });
-      if (vertices.length >= 2) {
+      if (vertices.length >= 2 && vertices.length < 3) {
         polyPreview = L.polyline(vertices, {
           color: POLY_COLOR, weight: 2.5, dashArray: "4 4", interactive: false,
         }).addTo(map);
-      }
-      if (vertices.length >= 3) {
-        // Превью замкнутого полигона полупрозрачной заливкой.
-        if (polyPreview) { map.removeLayer(polyPreview); }
+      } else if (vertices.length >= 3) {
         polyPreview = L.polygon(vertices, {
           color: POLY_COLOR, weight: 2.5, fillColor: POLY_COLOR,
           fillOpacity: 0.12, dashArray: "4 4", interactive: false,
         }).addTo(map);
       }
     };
+    redraw();
 
     const onClick = (e) => {
+      // Если уже есть pendingPolygon — игнорируем клики до Clear/Start.
+      // Юзер должен явно сбросить (right-click) чтобы продолжить править.
+      if (pendingPolygon && pendingPolygon.length >= 3) return;
       vertices.push([e.latlng.lat, e.latlng.lng]);
       redraw();
     };
     const onDblClick = (e) => {
       if (vertices.length < 3) return;
       L.DomEvent.stopPropagation(e);
-      // Замыкаем и отдаём родителю — он посчитает bbox + вызовет scan.
-      const poly = vertices.slice();
-      // Cleanup preview
-      if (polyPreview) map.removeLayer(polyPreview);
-      lineDots.forEach((m) => map.removeLayer(m));
+      // Заморозили вершины — отдаём родителю в pendingPolygon. Превью
+      // остаётся на карте (vertices не очищаем, только лочим клики).
+      onPolygonComplete && onPolygonComplete(vertices.slice());
+    };
+    const onContextMenu = (e) => {
+      // Right-click — clear current draw + pendingPolygon в родителе.
+      L.DomEvent.preventDefault(e);
+      L.DomEvent.stopPropagation(e);
       vertices = [];
-      polyPreview = null;
-      lineDots = [];
-      onPolygonComplete && onPolygonComplete(poly);
+      redraw();
+      onPolygonReset && onPolygonReset();
     };
 
     map.on("click", onClick);
     map.on("dblclick", onDblClick);
-    map.doubleClickZoom.disable();  // иначе dblclick зумит сразу
+    map.on("contextmenu", onContextMenu);
+    map.doubleClickZoom.disable();
 
     return () => {
       map.off("click", onClick);
       map.off("dblclick", onDblClick);
+      map.off("contextmenu", onContextMenu);
       map.doubleClickZoom.enable();
       if (polyPreview) map.removeLayer(polyPreview);
       lineDots.forEach((m) => map.removeLayer(m));
       container.classList.remove("capture-cursor");
     };
-  }, [polygonMode, onPolygonComplete]);
+  }, [polygonMode, onPolygonComplete, onPolygonReset, pendingPolygon]);
 
   const zoomIn = () => mapInstance.current?.zoomIn();
   const zoomOut = () => mapInstance.current?.zoomOut();
@@ -1601,8 +1641,10 @@ function App() {
   const [scanMode, setScanMode] = useState(false);
   // Polygon scan mode — параллельный к scanMode (rectangle). User кликает по
   // карте N раз, добавляя вершины, double-click замыкает полигон, после чего
-  // фронт считает axis-aligned bbox и шлёт scan вместе с polygon array.
+  // фронт сохраняет в pendingPolygon и показывает кнопку "Start". Так юзер
+  // успевает посмотреть полигон до запуска (или удалить через right-click).
   const [polygonMode, setPolygonMode] = useState(false);
+  const [pendingPolygon, setPendingPolygon] = useState(null);  // [[lat, lng], ...]
   const [scanRunning, setScanRunning] = useState(false);
   const [scanStatus, setScanStatus] = useState(null);
   // Streaming-прогресс scan: { regions: [{row, col, status: pending|capturing|predicting|done|error, sub_bbox, tree_count, error}], trees: [adapted detections so far], done: bool, total: {ok, total_trees, duration_ms} }
@@ -1838,19 +1880,33 @@ function App() {
     }
   }, [model, threshold, showToast, refreshAggregate, tileProvider]);
 
-  // Polygon-scan завершение: считаем axis-aligned bbox (NW=top-left,
-  // SE=bottom-right) и вызываем handleScanBbox с polygon-array.
+  // Polygon-scan: double-click на карте сохраняет polygon в pendingPolygon
+  // (НЕ запускает scan сразу). Юзер видит превью, может удалить через
+  // right-click или подтвердить кнопкой "Start Polygon Scan".
   const handlePolygonComplete = useCallback((polygon) => {
     if (!polygon || polygon.length < 3) return;
-    const lats = polygon.map(([lat]) => lat);
-    const lngs = polygon.map(([, lng]) => lng);
+    setPendingPolygon(polygon);  // [[lat, lng], ...] точки
+  }, []);
+
+  // Запуск scan'а из pendingPolygon — считаем axis-aligned bbox и шлём.
+  const handleStartPolygonScan = useCallback(() => {
+    if (!pendingPolygon || pendingPolygon.length < 3) return;
+    const lats = pendingPolygon.map(([lat]) => lat);
+    const lngs = pendingPolygon.map(([, lng]) => lng);
     const bbox = {
       nw: { lat: Math.max(...lats), lng: Math.min(...lngs) },
       se: { lat: Math.min(...lats), lng: Math.max(...lngs) },
     };
-    const polyPoints = polygon.map(([lat, lng]) => ({ lat, lng }));
+    const polyPoints = pendingPolygon.map(([lat, lng]) => ({ lat, lng }));
+    setPendingPolygon(null);
     handleScanBbox(bbox, polyPoints);
-  }, [handleScanBbox]);
+  }, [pendingPolygon, handleScanBbox]);
+
+  // Right-click / Clear button — сбрасывает pendingPolygon и любые
+  // полу-нарисованные вершины (MapView через ту же ссылку перерисует).
+  const handleClearPolygon = useCallback(() => {
+    setPendingPolygon(null);
+  }, []);
 
   // ============ Run detection ============
   const runDetection = useCallback(async () => {
@@ -1970,8 +2026,11 @@ function App() {
                 providersMap={providersMap}
                 scanProgress={scanProgress}
                 polygonMode={polygonMode}
-                onStartPolygon={() => { setCaptureMode(false); setScanMode(false); setPolygonMode(true); }}
-                onCancelPolygon={() => setPolygonMode(false)}
+                onStartPolygon={() => { setCaptureMode(false); setScanMode(false); setPolygonMode(true); setPendingPolygon(null); }}
+                onCancelPolygon={() => { setPolygonMode(false); setPendingPolygon(null); }}
+                pendingPolygon={pendingPolygon}
+                onStartPolygonScan={handleStartPolygonScan}
+                onClearPolygon={handleClearPolygon}
               />
               <DetectionControls
                 canRun={!!imageId}
@@ -2072,6 +2131,8 @@ function App() {
           scanProgress={scanProgress}
           polygonMode={viewMode === "single" && polygonMode}
           onPolygonComplete={handlePolygonComplete}
+          pendingPolygon={pendingPolygon}
+          onPolygonReset={handleClearPolygon}
         />
         <Legend
           trees={viewMode === "city" ? aggregateTrees : trees}
