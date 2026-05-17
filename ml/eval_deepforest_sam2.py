@@ -18,10 +18,9 @@ from pycocotools.cocoeval import COCOeval
 sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT     = Path(__file__).parent.parent
-VAL_JSON = ROOT / "yolov train dataset" / "annotations_merged" / "instances_Validation.json"
+VAL_JSON = ROOT / "yolov train dataset" / "v3_merged" / "instances_Validation.json"
 IMG_DIRS = [
-    ROOT / "yolov train dataset" / "фотографии",
-    ROOT / "yolov train dataset" / "новые фотографии",
+    ROOT / "yolov train dataset" / "v3_merged" / "images",
 ]
 DF_CKPT   = ROOT / "weights" / "deepforest_astana.pl"
 SAM2_ID   = "facebook/sam2.1-hiera-base-plus"
