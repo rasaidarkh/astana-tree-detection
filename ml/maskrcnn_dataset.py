@@ -23,6 +23,35 @@ from torchvision.transforms import functional as F
 log = logging.getLogger("astana-tree")
 
 
+def _build_augment_pipeline():
+    """Train-time augmentation pipeline (Albumentations).
+
+    Flips/rotations/photometric jitter. `min_visibility=0.3` drops bboxes
+    that lose more than 70% of their area after a transform; the corresponding
+    masks are filtered downstream via the `indices` label field.
+    """
+    import albumentations as A
+    return A.Compose(
+        [
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.3),
+            A.RandomRotate90(p=0.5),
+            A.RandomBrightnessContrast(p=0.3),
+            A.HueSaturationValue(
+                p=0.2,
+                hue_shift_limit=10,
+                sat_shift_limit=15,
+                val_shift_limit=10,
+            ),
+        ],
+        bbox_params=A.BboxParams(
+            format="pascal_voc",
+            min_visibility=0.3,
+            label_fields=["indices"],
+        ),
+    )
+
+
 def _has_valid_segmentation(ann: dict) -> bool:
     """True if ann has a non-degenerate polygon list or non-empty RLE.
 
@@ -51,6 +80,7 @@ class CocoMaskRCNNDataset(Dataset):
         annotations_json: str,
         images_roots: list[str],
         transforms: Optional[Callable] = None,
+        augment: bool = False,
     ):
         # pycocotools.COCO(path) opens with locale encoding (cp1251 on RU Windows),
         # which mojibakes Cyrillic file_name fields. Load JSON ourselves as UTF-8
@@ -64,6 +94,7 @@ class CocoMaskRCNNDataset(Dataset):
         self.image_ids: list[int] = sorted(self.coco.getImgIds())
         self.images_roots: list[Path] = [Path(r) for r in images_roots]
         self.transforms = transforms
+        self.augment_pipeline = _build_augment_pipeline() if augment else None
 
         # One-time scan: how many annotations will be filtered for not having
         # a usable segmentation. Helpful at training start for noticing drift
@@ -146,6 +177,11 @@ class CocoMaskRCNNDataset(Dataset):
             areas = torch.as_tensor(areas_list, dtype=torch.float32)
             iscrowd = torch.as_tensor(iscrowd_list, dtype=torch.int64)
 
+        if self.augment_pipeline is not None:
+            image, boxes, masks, labels, areas, iscrowd = _apply_augment(
+                self.augment_pipeline, image, boxes, masks, labels, areas, iscrowd,
+            )
+
         target: dict = {
             "boxes": boxes,
             "labels": labels,
@@ -159,6 +195,67 @@ class CocoMaskRCNNDataset(Dataset):
             image, target = self.transforms(image, target)
 
         return image, target
+
+
+def _apply_augment(
+    pipeline,
+    image: torch.Tensor,
+    boxes: torch.Tensor,
+    masks: torch.Tensor,
+    labels: torch.Tensor,
+    areas: torch.Tensor,
+    iscrowd: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Run Albumentations pipeline on (image, boxes, masks) and reassemble tensors.
+
+    Bboxes dropped by `min_visibility` are tracked via the `indices` label field;
+    we filter masks/labels/areas/iscrowd to the surviving subset so all tensors
+    stay aligned. Rotations swap H/W — the new image's shape becomes the
+    canonical size for empty-target zero tensors.
+    """
+    img_np = (image.permute(1, 2, 0).numpy() * 255.0).astype(np.uint8)
+    n = boxes.shape[0]
+    if n == 0:
+        result = pipeline(image=img_np, masks=[], bboxes=[], indices=[])
+        new_img = torch.as_tensor(result["image"]).permute(2, 0, 1).float() / 255.0
+        _, h, w = new_img.shape
+        return (
+            new_img,
+            torch.zeros((0, 4), dtype=torch.float32),
+            torch.zeros((0, h, w), dtype=torch.uint8),
+            torch.zeros((0,), dtype=torch.int64),
+            torch.zeros((0,), dtype=torch.float32),
+            torch.zeros((0,), dtype=torch.int64),
+        )
+
+    result = pipeline(
+        image=img_np,
+        masks=[m.numpy() for m in masks],
+        bboxes=boxes.tolist(),
+        indices=list(range(n)),
+    )
+    new_img = torch.as_tensor(result["image"]).permute(2, 0, 1).float() / 255.0
+    # Albumentations 2.x returns label_fields as floats — cast back to int for indexing
+    survived = [int(i) for i in result["indices"]]
+    if not survived:
+        _, h, w = new_img.shape
+        return (
+            new_img,
+            torch.zeros((0, 4), dtype=torch.float32),
+            torch.zeros((0, h, w), dtype=torch.uint8),
+            torch.zeros((0,), dtype=torch.int64),
+            torch.zeros((0,), dtype=torch.float32),
+            torch.zeros((0,), dtype=torch.int64),
+        )
+    new_boxes = torch.as_tensor(list(result["bboxes"]), dtype=torch.float32)
+    new_masks = torch.as_tensor(
+        np.stack([result["masks"][i] for i in survived], axis=0), dtype=torch.uint8
+    )
+    new_labels = labels[survived]
+    # Recompute area from the post-augmentation bbox; original COCO area no longer matches
+    new_areas = (new_boxes[:, 2] - new_boxes[:, 0]) * (new_boxes[:, 3] - new_boxes[:, 1])
+    new_iscrowd = iscrowd[survived]
+    return new_img, new_boxes, new_masks, new_labels, new_areas, new_iscrowd
 
 
 def collate_fn(batch):

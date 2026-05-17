@@ -31,3 +31,4 @@ matplotlib>=3.8
 tqdm>=4.66
 pyyaml>=6.0
 pycocotools>=2.0     # COCO mAP eval (Mask R-CNN)
+albumentations>=1.4  # train-time augmentations (Mask R-CNN)

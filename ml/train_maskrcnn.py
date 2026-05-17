@@ -1,14 +1,16 @@
 """Train Mask R-CNN (torchvision maskrcnn_resnet50_fpn_v2) on annotations_merged COCO.
 
   - SGD + StepLR, batch 2, mixed precision (8 GB VRAM friendly)
+  - Train-time Albumentations augmentation (flips, rotations, photometric)
   - Validation each epoch via torchmetrics MeanAveragePrecision (Box + Segm)
   - Saves best (by mask_map_50) and last checkpoints + metrics CSV
+  - Early stopping after --patience epochs without improvement of mask_map_50
 
-Example:
-    python -m ml.train_maskrcnn --epochs 50 --batch-size 2 --lr 0.005
+Example (from-scratch):
+    python -m ml.train_maskrcnn --epochs 50 --batch-size 2
 
-Resume:
-    python -m ml.train_maskrcnn --resume weights/maskrcnn_astana_last.pt
+Fine-tune (warm-start, lr drops to 0.001 by default):
+    python -m ml.train_maskrcnn --resume-from weights/maskrcnn_astana.pt --epochs 30 --patience 5
 """
 
 from __future__ import annotations
@@ -55,7 +57,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--output", default="weights/maskrcnn_astana.pt")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch-size", type=int, default=2)
-    p.add_argument("--lr", type=float, default=0.005)
+    p.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="SGD learning rate. Default 0.005 from-scratch / 0.001 with --resume-from",
+    )
     p.add_argument("--device", default="auto")
     p.add_argument(
         "--num-workers",
@@ -64,8 +71,21 @@ def parse_args() -> argparse.Namespace:
         help="0 default on Windows (avoids pickling artefacts); bump to 2 on Linux",
     )
     p.add_argument("--log-dir", default="lightning_logs/maskrcnn_v0")
-    p.add_argument("--resume", default=None, help="Path to state_dict .pt for resume")
-    return p.parse_args()
+    p.add_argument(
+        "--resume-from",
+        default=None,
+        help="Path to state_dict .pt to warm-start fine-tuning (lowers default lr to 0.001)",
+    )
+    p.add_argument(
+        "--patience",
+        type=int,
+        default=5,
+        help="Early stop after this many epochs without improvement of val mask_map_50",
+    )
+    args = p.parse_args()
+    if args.lr is None:
+        args.lr = 0.001 if args.resume_from else 0.005
+    return args
 
 
 def _validate_one_epoch(
@@ -141,9 +161,9 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     metrics_csv = log_dir / "metrics.csv"
 
-    train_ds = CocoMaskRCNNDataset(args.train_json, args.images_roots)
-    val_ds = CocoMaskRCNNDataset(args.val_json, args.images_roots)
-    log.info("Train: %d images | Val: %d images", len(train_ds), len(val_ds))
+    train_ds = CocoMaskRCNNDataset(args.train_json, args.images_roots, augment=True)
+    val_ds = CocoMaskRCNNDataset(args.val_json, args.images_roots, augment=False)
+    log.info("Train: %d images (augment=on) | Val: %d images", len(train_ds), len(val_ds))
 
     train_loader = DataLoader(
         train_ds,
@@ -163,11 +183,11 @@ def main() -> None:
     model = MaskRCNNAdapter.build_model(num_classes=2)
     model.to(device)
 
-    if args.resume:
+    if args.resume_from:
         model.load_state_dict(
-            torch.load(args.resume, map_location=device, weights_only=True)
+            torch.load(args.resume_from, map_location=device, weights_only=True)
         )
-        log.info("Resumed from %s", args.resume)
+        log.info("Resuming from %s (lr=%g)", args.resume_from, args.lr)
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=args.lr, momentum=0.9, weight_decay=0.0005)
@@ -184,6 +204,9 @@ def main() -> None:
         torch.cuda.reset_peak_memory_stats()
 
     best_mask_map = -1.0
+    best_epoch = 0
+    epochs_without_improvement = 0
+    stopped_early = False
     for epoch in range(1, args.epochs + 1):
         model.train()
         running_loss = 0.0
@@ -230,14 +253,34 @@ def main() -> None:
         torch.save(model.state_dict(), last_path)
         if val["mask_map_50"] > best_mask_map:
             best_mask_map = val["mask_map_50"]
+            best_epoch = epoch
+            epochs_without_improvement = 0
             torch.save(model.state_dict(), output_path)
             log.info(
                 "New best mask_map_50=%.4f -> saved to %s",
                 best_mask_map, output_path,
             )
+        else:
+            epochs_without_improvement += 1
+            log.info(
+                "No improvement for %d/%d epochs (best=%.4f at epoch %d)",
+                epochs_without_improvement, args.patience, best_mask_map, best_epoch,
+            )
+            if epochs_without_improvement >= args.patience:
+                log.info(
+                    "Early stopping at epoch %d (best mask_map_50=%.4f at epoch %d)",
+                    epoch, best_mask_map, best_epoch,
+                )
+                stopped_early = True
+                break
 
     log.info("=" * 60)
-    log.info("Training done. Best mask_map_50=%.4f at %s", best_mask_map, output_path)
+    if stopped_early:
+        log.info("Training stopped early. Best mask_map_50=%.4f at epoch %d -> %s",
+                 best_mask_map, best_epoch, output_path)
+    else:
+        log.info("Training done. Best mask_map_50=%.4f at epoch %d -> %s",
+                 best_mask_map, best_epoch, output_path)
     log.info("Last checkpoint at %s", last_path)
     log.info("Metrics CSV at %s", metrics_csv)
 
