@@ -794,7 +794,7 @@ function SnapshotCard({ snap, onRename, onDelete }) {
 /* ==================================================================
    Settings popover (top-right, accessed via gear)
    ================================================================== */
-function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, modelStatus, onClose }) {
+function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, modelStatus, model, setModel, onClose }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
@@ -805,8 +805,34 @@ function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, mo
   if (!open) return null;
 
   const models = modelStatus?.models || {};
+  // Available models, sorted: yolo* first (детекторы), then others
+  const availableEntries = Object.entries(models).filter(([_, m]) => m.available);
+  const yoloOpts = availableEntries.filter(([k]) => k.startsWith("yolo"));
+  const otherOpts = availableEntries.filter(([k]) => !k.startsWith("yolo"));
+  const orderedOpts = [...yoloOpts, ...otherOpts];
+
   return (
     <div className="settings-popover popover" ref={ref}>
+      <div className="popover-row">
+        <div className="popover-label">Detection model</div>
+        <select
+          className="select-full"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+        >
+          {orderedOpts.map(([k, m]) => (
+            <option key={k} value={k}>
+              {m.name || k}
+            </option>
+          ))}
+        </select>
+        <div className="field-help">
+          Used for all scans and predictions. Switch between YOLO variants to
+          compare quality on different scenes (e.g. v2 is more conservative
+          on unusual surfaces like stadium roofs).
+        </div>
+      </div>
+
       <div className="popover-row">
         <div className="popover-label">Satellite imagery</div>
         <select
@@ -823,15 +849,18 @@ function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, mo
         </select>
         <div className="field-help">Source for both map display and scan capture.</div>
       </div>
+
       <div className="popover-row">
-        <div className="popover-label">Models loaded</div>
+        <div className="popover-label">Status</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {Object.entries(models).map(([k, m]) => (
             <div key={k} className="row" style={{ fontSize: 11 }}>
               <span className="status-dot" style={{ background: m.available ? "var(--success)" : "var(--text-3)" }}></span>
-              <span style={{ flex: 1 }}>{m.name || k}</span>
+              <span style={{ flex: 1, fontWeight: k === model ? 600 : 400 }}>
+                {m.name || k}
+              </span>
               <span className="muted mono" style={{ fontSize: 10 }}>
-                {m.available ? (m.loaded ? "ready" : "lazy") : "—"}
+                {k === model ? "selected · " : ""}{m.available ? (m.loaded ? "ready" : "lazy") : "—"}
               </span>
             </div>
           ))}
@@ -1832,6 +1861,7 @@ function App() {
         tileProvider={tileProvider} setTileProvider={setTileProvider}
         providersMap={providersMap}
         modelStatus={modelStatus}
+        model={model} setModel={setModel}
         onClose={() => setSettingsOpen(false)}
       />
 
