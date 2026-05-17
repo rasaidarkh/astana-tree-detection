@@ -1,5 +1,5 @@
 /* =========================================================================
-   Astana Tree Detection — UI v2 (design rethink)
+   Canopy — Astana urban tree inventory · UI v2
    Map-first, progressive disclosure, MVP-grade.
    ========================================================================= */
 
@@ -54,10 +54,13 @@ function TopBar({ view, setView, onOpenSettings, settingsOpen, backendStatus, da
   return (
     <header className="topbar">
       <div className="topbar-brand">
-        <div className="topbar-mark"><Icon name="polygon" size={16} stroke={2} /></div>
+        <svg className="topbar-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M42 6 C 18 10, 8 18, 6 42 C 32 38, 42 30, 42 6 Z" fill="#7cd6a0" />
+          <path d="M42 6 C 18 10, 8 18, 6 42 C 16 26, 28 14, 42 6 Z" fill="#9fdfb8" />
+        </svg>
         <div>
-          <div className="topbar-title">Astana Tree Detection</div>
-          <div className="topbar-sub">Urban canopy inventory · AITU 2026</div>
+          <div className="topbar-title">Canopy</div>
+          <div className="topbar-sub">Astana urban tree inventory · 2026</div>
         </div>
       </div>
 
