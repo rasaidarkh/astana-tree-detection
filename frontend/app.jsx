@@ -1462,7 +1462,7 @@ function App() {
         onClose={() => setSettingsOpen(false)}
       />
 
-      <div className={view === "image" ? "layout-image" : ""}>
+      <div className={`view-shell ${view === "image" ? "layout-image" : ""}`}>
         {view === "image" && (
           <ImageSidebar
             image={image} uploading={uploading} uploadError={uploadError}

@@ -598,11 +598,15 @@ img, svg { display: block; max-width: 100%; }
 .ghost-btn:hover { background: var(--surface-2); color: var(--text-1); }
 .ghost-btn.danger:hover { color: var(--danger); }
 
-/* ---------- Image view sidebar ---------- */
-.layout-image {
+/* ---------- View shell (always between topbar and toast) ---------- */
+.view-shell {
+  flex: 1;
   display: flex;
-  height: 100%;
+  min-height: 0;
 }
+
+/* In image view the shell is sidebar + canvas; in map view it's just canvas. */
+.layout-image .sidebar { flex-shrink: 0; }
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
