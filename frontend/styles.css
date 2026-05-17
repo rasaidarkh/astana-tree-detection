@@ -645,19 +645,27 @@ img, svg { display: block; max-width: 100%; }
   font-size: 12px;
   font-weight: 500;
   color: var(--text-1);
-  transition: all 150ms ease;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
 .lp-action:hover {
   border-color: var(--accent);
   background: var(--accent-softer);
   color: var(--accent);
+  transform: translateY(-1px);
 }
 .lp-action.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--text-inv);
+  box-shadow: 0 2px 8px var(--accent-ring);
 }
-.lp-action.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--text-inv); }
+.lp-action.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--text-inv);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--accent-ring);
+}
 
 /* Big city stats card */
 .lp-hero {
@@ -774,24 +782,25 @@ img, svg { display: block; max-width: 100%; }
 /* Activity row (recent scan) */
 .activity-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  transition: background 150ms ease;
-  margin: 0 -6px;
-  padding-left: 6px;
-  padding-right: 6px;
+  padding: 8px 6px;
+  transition: background 180ms ease, transform 180ms ease;
   border-radius: var(--r-2);
+  margin: 0 -6px;
 }
-.activity-row:hover { background: var(--surface-2); }
-.activity-row:last-child { border-bottom: none; }
+.activity-row:not(:last-child) { box-shadow: 0 1px 0 var(--border); }
+.activity-row:hover {
+  background: var(--surface-2);
+}
+.activity-row.hidden { opacity: 0.45; }
+.activity-row.hidden:hover { opacity: 1; }
 .activity-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
-  margin-top: 7px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 7px;
 }
 .activity-body { flex: 1; min-width: 0; }
 .activity-name {
@@ -808,6 +817,18 @@ img, svg { display: block; max-width: 100%; }
   margin-top: 1px;
   font-feature-settings: "tnum";
 }
+.activity-eye {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-2);
+  color: var(--text-3);
+  transition: all 150ms ease;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.activity-row:hover .activity-eye { opacity: 1; }
+.activity-row.hidden .activity-eye { opacity: 1; color: var(--text-2); }
+.activity-eye:hover { background: var(--border); color: var(--accent); }
 
 /* Filters inline (always visible in left panel) */
 .lp-filter-block {
@@ -923,13 +944,16 @@ img, svg { display: block; max-width: 100%; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-3);
-  transition: all 150ms ease;
+  transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
   min-height: 130px;
 }
 .mgr-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-1);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-2px);
 }
+.mgr-card.is-hidden { opacity: 0.55; }
+.mgr-card.is-hidden:hover { opacity: 1; }
 .mgr-card-head {
   display: flex;
   align-items: center;

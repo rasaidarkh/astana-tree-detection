@@ -236,6 +236,15 @@
     if (!r.ok) throw new Error(`PATCH scan HTTP ${r.status}`);
     return await r.json();
   };
+  api.setScanHidden = async function (scanId, hidden) {
+    const r = await fetch(`${BASE}/api/scans/${scanId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hidden }),
+    });
+    if (!r.ok) throw new Error(`PATCH scan HTTP ${r.status}`);
+    return await r.json();
+  };
 
   // Aggregate API возвращает {lat, lng, confidence, crown_diameter_m, mask_polygon_geo, box_geo,
   //   model, job_id, image_id, local_id}. Адаптируем под UI-формат `tree`.

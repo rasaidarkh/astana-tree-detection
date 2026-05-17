@@ -35,6 +35,9 @@ function Icon({ name, size = 16, stroke = 1.8 }) {
     file:       <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></>,
     target:     <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="1" fill="currentColor" /></>,
     flame:      <path d="M12 3c0 4 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 1-5 0-1 1-2 3-4z" />,
+    eye:        <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+    eyeOff:     <><path d="M9.9 4.2A9.7 9.7 0 0 1 12 4c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.3 4.3M6.6 6.6A17.6 17.6 0 0 0 2 11s3.5 7 10 7c1.9 0 3.6-.4 5.1-1.1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /><line x1="2" y1="2" x2="22" y2="22" /></>,
+    edit:       <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" /></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -115,6 +118,7 @@ function LeftPanel({
   threshold, setThreshold, filter, setFilter,
   visibleCount,
   onOpenManager,
+  onToggleScanHidden,
 }) {
   const t = (aggregateStats && aggregateStats.total_trees) || 0;
   const s = (aggregateStats && aggregateStats.snapshot_count) || 0;
@@ -274,15 +278,23 @@ function LeftPanel({
             const ago = date ? timeAgo(date) : "";
             const name = s.display_name || `Scan ${s.id.slice(0, 8)}`;
             const dotColor = s.status === "completed" ? "var(--success)" : "var(--warning)";
+            const hidden = !!s.hidden;
             return (
-              <div key={s.id} className="activity-row" onClick={onOpenManager}>
+              <div key={s.id} className={`activity-row ${hidden ? "hidden" : ""}`}>
                 <span className="activity-dot" style={{ background: dotColor }}></span>
-                <div className="activity-body">
+                <div className="activity-body" onClick={onOpenManager} style={{ cursor: "pointer" }}>
                   <div className="activity-name">{name}</div>
                   <div className="activity-meta">
                     {(s.total_trees || 0).toLocaleString()} trees · {ago} · {s.model}
                   </div>
                 </div>
+                <button
+                  className="activity-eye"
+                  onClick={(e) => { e.stopPropagation(); onToggleScanHidden(s.id, hidden); }}
+                  title={hidden ? "Show on map" : "Hide from map"}
+                >
+                  <Icon name={hidden ? "eyeOff" : "eye"} size={13} />
+                </button>
               </div>
             );
           })}
@@ -396,7 +408,10 @@ function DisplayStrip({ displayMode, setDisplayMode, hasMasks, hasTrees, thresho
 /* ==================================================================
    ScanProgressCard (top-center, only during scan)
    ================================================================== */
-function ScanProgressCard({ scanProgress, onCancel }) {
+function ScanProgressCard({ scanProgress, onCancel, onRename }) {
+  // Локальный draft для post-scan rename input (показывается когда .done && sessionId)
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
   if (!scanProgress) return null;
   const regions = scanProgress.regions || [];
   const total = regions.length;
@@ -405,10 +420,21 @@ function ScanProgressCard({ scanProgress, onCancel }) {
   const treeCount = scanProgress.trees ? scanProgress.trees.length : 0;
   const cols = Math.max(1, Math.ceil(Math.sqrt(total || 1)));
   const pct = total ? Math.round((done / total) * 100) : 0;
+  const isDone = scanProgress.done && scanProgress.sessionId;
+
+  const submit = async () => {
+    if (!isDone || !draft.trim()) return;
+    setSaving(true);
+    try { await onRename(scanProgress.sessionId, draft.trim()); }
+    finally { setSaving(false); }
+  };
+
   return (
     <div className="float float-tc scan-progress">
       <div className="scan-progress-head">
-        <div className="scan-spinner" />
+        {scanProgress.done
+          ? <Icon name="check" size={14} stroke={2.5} />
+          : <div className="scan-spinner" />}
         <div className="scan-progress-title">
           {scanProgress.done ? "Scan complete" : "Scanning area"}
         </div>
@@ -447,6 +473,30 @@ function ScanProgressCard({ scanProgress, onCancel }) {
       <div className="scan-progress-line">
         <div className="scan-progress-fill" style={{ width: `${pct}%` }} />
       </div>
+
+      {/* Optional post-scan rename — non-blocking, юзер может проигнорировать */}
+      {isDone && (
+        <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+          <input
+            className="input"
+            placeholder="Name this scan (optional)…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            maxLength={120}
+            autoFocus
+          />
+          <button
+            className="btn btn-primary"
+            style={{ width: "auto", padding: "0 14px", flexShrink: 0 }}
+            onClick={submit}
+            disabled={saving || !draft.trim()}
+          >
+            <Icon name="check" size={12} stroke={2.5} />
+            <span>Save</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,6 +530,7 @@ function ManagerModal({
   scans, snapshots,
   onDeleteScan, onDeleteSnapshot,
   onRenameScan, onRenameSnapshot,
+  onToggleScanHidden,
   loading,
 }) {
   const [tab, setTab] = useState("scans");
@@ -576,6 +627,7 @@ function ManagerModal({
                   key={s.id} scan={s}
                   onRename={(name) => onRenameScan(s.id, name)}
                   onDelete={() => onDeleteScan(s.id, s.sub_count)}
+                  onToggleHidden={onToggleScanHidden}
                 />
               ))}
             </div>
@@ -644,10 +696,11 @@ function EditableName({ value, fallback, onSave }) {
   );
 }
 
-function ScanCard({ scan, onRename, onDelete }) {
+function ScanCard({ scan, onRename, onDelete, onToggleHidden }) {
   const date = scan.created_at ? new Date(scan.created_at) : null;
+  const hidden = !!scan.hidden;
   return (
-    <div className="mgr-card">
+    <div className={`mgr-card ${hidden ? "is-hidden" : ""}`}>
       <div className="mgr-card-head">
         <EditableName
           value={scan.display_name}
@@ -656,6 +709,14 @@ function ScanCard({ scan, onRename, onDelete }) {
         />
         {scan.polygon_json && <span className="tag gray">polygon</span>}
         {scan.status === "running" && <span className="tag running">running</span>}
+        <button
+          className="icon-btn"
+          style={{ width: 28, height: 28 }}
+          onClick={() => onToggleHidden(scan.id, hidden)}
+          title={hidden ? "Show on map" : "Hide from map"}
+        >
+          <Icon name={hidden ? "eyeOff" : "eye"} size={13} />
+        </button>
       </div>
       <div className="mgr-card-stats">
         <div className="mgr-card-stat">
@@ -1456,6 +1517,9 @@ function App() {
   const [scanProgress, setScanProgress] = useState(null);
   const [pendingPolygon, setPendingPolygon] = useState(null);
   const scanAbortRef = useRef(null);
+  // Most-recently-completed scan id — backing data for the optional rename
+  // chip that appears in the scan progress card after `done` event.
+  const [lastFinishedScan, setLastFinishedScan] = useState(null);
 
   // ---- model + threshold (shared) ----
   const [model, setModel] = useState("yolo");
@@ -1590,7 +1654,8 @@ function App() {
               ),
             }));
           } else if (ev.type === "done") {
-            setScanProgress((p) => ({ ...p, done: true }));
+            setScanProgress((p) => ({ ...p, done: true, sessionId: ev.scan_session_id }));
+            setLastFinishedScan({ id: ev.scan_session_id, trees: ev.total_trees, when: Date.now() });
             showToast(`Scan complete · ${ev.total_trees.toLocaleString()} trees · ${(ev.duration_ms / 1000).toFixed(1)}s`, "success");
           } else if (ev.type === "fatal") {
             showToast("Scan crashed: " + ev.error, "error");
@@ -1650,6 +1715,19 @@ function App() {
   const handleRenameSnapshot = useCallback(async (id, name) => {
     try { await window.api.renameSnapshot(id, name); await refreshAggregate(); }
     catch (e) { showToast("Rename failed: " + e.message, "error"); }
+  }, [refreshAggregate, showToast]);
+
+  const handleToggleScanHidden = useCallback(async (id, currentlyHidden) => {
+    // optimistic — обновляем locally, потом refreshAggregate подтянет настоящее.
+    setScans((prev) => prev.map((s) => s.id === id ? { ...s, hidden: !currentlyHidden ? 1 : 0 } : s));
+    try {
+      await window.api.setScanHidden(id, !currentlyHidden);
+      await refreshAggregate();
+    } catch (e) {
+      showToast("Toggle failed: " + e.message, "error");
+      // Откатываем locally если упало.
+      setScans((prev) => prev.map((s) => s.id === id ? { ...s, hidden: currentlyHidden ? 1 : 0 } : s));
+    }
   }, [refreshAggregate, showToast]);
 
   // -------- image flow --------
@@ -1789,6 +1867,7 @@ function App() {
             filter={filter} setFilter={setFilter}
             visibleCount={visibleCount}
             onOpenManager={() => setManagerOpen(true)}
+            onToggleScanHidden={handleToggleScanHidden}
           />
         )}
 
@@ -1822,7 +1901,11 @@ function App() {
                 />
               )}
 
-              <ScanProgressCard scanProgress={scanProgress} onCancel={cancelScan} />
+              <ScanProgressCard
+                scanProgress={scanProgress}
+                onCancel={cancelScan}
+                onRename={handleRenameScan}
+              />
 
               <ManagerModal
                 open={managerOpen}
@@ -1833,6 +1916,7 @@ function App() {
                 onDeleteSnapshot={handleDeleteSnapshot}
                 onRenameScan={handleRenameScan}
                 onRenameSnapshot={handleRenameSnapshot}
+                onToggleScanHidden={handleToggleScanHidden}
                 loading={aggLoading}
               />
             </>
