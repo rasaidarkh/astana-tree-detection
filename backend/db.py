@@ -102,15 +102,23 @@ def init_db(path: Path) -> None:
         CREATE INDEX IF NOT EXISTS idx_det_latlng       ON detections(lat, lng);
         CREATE INDEX IF NOT EXISTS idx_scans_created    ON scan_sessions(created_at);
         """)
-        # Идемпотентная миграция: добавляем scan_session_id к существующим
-        # runs без потери данных. SQLite не имеет IF NOT EXISTS для ADD COLUMN,
-        # поэтому проверяем через pragma_table_info.
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
-        if "scan_session_id" not in cols:
+        # Идемпотентные миграции через PRAGMA table_info — SQLite не имеет
+        # ALTER TABLE ADD COLUMN IF NOT EXISTS, поэтому проверяем существование.
+        run_cols = [r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
+        if "scan_session_id" not in run_cols:
             conn.execute(
                 "ALTER TABLE runs ADD COLUMN scan_session_id TEXT REFERENCES scan_sessions(id) ON DELETE SET NULL"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_scan_session ON runs(scan_session_id)")
+        snap_cols = [r["name"] for r in conn.execute("PRAGMA table_info(snapshots)").fetchall()]
+        if "display_name" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN display_name TEXT")
+        scan_cols = [r["name"] for r in conn.execute("PRAGMA table_info(scan_sessions)").fetchall()]
+        if "display_name" not in scan_cols:
+            conn.execute("ALTER TABLE scan_sessions ADD COLUMN display_name TEXT")
+        if "hidden" not in scan_cols:
+            # 0 = visible (default), 1 = hidden from city aggregate map.
+            conn.execute("ALTER TABLE scan_sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         conn.commit()
 
 
@@ -216,6 +224,37 @@ def delete_snapshot(image_id: str) -> bool:
     """CASCADE удалит runs и detections."""
     with _lock, _connect() as conn:
         cur = conn.execute("DELETE FROM snapshots WHERE image_id = ?", (image_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def rename_snapshot(image_id: str, name: Optional[str]) -> bool:
+    """Юзерский display_name (или None для сброса к filename-fallback)."""
+    with _lock, _connect() as conn:
+        cur = conn.execute(
+            "UPDATE snapshots SET display_name = ? WHERE image_id = ?",
+            (name.strip() if name and name.strip() else None, image_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def rename_scan_session(session_id: str, name: Optional[str]) -> bool:
+    with _lock, _connect() as conn:
+        cur = conn.execute(
+            "UPDATE scan_sessions SET display_name = ? WHERE id = ?",
+            (name.strip() if name and name.strip() else None, session_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def set_scan_hidden(session_id: str, hidden: bool) -> bool:
+    with _lock, _connect() as conn:
+        cur = conn.execute(
+            "UPDATE scan_sessions SET hidden = ? WHERE id = ?",
+            (1 if hidden else 0, session_id),
+        )
         conn.commit()
         return cur.rowcount > 0
 
@@ -411,6 +450,7 @@ def query_detections(
     image_ids: list[str] | None = None,
     min_confidence: float = 0.0,
     only_latest_run_per_image: bool = True,
+    include_hidden_scans: bool = False,
     limit: int = 200_000,
 ) -> list[dict]:
     """Главный запрос для aggregate map. Возвращает дет-ции по фильтрам.
@@ -449,13 +489,22 @@ def query_detections(
             )
         )""")
 
+    join_scans = ""
+    if not include_hidden_scans:
+        # Hide detections whose run belongs to a scan-session marked hidden=1.
+        # LEFT JOIN: runs without scan_session_id (legacy single-image runs)
+        # remain visible (NULL scan_session_id never matches hidden=1).
+        join_scans = "LEFT JOIN scan_sessions ss ON ss.id = r.scan_session_id"
+        conditions.append("(ss.hidden IS NULL OR ss.hidden = 0)")
+
     sql = f"""
         SELECT
           d.id, d.local_id, d.lat, d.lng, d.confidence, d.crown_diameter_m,
           d.mask_polygon_geo, d.box_geo,
-          r.model, r.job_id, r.image_id, r.created_at AS run_created_at
+          r.model, r.job_id, r.image_id, r.scan_session_id, r.created_at AS run_created_at
         FROM detections d
         JOIN runs r ON r.job_id = d.job_id
+        {join_scans}
         WHERE {' AND '.join(conditions)}
         ORDER BY d.id
         LIMIT ?
@@ -477,6 +526,7 @@ def query_detections(
             "model": r["model"],
             "job_id": r["job_id"],
             "image_id": r["image_id"],
+            "scan_session_id": r["scan_session_id"],
         })
     return out
 

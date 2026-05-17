@@ -779,6 +779,44 @@ def history(limit: int = 20):
     return out
 
 
+class RenameRequest(BaseModel):
+    name: Optional[str] = Field(None, max_length=120)
+
+
+class ScanPatchRequest(BaseModel):
+    """Generic PATCH body для scan-session: меняем name и/или hidden flag.
+    Оба поля optional — если поле не задано, БД-запись остаётся как есть."""
+    name: Optional[str] = Field(None, max_length=120)
+    hidden: Optional[bool] = None
+
+
+@app.patch("/api/scans/{session_id}")
+def patch_scan(session_id: str, req: ScanPatchRequest):
+    touched = False
+    if "name" in req.model_fields_set:
+        if not db.rename_scan_session(session_id, req.name):
+            raise HTTPException(404, f"Unknown scan session {session_id}")
+        touched = True
+    if req.hidden is not None:
+        if not db.set_scan_hidden(session_id, req.hidden):
+            raise HTTPException(404, f"Unknown scan session {session_id}")
+        touched = True
+    if not touched:
+        # Touch nothing — but verify the scan exists so frontend gets a useful 404.
+        scans = db.list_scan_sessions()
+        if not any(s["id"] == session_id for s in scans):
+            raise HTTPException(404, f"Unknown scan session {session_id}")
+    return {"ok": True, "id": session_id, "name": req.name, "hidden": req.hidden}
+
+
+@app.patch("/api/snapshots/{image_id}")
+def rename_snapshot(image_id: str, req: RenameRequest):
+    ok = db.rename_snapshot(image_id, req.name)
+    if not ok:
+        raise HTTPException(404, f"Unknown image_id {image_id}")
+    return {"ok": True, "image_id": image_id, "name": req.name}
+
+
 @app.get("/api/scans")
 def list_scans():
     """Список Auto-Zoom Scan-сессий — каждая = один большой scan_region,
@@ -857,15 +895,19 @@ def aggregate_detections(
     se_lng: float | None = None,
     model: str | None = None,
     min_confidence: float = 0.0,
+    include_hidden: bool = False,
     limit: int = 50_000,
 ):
-    """Главный aggregate-запрос для городской карты."""
+    """Главный aggregate-запрос для городской карты. По умолчанию пропускает
+    детекции из hidden=true scan-сессий — пользователь временно скрыл их
+    через UI-toggle. `?include_hidden=true` возвращает всё."""
     bbox = None
     if all(v is not None for v in (nw_lat, nw_lng, se_lat, se_lng)):
         bbox = (nw_lat, nw_lng, se_lat, se_lng)
     models = [model] if model else None
     detections = db.query_detections(
-        bbox=bbox, models=models, min_confidence=min_confidence, limit=limit,
+        bbox=bbox, models=models, min_confidence=min_confidence,
+        include_hidden_scans=include_hidden, limit=limit,
     )
     return {
         "count": len(detections),

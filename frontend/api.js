@@ -206,6 +206,15 @@
     if (!r.ok) throw new Error(`DELETE snapshot HTTP ${r.status}`);
     return await r.json();
   };
+  api.renameSnapshot = async function (imageId, name) {
+    const r = await fetch(`${BASE}/api/snapshots/${imageId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) throw new Error(`PATCH snapshot HTTP ${r.status}`);
+    return await r.json();
+  };
 
   // ============ Scan sessions ============
   api.listScans = async function () {
@@ -216,6 +225,24 @@
   api.deleteScan = async function (scanId) {
     const r = await fetch(`${BASE}/api/scans/${scanId}`, { method: "DELETE" });
     if (!r.ok) throw new Error(`DELETE scan HTTP ${r.status}`);
+    return await r.json();
+  };
+  api.renameScan = async function (scanId, name) {
+    const r = await fetch(`${BASE}/api/scans/${scanId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) throw new Error(`PATCH scan HTTP ${r.status}`);
+    return await r.json();
+  };
+  api.setScanHidden = async function (scanId, hidden) {
+    const r = await fetch(`${BASE}/api/scans/${scanId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hidden }),
+    });
+    if (!r.ok) throw new Error(`PATCH scan HTTP ${r.status}`);
     return await r.json();
   };
 
