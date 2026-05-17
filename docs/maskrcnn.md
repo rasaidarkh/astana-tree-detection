@@ -39,16 +39,22 @@ Image lookup spans both photo roots
 (`yolov train dataset/фотографии/` for v1 and
 `yolov train dataset/новые фотографии/` for v2); first-existing wins.
 
-### v3 dataset (May 2026 — Google Maps tile batch)
+### v3 dataset (May 2026 — additional Earth Pro batch)
 
-A third batch of images is being annotated from the production deployment
-imagery source (Google Maps satellite tiles), addressing domain shift between
-v1/v2 training data (Earth Pro) and runtime. **Read
+A third batch of ~24 images (additional Earth Pro screenshots, same
+distribution as v1/v2) is being annotated to expand training coverage and
+improve metrics on the merged val. **Read
 [`yolov train dataset/v3 annotations/README.md`](../yolov%20train%20dataset/v3%20annotations/README.md)
-for the full plan and per-team-member instructions** — including a recommended
-from-scratch retrain path for Mask R-CNN against merged v2+v3 (current
-`weights/maskrcnn_astana.pt` is v1+v2 only and not appropriate for the new
-imagery source).
+for the full plan and per-team-member instructions** — covers both a
+from-scratch retrain on v2+v3 (recommended for the cleanest ablation entry
+in the thesis) and a fine-tune path from the existing checkpoint.
+
+> **Note on runtime domain shift**: all our training data (v1, v2, v3) is
+> Earth Pro screenshots, while the production site fetches Google Maps tiles
+> via `mt0.google.com/vt/lyrs=s`. v3 does NOT close that gap; it's same
+> distribution + more samples. Addressing train/serve mismatch is a separate
+> future-v4 effort (capture screenshots directly from the deployed app's
+> Auto-Zoom Scan output).
 
 ## Quickstart
 

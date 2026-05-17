@@ -1,10 +1,16 @@
-# v3 dataset — Google Maps Satellite batch (May 2026)
+# v3 dataset — Earth Pro batch (May 2026)
 
-Третий батч размеченных снимков для дообучения / переобучения детекторов
-деревьев. Принципиальное отличие от v1/v2: фотографии сделаны из **той же
-imagery source, что использует production-сайт** (Google Maps satellite tiles
-через `mt0.google.com/vt/lyrs=s` @ zoom 19), а не из Google Earth Pro как у
-v1/v2. Закрывает domain shift замеченный во время production-деплоя.
+Третий батч размеченных снимков — **больше данных в том же распределении**,
+что v1/v2: Google Earth Pro скриншоты Астаны на zoom 17-19. Цель — улучшить
+метрики на текущем val (recall + precision) и собрать более robust модель
+за счёт большего разнообразия районов.
+
+> **NB про domain shift** — production-сайт качает тайлы из Google Maps API
+> (`mt0.google.com/vt/lyrs=s`), а **все** наши training data (v1, v2, v3)
+> сняты с Google Earth Pro. Это другой rendering pipeline и иногда другая
+> дата съёмки. Train ≠ deploy distribution. Чтобы закрыть этот gap — нужен
+> отдельный v4 батч из сервиса (можно прямо в UI наш через Auto-Zoom Scan
+> и сохранение PNG-ов). Не делаем сейчас, помним.
 
 ## Версии датасета — что куда
 
@@ -12,7 +18,7 @@ v1/v2. Закрывает domain shift замеченный во время prod
 |---|---|---|---|---|
 | `annotations/` | `instances_Train.json`, `instances_Validation.json` | 16 + 5 | v1 CVAT export (2026-04, Earth Pro) | legacy, не трогаем |
 | `annotations_merged/` | `instances_Train.json`, `instances_Validation.json` | 44 + 10 | v1 + v2 merge (2026-05, Earth Pro) | **production v2 train target** |
-| `v3 annotations/annotations/` | `instances_default.json` | 24 (нужно сплитнуть) | **v3** (2026-05-17, Google Maps tiles) | **этот батч** |
+| `v3 annotations/annotations/` | `instances_default.json` | 24 (нужно сплитнуть) | **v3** (2026-05-17, Earth Pro) | **этот батч** |
 
 PNG-файлы:
 - v1: `../фотографии/Снимок экрана 2026-04-01 *.png` (в git, 20 файлов)
@@ -92,9 +98,14 @@ python ml/train_yolo.py \
 
 ### Berik — Mask R-CNN от-нуля на merged v2+v3
 
-Текущий `weights/maskrcnn_astana.pt` (если есть) тренирован только на v1+v2.
-Тебе надо **переобучить с нуля** на v2+v3, использовав COCO V1 pretrained
-backbone из torchvision (это default в `MaskRCNNAdapter.build_model`).
+v3 это **просто больше данных в том же распределении** (Earth Pro). Текущий
+`weights/maskrcnn_astana.pt` (если есть) тренирован на v1+v2 = той же
+distribution. Делать from-scratch retrain не обязательно — fine-tune от
+существующего тоже сработает. Но **рекомендуется from-scratch** по простой
+причине: ты на v3 ещё не делал ни одного train run, baseline-таблица для
+диплома будет чище если все три (v1, v2, v3) пройдены одной рукой за один
+заход с pretrained COCO V1 backbone. Меньше шансов что reviewer спросит
+"а почему именно эта стартовая точка?"
 
 ```bash
 # Шаги 1-2 те же что выше (сплит v3 + merge COCO):
@@ -129,17 +140,21 @@ python -m ml.train_maskrcnn \
     --log-dir lightning_logs/maskrcnn_v3
 ```
 
-**Почему from-scratch:**
-1. Старый `maskrcnn_astana.pt` (если есть) учила только Earth Pro кадры — не
-   видела Google Maps tiles. Fine-tune от него = усугубит domain bias.
-2. torchvision COCO V1 backbone сам по себе хорошая generic-инициализация,
-   не зависит от спутниковых датасетов.
-3. У тебя 63 train + 15 val (v2+v3 merge) — этого достаточно чтобы вытянуть
-   от-нуля на 50 эпохах с COCO V1 backbone.
+**Почему from-scratch в данном случае:**
+1. У тебя ещё не было train run на v3 → чистый baseline без зависимости
+   от прошлого checkpoint'а.
+2. torchvision COCO V1 backbone уже даёт generic-инициализацию (миллионы
+   аннотаций из MS COCO), не нужен ни v1 ни v2 prior.
+3. 63 train + 15 val (v2+v3 merge) достаточно чтобы вытянуть от-нуля за
+   ~50 эпох — у нас же не миллион кадров чтобы экономить compute через
+   fine-tune.
 
-Если хочешь сравнить fine-tune vs from-scratch — это reasonable ablation:
-сделай оба ран'а в разные имена (`maskrcnn_v3_scratch.pt` и `maskrcnn_v3_finetune.pt`)
-и положи в comparison table.
+Альтернатива: **fine-tune от существующего `weights/maskrcnn_astana.pt`**
+если он уже есть. Тоже валидный путь, обычно сходится быстрее (~30 эпох
+вместо 50). Если хочешь, сделай оба ран'а в разные имена
+(`maskrcnn_v3_scratch.pt` и `maskrcnn_v3_finetune.pt`) — получишь
+дополнительную строчку для ablation-таблицы диплома (fine-tune vs scratch
+на одной модели = ML-методология).
 
 ### Anuar — DeepForest + SAM 2
 
