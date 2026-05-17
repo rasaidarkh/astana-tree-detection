@@ -185,7 +185,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -316,6 +316,51 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
             <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
             <span>{scanStatus || "Сканирую под-регионы…"}</span>
           </div>
+          {scanProgress && scanProgress.regions && scanProgress.regions.length > 0 && (() => {
+            const total = scanProgress.regions.length;
+            const done = scanProgress.regions.filter((r) => r.status === "done").length;
+            const errs = scanProgress.regions.filter((r) => r.status === "error").length;
+            const totalTrees = scanProgress.trees ? scanProgress.trees.length : 0;
+            // Авто-определяем число столбцов для grid: квадрат от N regions.
+            const cols = Math.ceil(Math.sqrt(total));
+            const STATUS_BG = {
+              pending: "#dadce0",
+              capturing: "#3b82f6",
+              captured: "#1d4ed8",
+              predicting: "#f59e0b",
+              done: "#0F6E56",
+              error: "#dc3545",
+            };
+            return (
+              <>
+                <div style={{ display: "flex", gap: 8, fontSize: 11, marginTop: 6, color: "#444" }}>
+                  <span><b>{done}/{total}</b> done</span>
+                  {errs > 0 && <span style={{ color: "#dc3545" }}>· {errs} err</span>}
+                  <span style={{ marginLeft: "auto" }}>🌳 {totalTrees}</span>
+                </div>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  gap: 3,
+                  marginTop: 6,
+                }}>
+                  {scanProgress.regions.map((r) => (
+                    <div
+                      key={`${r.row}-${r.col}`}
+                      title={`r${r.row}c${r.col}: ${r.status}${r.tree_count ? ` · ${r.tree_count} trees` : ""}${r.error ? ` · ${r.error}` : ""}`}
+                      className={r.status === "capturing" || r.status === "predicting" ? "scan-region-pulse" : ""}
+                      style={{
+                        aspectRatio: "1 / 1",
+                        background: STATUS_BG[r.status] || "#ccc",
+                        borderRadius: 3,
+                        opacity: r.status === "pending" ? 0.5 : 1,
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            );
+          })()}
           <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
             Каждый под-регион качает ~100 тайлов и прогоняет модель — не закрывай вкладку.
           </div>
@@ -842,7 +887,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -853,6 +898,9 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
   const seMarkerRef = useRef(null);
   const rectRef = useRef(null);
   const captureRectRef = useRef(null);
+  // Auto-Zoom Scan progress overlay: grid под-регионов + прогрессивные деревья.
+  const scanGridRef = useRef(null);
+  const scanTreesRef = useRef(null);
 
   useEffect(() => {
     if (mapInstance.current || !mapRef.current) return;
@@ -867,6 +915,8 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     L.control.scale({ position: "bottomright", imperial: false }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     cornersLayerRef.current = L.layerGroup().addTo(map);
+    scanGridRef.current = L.layerGroup().addTo(map);
+    scanTreesRef.current = L.layerGroup().addTo(map);
 
     return () => { map.remove(); mapInstance.current = null; };
   }, []);
@@ -960,6 +1010,75 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       try { mapInstance.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 }); } catch {}
     }
   }, [trees, filter, threshold, markerSize, displayMode]);
+
+  // Auto-Zoom Scan progress overlay — рисует сетку под-регионов с цветом
+  // по статусу + прогрессивные деревья по мере прихода sub_complete событий.
+  useEffect(() => {
+    if (!scanGridRef.current || !scanTreesRef.current || !mapInstance.current) return;
+    scanGridRef.current.clearLayers();
+    scanTreesRef.current.clearLayers();
+    if (!scanProgress || !scanProgress.regions) return;
+
+    // Цвет/толщина по статусу — pulse-анимация для активных через className.
+    const STATUS = {
+      pending:    { color: "#9aa0a6", weight: 1.5, fillOpacity: 0.05, dashArray: "4 4", className: "" },
+      capturing:  { color: "#3b82f6", weight: 2.5, fillOpacity: 0.10, dashArray: null,  className: "scan-region-pulse" },
+      captured:   { color: "#1d4ed8", weight: 2,   fillOpacity: 0.08, dashArray: null,  className: "" },
+      predicting: { color: "#f59e0b", weight: 2.5, fillOpacity: 0.10, dashArray: null,  className: "scan-region-pulse" },
+      done:       { color: "#0F6E56", weight: 2,   fillOpacity: 0.15, dashArray: null,  className: "" },
+      error:      { color: "#dc3545", weight: 2,   fillOpacity: 0.10, dashArray: "2 3", className: "" },
+    };
+
+    scanProgress.regions.forEach((r) => {
+      const s = STATUS[r.status] || STATUS.pending;
+      const nw = r.sub_bbox.nw, se = r.sub_bbox.se;
+      const rect = L.rectangle(
+        [[nw.lat, nw.lng], [se.lat, se.lng]],
+        {
+          color: s.color, weight: s.weight, fillColor: s.color,
+          fillOpacity: s.fillOpacity, dashArray: s.dashArray || undefined,
+          className: s.className,
+          interactive: false,
+        },
+      ).addTo(scanGridRef.current);
+
+      // Лейбл в углу: "r0c0 · capturing" / "r0c0 · 12 trees" / "r0c0 · err"
+      let label = `r${r.row}c${r.col}`;
+      if (r.status === "done") label += ` · ${r.tree_count} trees`;
+      else if (r.status === "error") label += ` · err`;
+      else label += ` · ${r.status}`;
+      const icon = L.divIcon({
+        className: "scan-region-label",
+        html: `<span>${label}</span>`,
+        iconSize: null, iconAnchor: [0, 0],
+      });
+      L.marker([nw.lat, nw.lng], { icon, interactive: false }).addTo(scanGridRef.current);
+    });
+
+    // Прогрессивные деревья — рисуем как circleMarker, цвет по confidence.
+    // Простой dot — детальный displayMode (polygon/bbox) можно подключить позже.
+    (scanProgress.trees || []).forEach((t) => {
+      if (t.lat == null || t.lng == null) return;
+      const conf = t.confidence ?? 0;
+      const color = conf > 0.7 ? "#0F6E56" : conf > 0.5 ? "#5DCAA5" : "#EF9F27";
+      L.circleMarker([t.lat, t.lng], {
+        radius: 4, color: "#fff", weight: 1, fillColor: color, fillOpacity: 0.9,
+        className: "scan-tree-pop",
+        interactive: false,
+      }).addTo(scanTreesRef.current);
+    });
+
+    // Авто-zoom к первому событию plan-а — чтобы пользователь видел сетку
+    // целиком даже если изначально смотрел на другой район. Только один раз
+    // (когда regions появились впервые и trees ещё пуст).
+    if (scanProgress.regions.length && (scanProgress.trees || []).length === 0) {
+      const all = scanProgress.regions.flatMap((r) => [
+        [r.sub_bbox.nw.lat, r.sub_bbox.nw.lng],
+        [r.sub_bbox.se.lat, r.sub_bbox.se.lng],
+      ]);
+      try { mapInstance.current.fitBounds(all, { padding: [60, 60], maxZoom: 17 }); } catch {}
+    }
+  }, [scanProgress]);
 
   // Image overlay (real image)
   useEffect(() => {
@@ -1255,6 +1374,9 @@ function App() {
   const [scanMode, setScanMode] = useState(false);
   const [scanRunning, setScanRunning] = useState(false);
   const [scanStatus, setScanStatus] = useState(null);
+  // Streaming-прогресс scan: { regions: [{row, col, status: pending|capturing|predicting|done|error, sub_bbox, tree_count, error}], trees: [adapted detections so far], done: bool, total: {ok, total_trees, duration_ms} }
+  // null = scan не активен (overlay / progress не рисуем).
+  const [scanProgress, setScanProgress] = useState(null);
   // Tile-провайдер для capture / scan / Leaflet base layer.
   // Default = google (та же image base что Google Earth Pro = тренировочные
   // данные YOLO/Mask R-CNN). Список грузим из /api/providers чтобы один
@@ -1377,29 +1499,96 @@ function App() {
     }
   }, [captureZoom, showToast, tileProvider]);
 
-  // ============ Auto-Zoom Region Scan ============
-  // User draws a big rectangle; backend splits it into a grid of sub-regions
-  // at fixed zoom=19 and runs capture+predict per sub-region. Results land in
-  // the city aggregate DB, so после успеха просто переключаемся в city view.
+  // ============ Auto-Zoom Region Scan (streaming) ============
+  // На draw bbox открываем NDJSON-стрим к /api/scan_region/stream и обновляем
+  // scanProgress инкрементально:
+  //   - "plan" событие → создаёт grid с N пустых regions со status=pending
+  //   - "capturing"/"predicting" → меняет status конкретного row/col
+  //   - "sub_complete" → status=done + кладёт detections в scanProgress.trees
+  //     (progressive рендеринг на карте без ожидания всего скана)
+  //   - "sub_error" → status=error + сообщение
+  //   - "done" → итог + soft-переход в city view
   const handleScanBbox = useCallback(async (bbox) => {
     setScanMode(false);
     setScanRunning(true);
-    setScanStatus("Запрашиваю сервер…");
+    setScanStatus("Запрашиваю план…");
+    setScanProgress({ regions: [], trees: [], done: false, total: null });
     try {
-      const res = await window.api.scanRegion({
-        nw: bbox.nw,
-        se: bbox.se,
-        zoom: 19,
-        model,
-        confidence: threshold,
-        maxSubregions: 9,
-        provider: tileProvider,
-      });
-      const okMsg = `Scan done · ${res.ok_count}/${res.sub_count} regions · ${res.total_trees} trees · ${(res.duration_ms / 1000).toFixed(1)} s`;
-      showToast(okMsg);
-      setScanStatus(okMsg);
-      // Прыгаем в city view — там видно все свежие snapshots на одной карте.
-      setViewMode("city");
+      await window.api.scanRegionStream(
+        {
+          nw: bbox.nw, se: bbox.se, zoom: 19,
+          model, confidence: threshold,
+          maxSubregions: 9, provider: tileProvider,
+        },
+        (ev) => {
+          if (ev.type === "plan") {
+            const regions = ev.sub_regions.map((r) => ({
+              row: r.row, col: r.col,
+              sub_bbox: { nw: r.nw, se: r.se },
+              status: "pending",
+              tree_count: 0,
+              error: null,
+            }));
+            setScanProgress((p) => ({ ...p, regions }));
+            setScanStatus(`Plan: ${ev.sub_count} sub-regions · ${ev.provider} · z${ev.zoom}`);
+          } else if (ev.type === "capturing" || ev.type === "predicting" || ev.type === "capture_done") {
+            const newStatus = ev.type === "capturing"
+              ? "capturing"
+              : (ev.type === "capture_done" ? "captured" : "predicting");
+            setScanProgress((p) => ({
+              ...p,
+              regions: p.regions.map((r) =>
+                r.row === ev.row && r.col === ev.col ? { ...r, status: newStatus } : r,
+              ),
+            }));
+            setScanStatus(`r${ev.row}c${ev.col}: ${newStatus}…`);
+          } else if (ev.type === "sub_complete") {
+            // Адаптируем детекции к UI-формату того же что используется в city view.
+            const adapted = window.api.adaptAggregateDetections(
+              ev.detections.map((d) => ({
+                ...d,
+                local_id: d.id,
+                model: ev.model,
+                image_id: ev.snapshot_id,
+                job_id: ev.job_id,
+              }))
+            );
+            setScanProgress((p) => ({
+              ...p,
+              regions: p.regions.map((r) =>
+                r.row === ev.row && r.col === ev.col
+                  ? { ...r, status: "done", tree_count: ev.tree_count }
+                  : r,
+              ),
+              trees: [...p.trees, ...adapted],
+            }));
+            setScanStatus(`r${ev.row}c${ev.col}: ${ev.tree_count} trees`);
+          } else if (ev.type === "sub_error") {
+            setScanProgress((p) => ({
+              ...p,
+              regions: p.regions.map((r) =>
+                r.row === ev.row && r.col === ev.col
+                  ? { ...r, status: "error", error: ev.error }
+                  : r,
+              ),
+            }));
+            console.warn(`scan sub-r${ev.row}c${ev.col} ${ev.stage} failed: ${ev.error}`);
+          } else if (ev.type === "done") {
+            setScanProgress((p) => ({
+              ...p,
+              done: true,
+              total: { total_trees: ev.total_trees, duration_ms: ev.duration_ms, sub_count: ev.sub_count },
+            }));
+            const okMsg = `Scan done · ${ev.total_trees} trees · ${(ev.duration_ms / 1000).toFixed(1)} s`;
+            showToast(okMsg);
+            setScanStatus(okMsg);
+          } else if (ev.type === "fatal") {
+            console.error("Scan fatal:", ev.error);
+            showToast("Scan crashed: " + ev.error, "error");
+          }
+        },
+      );
+      // Подтягиваем aggregate (city view карточки и snapshots-list)
       await refreshAggregate();
     } catch (e) {
       console.error("Auto-Zoom Scan failed:", e);
@@ -1407,8 +1596,12 @@ function App() {
       showToast("Scan failed: " + e.message, "error");
     } finally {
       setScanRunning(false);
-      // Очищаем статус через пару секунд чтобы не висел в UI вечно.
-      setTimeout(() => setScanStatus(null), 4000);
+      // Оставляем scanProgress на экране ~5 сек чтобы видеть итог, потом гасим
+      // overlay (но детекции остаются в city view / aggregate).
+      setTimeout(() => {
+        setScanProgress(null);
+        setScanStatus(null);
+      }, 5000);
     }
   }, [model, threshold, showToast, refreshAggregate, tileProvider]);
 
@@ -1528,6 +1721,7 @@ function App() {
                 tileProvider={tileProvider}
                 setTileProvider={setTileProvider}
                 providersMap={providersMap}
+                scanProgress={scanProgress}
               />
               <DetectionControls
                 canRun={!!imageId}
@@ -1620,6 +1814,7 @@ function App() {
           onScanBbox={handleScanBbox}
           tileProvider={tileProvider}
           providersMap={providersMap}
+          scanProgress={scanProgress}
         />
         <Legend
           trees={viewMode === "city" ? aggregateTrees : trees}

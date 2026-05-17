@@ -10,6 +10,7 @@ Why we need this: пользователь рисует rectangle на Leaflet-�
 from __future__ import annotations
 
 import math
+import os
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -20,7 +21,11 @@ from typing import Optional
 from PIL import Image
 
 TILE_SIZE = 256
-MAX_TILES = 144  # 12×12 ≈ 3072×3072 px — потолок чтобы не вешать сервер
+# Cap on tiles per single capture_bbox() call — наша внутренняя страховка,
+# не лимит провайдера. 400 ≈ 20×20 = 5120×5120 px ≈ 75 МБ raw RGB в памяти
+# и ~10-30 МБ PNG на диске. Поднимать выше — рискуем OOM в параллели с
+# YOLO/Mask R-CNN инференсом. Override через env: ASTANA_MAX_TILES=N.
+MAX_TILES = int(os.environ.get("ASTANA_MAX_TILES", "400"))
 USER_AGENT = "AstanaTreeDetection/1.0 (academic; AITU diploma project)"
 
 # Переключаемые источники спутниковых тайлов.

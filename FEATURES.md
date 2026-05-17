@@ -96,6 +96,15 @@ Endpoint `GET /api/providers` отдаёт список с URL-шаблонам�
 
 **UI:** кнопка `Auto-Zoom Scan` в Upload-секции (зелёная, рядом с `Capture from map`). Зум зафиксирован на 19, скан-режим рисует прямоугольник зелёным цветом (capture-mode остался оранжевым). Лимит 9 под-регионов ≈ 3×3 = ~1.5×1.5 км @ z19 за один запрос.
 
+**Streaming variant — `POST /api/scan_region/stream`:**
+Тот же запрос, но возвращает `application/x-ndjson` поток событий по мере обработки. Frontend читает через `fetch + ReadableStream.getReader()` и обновляет UI инкрементально — на карте появляется сетка под-регионов с цветовыми статусами (pending/capturing/predicting/done/error, pulse-анимация для активных), деревья дорисовываются батчами по мере прихода `sub_complete` событий, в сайдбаре виден mini-grid с тем же color-coding + счётчик `done/total · 🌳 N`.
+
+Event types: `plan` (single, в начале — список всех под-bbox-ов), `capturing` / `capture_done` / `predicting` / `sub_complete` / `sub_error` (per-region), `done` (итог), `fatal` (рантайм-краш стрима). Pre-flight ошибки (model недоступна, bbox перевёрнут) возвращаются обычным 4xx до старта стрима.
+
+Заголовки `X-Accel-Buffering: no` + `Cache-Control: no-cache` отрубают proxy-буферизацию (nginx и др.) — без них первое событие доедет до клиента только после закрытия стрима, и прогресс теряет смысл.
+
+**MAX_TILES env override.** Дефолт `MAX_TILES=400` (≈20×20 ≈ 5120×5120 px ≈ 75 МБ raw RGB). Это **наш** server-side cap (не лимит провайдера) — защита от OOM в параллели с инференсом. Override: `ASTANA_MAX_TILES=600 uvicorn ...`. Оба провайдера (Esri, Google) физически выдержат и 1000+ тайлов; ограничивает только наш сервер.
+
 ### REST endpoints
 | Метод | Путь | Назначение |
 |---|---|---|
@@ -104,6 +113,7 @@ Endpoint `GET /api/providers` отдаёт список с URL-шаблонам�
 | `POST` | `/api/upload` | Загрузка PNG/JPG/TIFF/GeoTIFF. Возвращает `ImageMeta`. |
 | `POST` | `/api/capture_from_map` | `{nw, se, zoom}` → ImageMeta с bounds. |
 | `POST` | `/api/scan_region` | **Auto-Zoom Region Scan** — большой bbox любого размера → сетка под-регионов на zoom 19 → capture+predict каждого → snapshots в БД. |
+| `POST` | `/api/scan_region/stream` | Streaming NDJSON-вариант — прогрессивные события (plan / capturing / predicting / sub_complete / done) по мере обработки каждого под-региона. |
 | `GET` | `/api/image/{id}` | Сам PNG для отображения. |
 | `GET` | `/api/image/{id}/meta` | Meta снимка. |
 | `POST` | `/api/predict` | Inference (model, confidence, geo). Сохраняет run+detections. |
@@ -197,7 +207,7 @@ Endpoint `GET /api/providers` отдаёт список с URL-шаблонам�
 - **Bulk upload папки** GeoTIFF — UX заплатка, сейчас можно по одной.
 - **Compare mode** — две даты, diff деревьев.
 - **Click на snapshot в city list → load в single view** — навигация-удобство.
-- **Async/streaming прогресс для Auto-Zoom Scan** — сейчас endpoint синхронный, фронт ждёт ~30–60 сек блок-spinner'ом. Нормально для 9 под-регионов; для 25+ нужен WebSocket / SSE.
+- **Concurrent под-регионы в scan_region** — сейчас sub-regions обрабатываются строго последовательно (один capture → один predict → следующий). Параллелить capture (тяжёлые by network) с predict (тяжёлый by GPU) дало бы ~1.5x speedup, но усложнит memory-budget и логику NMS.
 
 ## Запуск локально
 

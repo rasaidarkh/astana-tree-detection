@@ -49,6 +49,59 @@
       }));
     },
 
+    // Streaming variant — отдаёт прогресс по мере обработки каждого под-региона.
+    // Callback вызывается на каждое событие из NDJSON-потока:
+    //   {type:"plan", sub_count, sub_regions:[{row,col,nw,se},...]}
+    //   {type:"capturing"|"capture_done"|"predicting", row, col, ...}
+    //   {type:"sub_complete", row, col, detections:[...], tree_count, snapshot_id, job_id, ...}
+    //   {type:"sub_error", row, col, stage, error, ...}
+    //   {type:"done", total_trees, duration_ms}
+    //   {type:"fatal", error}
+    async scanRegionStream({ nw, se, zoom = 19, model = "yolo", confidence = 0.25, maxSubregions = 9, provider = "esri" }, onEvent, { signal } = {}) {
+      const resp = await fetch(`${BASE}/api/scan_region/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nw, se, zoom, model, confidence,
+          max_subregions: maxSubregions, provider,
+        }),
+        signal,
+      });
+      if (!resp.ok) {
+        // pre-flight 4xx/5xx (model недоступна, bbox перевёрнут, scan слишком большой)
+        const txt = await resp.text();
+        let detail;
+        try { detail = JSON.parse(txt).detail; } catch { detail = txt; }
+        throw new Error(`API ${resp.status}: ${detail || resp.statusText}`);
+      }
+      if (!resp.body) throw new Error("ReadableStream not supported");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let lines = buf.split("\n");
+          buf = lines.pop();  // последняя строка может быть неполной
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t) continue;
+            try { onEvent(JSON.parse(t)); }
+            catch (e) { console.warn("Skipping malformed NDJSON line:", t, e); }
+          }
+        }
+        // flush последнего буфера если он не пустой
+        if (buf.trim()) {
+          try { onEvent(JSON.parse(buf)); } catch (e) {/* ignore */}
+        }
+      } finally {
+        try { reader.releaseLock(); } catch {/* ignore */}
+      }
+    },
+
     // Список tile-провайдеров — фронт подтягивает один раз и строит
     // dropdown + Leaflet base layer URL из того же источника что backend.
     async providers() {

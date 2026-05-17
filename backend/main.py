@@ -21,7 +21,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
@@ -306,25 +306,14 @@ async def capture_from_map(req: CaptureFromMapRequest):
     return meta
 
 
-@app.post("/api/scan_region")
-async def scan_region(req: ScanRegionRequest):
-    """Auto-Zoom Region Scan — большой bbox → сетка под-регионов на фикс. зуме,
-    каждая под-область прогоняется через тот же capture+predict pipeline.
-
-    Синхронный endpoint: возвращает только когда ВСЕ под-регионы обработаны.
-    UI показывает spinner; для 1.5×1.5 км @ z19 типичное время ~30–60 сек.
-
-    Под-регионы сохраняются в БД как отдельные snapshots — после завершения
-    они подтягиваются в city-aggregate view (`GET /api/snapshots`,
-    `GET /api/detections`) на общих основаниях.
-    """
+def _scan_region_setup(req: ScanRegionRequest):
+    """Pre-flight для scan_region: validate + план под-регионов. Raises HTTPException."""
     adapter: Optional[ModelAdapter] = registry.get(req.model)
     if adapter is None:
         available = [k.value for k in registry.available()]
         raise HTTPException(503, f"Model {req.model.value} not available. Available: {available}")
     if req.provider not in TILE_PROVIDERS:
         raise HTTPException(400, f"Unknown tile provider {req.provider!r}. Known: {sorted(TILE_PROVIDERS)}")
-
     try:
         subs = plan_scan(
             req.nw.lat, req.nw.lng, req.se.lat, req.se.lng,
@@ -333,19 +322,57 @@ async def scan_region(req: ScanRegionRequest):
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
+    return adapter, subs
 
-    log.info(
-        "scan_region: provider=%s bbox=(%.5f,%.5f → %.5f,%.5f) z=%d → %d sub-region(s), model=%s",
-        req.provider, req.nw.lat, req.nw.lng, req.se.lat, req.se.lng, req.zoom,
-        len(subs), req.model.value,
-    )
 
-    sub_results = []
+async def _scan_region_events(req: ScanRegionRequest, adapter: ModelAdapter, subs: list):
+    """Async generator yielding scan-progress events.
+
+    Используется обеими endpoint-ами: sync `/api/scan_region` агрегирует
+    события в финальный dict, streaming `/api/scan_region/stream` сериализует
+    каждое событие в NDJSON и шлёт клиенту по мере появления.
+
+    Event types:
+      * `plan`        — список под-регионов которые сервер будет посещать.
+      * `capturing`   — старт скачивания тайлов под-региона.
+      * `capture_done`— тайлы склеены + сохранён snapshot (без detections).
+      * `predicting`  — старт инференса модели.
+      * `sub_complete`— успешный finish одного под-региона (+ detections).
+      * `sub_error`   — fail (capture или predict) — scan продолжается.
+      * `done`        — итог всего scan'а.
+    """
+    sub_bbox_payload = [
+        {
+            "row": s.row, "col": s.col,
+            "nw": {"lat": s.nw_lat, "lng": s.nw_lng},
+            "se": {"lat": s.se_lat, "lng": s.se_lng},
+        }
+        for s in subs
+    ]
+    yield {
+        "type": "plan",
+        "sub_count": len(subs),
+        "sub_regions": sub_bbox_payload,
+        "zoom": req.zoom,
+        "provider": req.provider,
+        "model": req.model.value,
+        "bbox": {
+            "nw": {"lat": req.nw.lat, "lng": req.nw.lng},
+            "se": {"lat": req.se.lat, "lng": req.se.lng},
+        },
+    }
+
     total_trees = 0
     t_total = time.perf_counter()
 
     for sub in subs:
         sub_label = f"r{sub.row}c{sub.col}"
+        sub_bbox = {
+            "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
+            "se": {"lat": sub.se_lat, "lng": sub.se_lng},
+        }
+
+        yield {"type": "capturing", "row": sub.row, "col": sub.col, "sub_bbox": sub_bbox}
         try:
             cap = await asyncio.to_thread(
                 capture_bbox,
@@ -354,36 +381,15 @@ async def scan_region(req: ScanRegionRequest):
             )
         except ValueError as e:
             log.warning("scan_region sub-%s capture rejected: %s", sub_label, e)
-            sub_results.append({
-                "row": sub.row, "col": sub.col,
-                "error": str(e),
-                "sub_bbox": {
-                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
-                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
-                },
-            })
+            yield {"type": "sub_error", "row": sub.row, "col": sub.col, "stage": "capture", "error": str(e), "sub_bbox": sub_bbox}
             continue
         except (urllib.error.URLError, urllib.error.HTTPError, IOError) as e:
             log.warning("scan_region sub-%s tile fetch failed: %s", sub_label, e)
-            sub_results.append({
-                "row": sub.row, "col": sub.col,
-                "error": f"tile fetch failed: {e}",
-                "sub_bbox": {
-                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
-                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
-                },
-            })
+            yield {"type": "sub_error", "row": sub.row, "col": sub.col, "stage": "capture", "error": f"tile fetch failed: {e}", "sub_bbox": sub_bbox}
             continue
         except Exception as e:
             log.exception("scan_region sub-%s capture failed unexpectedly", sub_label)
-            sub_results.append({
-                "row": sub.row, "col": sub.col,
-                "error": f"capture failed: {e}",
-                "sub_bbox": {
-                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
-                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
-                },
-            })
+            yield {"type": "sub_error", "row": sub.row, "col": sub.col, "stage": "capture", "error": f"capture failed: {e}", "sub_bbox": sub_bbox}
             continue
 
         image_id = uuid.uuid4().hex[:12]
@@ -403,7 +409,15 @@ async def scan_region(req: ScanRegionRequest):
             bounds=bounds,
         )
         db.save_snapshot(meta)
+        yield {
+            "type": "capture_done",
+            "row": sub.row, "col": sub.col,
+            "snapshot_id": image_id,
+            "width": w, "height": h, "size_bytes": size_bytes,
+            "sub_bbox": sub_bbox,
+        }
 
+        yield {"type": "predicting", "row": sub.row, "col": sub.col, "snapshot_id": image_id, "sub_bbox": sub_bbox}
         t_sub = time.perf_counter()
         try:
             detections = await asyncio.to_thread(
@@ -411,15 +425,11 @@ async def scan_region(req: ScanRegionRequest):
             )
         except Exception as e:
             log.exception("scan_region sub-%s predict failed", sub_label)
-            sub_results.append({
-                "row": sub.row, "col": sub.col,
-                "snapshot_id": image_id,
-                "error": f"predict failed: {e}",
-                "sub_bbox": {
-                    "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
-                    "se": {"lat": sub.se_lat, "lng": sub.se_lng},
-                },
-            })
+            yield {
+                "type": "sub_error", "row": sub.row, "col": sub.col,
+                "stage": "predict", "error": f"predict failed: {e}",
+                "snapshot_id": image_id, "sub_bbox": sub_bbox,
+            }
             continue
 
         ctx = build_context(
@@ -430,7 +440,6 @@ async def scan_region(req: ScanRegionRequest):
         detections = annotate_detections(detections, ctx)
         stats = _compute_stats(detections, meta, ctx)
         duration_ms = int((time.perf_counter() - t_sub) * 1000)
-
         job_id = uuid.uuid4().hex[:12]
         result = PredictResult(
             job_id=job_id, image_id=image_id, model=req.model,
@@ -438,33 +447,77 @@ async def scan_region(req: ScanRegionRequest):
         )
         db.save_run(result, geo_mode=GeoMode.CORNERS_2.value, confidence=req.confidence)
         total_trees += len(detections)
-        sub_results.append({
+        # Сериализуем детекции в plain dict — Pydantic models не serializable
+        # из StreamingResponse без model_dump().
+        det_payload = [d.model_dump() for d in detections]
+        yield {
+            "type": "sub_complete",
             "row": sub.row, "col": sub.col,
-            "snapshot_id": image_id,
-            "job_id": job_id,
+            "snapshot_id": image_id, "job_id": job_id,
             "tree_count": len(detections),
             "duration_ms": duration_ms,
-            "sub_bbox": {
-                "nw": {"lat": sub.nw_lat, "lng": sub.nw_lng},
-                "se": {"lat": sub.se_lat, "lng": sub.se_lng},
-            },
-        })
+            "detections": det_payload,
+            "sub_bbox": sub_bbox,
+        }
         log.info(
             "scan_region sub-%s: %d trees in %d ms (snapshot=%s, job=%s)",
             sub_label, len(detections), duration_ms, image_id, job_id,
         )
 
     total_duration_ms = int((time.perf_counter() - t_total) * 1000)
+    yield {
+        "type": "done",
+        "sub_count": len(subs),
+        "total_trees": total_trees,
+        "duration_ms": total_duration_ms,
+    }
+
+
+@app.post("/api/scan_region")
+async def scan_region(req: ScanRegionRequest):
+    """Auto-Zoom Region Scan — большой bbox → сетка под-регионов на фикс. зуме,
+    каждая под-область прогоняется через тот же capture+predict pipeline.
+
+    Синхронный endpoint: возвращает только когда ВСЕ под-регионы обработаны.
+    Для прогрессивного UI используй `/api/scan_region/stream`.
+    """
+    adapter, subs = _scan_region_setup(req)
+    log.info(
+        "scan_region (sync): provider=%s z=%d → %d sub-region(s), model=%s",
+        req.provider, req.zoom, len(subs), req.model.value,
+    )
+
+    sub_results = []
+    total_trees = 0
+    duration_ms = 0
+    async for ev in _scan_region_events(req, adapter, subs):
+        if ev["type"] == "sub_complete":
+            sub_results.append({
+                "row": ev["row"], "col": ev["col"],
+                "snapshot_id": ev["snapshot_id"], "job_id": ev["job_id"],
+                "tree_count": ev["tree_count"], "duration_ms": ev["duration_ms"],
+                "sub_bbox": ev["sub_bbox"],
+            })
+        elif ev["type"] == "sub_error":
+            sub_results.append({
+                "row": ev["row"], "col": ev["col"],
+                "error": ev["error"], "sub_bbox": ev["sub_bbox"],
+                "snapshot_id": ev.get("snapshot_id"),
+            })
+        elif ev["type"] == "done":
+            total_trees = ev["total_trees"]
+            duration_ms = ev["duration_ms"]
+
     ok_count = sum(1 for r in sub_results if "error" not in r)
     log.info(
         "scan_region done: %d/%d sub-regions ok, %d trees, %d ms total",
-        ok_count, len(sub_results), total_trees, total_duration_ms,
+        ok_count, len(sub_results), total_trees, duration_ms,
     )
     return {
         "sub_count": len(sub_results),
         "ok_count": ok_count,
         "total_trees": total_trees,
-        "duration_ms": total_duration_ms,
+        "duration_ms": duration_ms,
         "zoom": req.zoom,
         "provider": req.provider,
         "model": req.model.value,
@@ -474,6 +527,45 @@ async def scan_region(req: ScanRegionRequest):
         },
         "sub_regions": sub_results,
     }
+
+
+@app.post("/api/scan_region/stream")
+async def scan_region_stream(req: ScanRegionRequest):
+    """Streaming variant of `/api/scan_region` — отдаёт NDJSON-поток событий
+    по мере обработки каждого под-региона. Клиент читает через fetch +
+    ReadableStream и обновляет UI инкрементально (грид под-регионов,
+    деревья появляются батчами, ETA из прогресса).
+
+    Pre-flight (validate model/provider/plan) делается синхронно и может
+    отдать обычный 4xx/5xx до старта потока. Внутри потока ошибки одного
+    под-региона не валят весь scan — приходят как `sub_error` событие.
+
+    Content-Type: application/x-ndjson — одна JSON-строка на event,
+    `\\n`-разделитель. Никакого SSE-префикса `data: ` чтобы парсить было
+    тупо через `JSON.parse(line)`.
+    """
+    adapter, subs = _scan_region_setup(req)
+    log.info(
+        "scan_region (stream): provider=%s z=%d → %d sub-region(s), model=%s",
+        req.provider, req.zoom, len(subs), req.model.value,
+    )
+
+    async def ndjson_gen():
+        try:
+            async for ev in _scan_region_events(req, adapter, subs):
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as e:
+            log.exception("scan_region stream crashed mid-flight")
+            yield json.dumps({"type": "fatal", "error": str(e)}) + "\n"
+
+    return StreamingResponse(
+        ndjson_gen(),
+        media_type="application/x-ndjson",
+        # Отрубаем proxy-буферизацию (nginx etc.) — иначе первый событие
+        # доедет до клиента только после закрытия стрима, и весь прогресс
+        # потеряет смысл.
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/api/image/{image_id}")
