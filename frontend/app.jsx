@@ -89,7 +89,7 @@ function ScansList({ scans, onDelete, loading }) {
     <div className="section">
       <div className="section-label">
         <Icon name="grid" size={13} />
-        <span>Auto-Zoom Scans</span>
+        <span>Area Scans</span>
         <span className="badge-count">{scans.length}</span>
       </div>
       <ul className="snap-list">
@@ -242,7 +242,7 @@ function Header({ dark, onToggleDark, modelStatus }) {
 }
 
 // ============ UPLOAD ZONE ============
-function UploadZone({ image, onUpload, onClear, scanning, uploading, error, captureMode, onStartCapture, onCancelCapture, captureZoom, setCaptureZoom, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress, polygonMode, onStartPolygon, onCancelPolygon, pendingPolygon, onStartPolygonScan, onClearPolygon }) {
+function UploadZone({ image, onUpload, onClear, scanning, uploading, error, scanMode, onStartScan, onCancelScan, scanRunning, scanStatus, model, tileProvider, setTileProvider, providersMap, scanProgress, polygonMode, onStartPolygon, onCancelPolygon, pendingPolygon, onStartPolygonScan, onClearPolygon }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
 
@@ -278,7 +278,7 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           <div className="upload-hint">Source: Google Earth / SAS.Planet · Zoom 17–20</div>
         </div>
       ) : null}
-      {!image && !captureMode && !scanMode && !scanRunning && (
+      {!image && !scanMode && !polygonMode && !scanRunning && (
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, fontSize: 11, color: "#666" }}>
           <span>Imagery:</span>
           <select
@@ -286,7 +286,7 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
             onChange={(e) => setTileProvider(e.target.value)}
             className="select"
             style={{ flex: 1, height: 28, fontSize: 11 }}
-            title="Источник тайлов для capture + Leaflet base layer. Google = ближе к training distribution YOLO/Mask R-CNN."
+            title="Источник тайлов для scan + Leaflet base layer. Google = ближе к training distribution YOLO/Mask R-CNN."
           >
             {providersMap
               ? Object.entries(providersMap).map(([key, cfg]) => (
@@ -300,70 +300,31 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
           </select>
         </div>
       )}
-      {!image && !captureMode && !scanMode && !scanRunning && (
-        <div className="capture-row">
-          <button
-            type="button"
-            className="btn-capture"
-            onClick={onStartCapture}
-            disabled={uploading}
-            title={`Нарисовать прямоугольник на карте, скачать тайлы ${tileProvider}`}
-          >
-            <Icon name="target" size={14} />
-            <span>Capture from map</span>
-          </button>
-          <div className="capture-zoom">
-            <label>Zoom</label>
-            <input
-              type="number" min="14" max="20" step="1"
-              value={captureZoom}
-              onChange={(e) => setCaptureZoom(Math.max(14, Math.min(20, +e.target.value || 18)))}
-            />
-          </div>
-        </div>
-      )}
-      {!image && !captureMode && !scanMode && !polygonMode && !scanRunning && (
-        <div className="capture-row" style={{ marginTop: 6 }}>
+      {/* Две основные кнопки рядом — rectangle vs polygon. Обе идут через
+          Auto-Zoom pipeline (фикс z=19, streaming, scan-session). */}
+      {!image && !scanMode && !polygonMode && !scanRunning && (
+        <div style={{ display: "flex", gap: 6 }}>
           <button
             type="button"
             className="btn-capture"
             onClick={onStartScan}
             disabled={uploading}
-            style={{ background: "linear-gradient(135deg,#0F6E56,#1a9170)" }}
-            title="Большой bbox → авто-сетка под-регионов на zoom 19 → predict каждого"
+            style={{ flex: 1, background: "linear-gradient(135deg,#0F6E56,#1a9170)" }}
+            title="Нарисуй прямоугольник любого размера. Бэк фиксирует z=19, делит на сетку под-регионов если нужно, прогоняет модель."
           >
             <Icon name="grid" size={14} />
-            <span>Auto-Zoom Scan</span>
+            <span>Scan area</span>
           </button>
-          <div className="capture-zoom">
-            <label>z</label>
-            <input type="number" value={19} disabled readOnly title="Фиксированный max-zoom для максимальной детализации" />
-          </div>
-        </div>
-      )}
-      {!image && !captureMode && !scanMode && !polygonMode && !scanRunning && (
-        <div className="capture-row" style={{ marginTop: 6 }}>
           <button
             type="button"
             className="btn-capture"
             onClick={onStartPolygon}
             disabled={uploading}
-            style={{ background: "linear-gradient(135deg,#5DCAA5,#0F6E56)", flex: 1 }}
-            title="Кликай по карте чтобы рисовать произвольный полигон. Двойной клик = замкнуть и запустить scan."
+            style={{ flex: 1, background: "linear-gradient(135deg,#5DCAA5,#0F6E56)" }}
+            title="Произвольный полигон: клик = вершина, double-click = замкнуть. Детекции фильтруются point-in-polygon."
           >
             <Icon name="leaf" size={14} />
-            <span>Polygon Scan</span>
-          </button>
-        </div>
-      )}
-      {!image && captureMode && (
-        <div className="capture-active">
-          <div className="capture-active-row">
-            <span className="capture-pulse"></span>
-            <span>Нарисуй прямоугольник на карте справа</span>
-          </div>
-          <button type="button" className="btn-capture-cancel" onClick={onCancelCapture}>
-            Отмена
+            <span>Polygon</span>
           </button>
         </div>
       )}
@@ -371,11 +332,11 @@ function UploadZone({ image, onUpload, onClear, scanning, uploading, error, capt
         <div className="capture-active" style={{ borderColor: "#0F6E56" }}>
           <div className="capture-active-row">
             <span className="capture-pulse" style={{ background: "#0F6E56" }}></span>
-            <span>Auto-Zoom Scan: нарисуй большой прямоугольник</span>
+            <span>Scan area: нарисуй прямоугольник любого размера</span>
           </div>
           <div style={{ fontSize: 11, color: "#666", margin: "4px 0 8px" }}>
-            Сервер сам дробит на сетку под-регионов на zoom 19 ({model || "yolo"}).
-            Лимит: 9 под-регионов за запрос.
+            Сервер фиксирует zoom=19 и при необходимости делит bbox на сетку
+            под-регионов ({model || "yolo"}, до 9 за запрос).
           </div>
           <button type="button" className="btn-capture-cancel" onClick={onCancelScan}>
             Отмена
@@ -1014,7 +975,7 @@ function HistoryPanel({ open, setOpen, history, onLoad }) {
 }
 
 // ============ MAP COMPONENT ============
-function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, captureMode, onCaptureBbox, scanMode, onScanBbox, tileProvider, providersMap, scanProgress, polygonMode, onPolygonComplete, pendingPolygon, onPolygonReset }) {
+function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClick, markerSize, scanning, showOverlay, displayMode, overlayOpacity, image, imageBounds, geo, setGeo, scanMode, onScanBbox, tileProvider, providersMap, scanProgress, polygonMode, onPolygonComplete, pendingPolygon, onPolygonReset }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const layerRef = useRef(null);
@@ -1324,8 +1285,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     if (!map) return;
 
     const container = map.getContainer();
-    const drawing = captureMode || scanMode;
-    if (!drawing) {
+    if (!scanMode) {
       container.classList.remove("capture-cursor");
       if (captureRectRef.current) {
         map.removeLayer(captureRectRef.current);
@@ -1335,8 +1295,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
     }
 
     container.classList.add("capture-cursor");
-    // Scan mode рисуем в зелёный (DeepForest-ish, отличает от обычного capture).
-    const rectColor = scanMode ? "#0F6E56" : "#EF9F27";
+    const rectColor = "#0F6E56";
     let startLL = null;
 
     const onDown = (e) => {
@@ -1373,8 +1332,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
         }
         return;
       }
-      if (scanMode && onScanBbox) onScanBbox({ nw, se });
-      else if (captureMode && onCaptureBbox) onCaptureBbox({ nw, se });
+      if (onScanBbox) onScanBbox({ nw, se });
     };
 
     map.on("mousedown", onDown);
@@ -1386,7 +1344,7 @@ function MapView({ trees, filter, threshold, baseLayer, setBaseLayer, onTreeClic
       map.off("mouseup", onUp);
       map.dragging.enable();
     };
-  }, [captureMode, onCaptureBbox, scanMode, onScanBbox]);
+  }, [scanMode, onScanBbox]);
 
   // Polygon-scan draw mode: клик добавляет вершину, double-click "закрывает"
   // полигон (отдаётся родителю в pendingPolygon, но scan НЕ запускается —
@@ -1634,10 +1592,8 @@ function App() {
     }
   }, [refreshAggregate]);
   const [overlayOpacity, setOverlayOpacity] = useState(0.8);
-  const [captureMode, setCaptureMode] = useState(false);
-  const [captureZoom, setCaptureZoom] = useState(18);
-  // Auto-Zoom Region Scan — параллельный режим к captureMode. На "Start" — войти,
-  // на рисование bbox — отправить scan, после возврата автоматически в city view.
+  // Scan area mode — пользователь рисует прямоугольник, бэк делит на сетку
+  // под-регионов на фикс. zoom=19 и стримит прогресс через NDJSON.
   const [scanMode, setScanMode] = useState(false);
   // Polygon scan mode — параллельный к scanMode (rectangle). User кликает по
   // карте N раз, добавляя вершины, double-click замыкает полигон, после чего
@@ -1736,43 +1692,7 @@ function App() {
     setShowOverlay(false);
   }, []);
 
-  // ============ Capture from map ============
-  const handleCaptureBbox = useCallback(async (bbox) => {
-    setCaptureMode(false);
-    setUploadError(null);
-    setUploading(true);
-    try {
-      const meta = await window.api.captureFromMap({
-        nw: bbox.nw,
-        se: bbox.se,
-        zoom: captureZoom,
-        provider: tileProvider,
-      });
-      setImage({
-        ...meta,
-        name: meta.filename,
-        url: window.api.imageUrl(meta.image_id),
-      });
-      setImageId(meta.image_id);
-      setTrees(null);
-      setStats(null);
-      setJobId(null);
-      setStatus("idle");
-      // bounds уже есть в meta — выставим режим corners_2 с этими углами
-      if (meta.bounds) {
-        setGeo({ mode: "corners_2", corners_2: meta.bounds });
-        setShowOverlay(true);
-      }
-      showToast(`Captured ${meta.width}×${meta.height} from map (zoom ${captureZoom})`);
-    } catch (e) {
-      setUploadError(e.message);
-      showToast("Capture failed: " + e.message, "error");
-    } finally {
-      setUploading(false);
-    }
-  }, [captureZoom, showToast, tileProvider]);
-
-  // ============ Auto-Zoom Region Scan (streaming) ============
+  // ============ Scan area (streaming) ============
   // На draw bbox открываем NDJSON-стрим к /api/scan_region/stream и обновляем
   // scanProgress инкрементально:
   //   - "plan" событие → создаёт grid с N пустых regions со status=pending
@@ -2010,13 +1930,8 @@ function App() {
                 onUpload={handleUpload}
                 onClear={handleClear}
                 error={uploadError}
-                captureMode={captureMode}
-                onStartCapture={() => { setScanMode(false); setCaptureMode(true); }}
-                onCancelCapture={() => setCaptureMode(false)}
-                captureZoom={captureZoom}
-                setCaptureZoom={setCaptureZoom}
                 scanMode={scanMode}
-                onStartScan={() => { setCaptureMode(false); setPolygonMode(false); setScanMode(true); }}
+                onStartScan={() => { setPolygonMode(false); setScanMode(true); }}
                 onCancelScan={() => setScanMode(false)}
                 scanRunning={scanRunning}
                 scanStatus={scanStatus}
@@ -2026,7 +1941,7 @@ function App() {
                 providersMap={providersMap}
                 scanProgress={scanProgress}
                 polygonMode={polygonMode}
-                onStartPolygon={() => { setCaptureMode(false); setScanMode(false); setPolygonMode(true); setPendingPolygon(null); }}
+                onStartPolygon={() => { setScanMode(false); setPolygonMode(true); setPendingPolygon(null); }}
                 onCancelPolygon={() => { setPolygonMode(false); setPendingPolygon(null); }}
                 pendingPolygon={pendingPolygon}
                 onStartPolygonScan={handleStartPolygonScan}
@@ -2122,8 +2037,6 @@ function App() {
           imageBounds={viewMode === "city" ? null : ((geo.mode === "corners_2" ? geo.corners_2 : null) || image?.bounds)}
           geo={geo}
           setGeo={setGeo}
-          captureMode={viewMode === "single" && captureMode}
-          onCaptureBbox={handleCaptureBbox}
           scanMode={viewMode === "single" && scanMode}
           onScanBbox={handleScanBbox}
           tileProvider={tileProvider}

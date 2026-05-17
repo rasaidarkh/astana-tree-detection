@@ -94,7 +94,9 @@ Endpoint `GET /api/providers` отдаёт список с URL-шаблонам�
 
 Каждый успешный под-регион сохраняется как обычный `snapshot` + `run`, поэтому **в city-aggregate view (`/api/snapshots`, `/api/detections`) результаты появляются автоматически** — никакой отдельной таблицы scan-сессий нет. Если под-регион упал на capture или predict — endpoint не прерывается, просто в `sub_regions[i]` появится `"error"`. Frontend после успеха переключается в city view и обновляет агрегат.
 
-**UI:** кнопка `Auto-Zoom Scan` в Upload-секции (зелёная, рядом с `Capture from map`). Зум зафиксирован на 19, скан-режим рисует прямоугольник зелёным цветом (capture-mode остался оранжевым). Лимит 9 под-регионов ≈ 3×3 = ~1.5×1.5 км @ z19 за один запрос.
+**UI:** две основные кнопки в Upload-секции — `Scan area` (rectangle) и `Polygon`. Обе идут через тот же Auto-Zoom pipeline (фикс z=19, grid-split, streaming progress, scan-session tagging). Старая кнопка `Capture from map` (manual single-shot capture на user-picked zoom) удалена из UI в коммите 2026-05-17 — она была foot-gun-ом на низком зуме (кроны 4-6 px → нулевая детекция). Сам endpoint `POST /api/capture_from_map` остался для прямых API-юзеров и для ablation-сравнений из тестов.
+
+Зум зафиксирован на 19, scan-rectangle рисуется зелёным. Лимит 9 под-регионов ≈ 3×3 = ~1.5×1.5 км @ z19 за один запрос.
 
 **Streaming variant — `POST /api/scan_region/stream`:**
 Тот же запрос, но возвращает `application/x-ndjson` поток событий по мере обработки. Frontend читает через `fetch + ReadableStream.getReader()` и обновляет UI инкрементально — на карте появляется сетка под-регионов с цветовыми статусами (pending/capturing/predicting/done/error, pulse-анимация для активных), деревья дорисовываются батчами по мере прихода `sub_complete` событий, в сайдбаре виден mini-grid с тем же color-coding + счётчик `done/total · 🌳 N`.
