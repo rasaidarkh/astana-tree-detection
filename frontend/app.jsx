@@ -2151,7 +2151,7 @@ function App() {
 
           {view === "map" && (
             <>
-              {isEmpty && <Welcome onStart={startScanRect} />}
+              {isEmpty && <Welcome onStart={requestScanRect} />}
 
               {hasTrees && (
                 <DisplayStrip
