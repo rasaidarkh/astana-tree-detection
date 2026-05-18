@@ -122,7 +122,6 @@ function LeftPanel({
   visibleCount,
   onOpenManager,
   onToggleScanHidden,
-  model, setModel, modelStatus,
 }) {
   const t = (aggregateStats && aggregateStats.total_trees) || 0;
   const s = (aggregateStats && aggregateStats.snapshot_count) || 0;
@@ -143,15 +142,7 @@ function LeftPanel({
     <aside className="left-panel">
       <div className="lp-scroll">
 
-        {/* ── model picker (shown above scan actions so the user knows
-              which checkpoint will be used) ── */}
-        {!drawing && !hasPending && setModel && modelStatus && (
-          <div style={{ marginBottom: 12 }}>
-            <ModelPicker model={model} setModel={setModel} modelStatus={modelStatus} />
-          </div>
-        )}
-
-        {/* ── primary actions ── */}
+        {/* ── primary actions (model is picked in a centered modal on click) ── */}
         {!drawing && !hasPending && (
           <div className="lp-actions">
             <button className="lp-action primary" onClick={onStartScan}>
@@ -1011,6 +1002,75 @@ function ModelPicker({ model, setModel, modelStatus }) {
 }
 
 /* ==================================================================
+   ScanModelModal — centered modal that asks "which detector" right
+   before kicking off Scan area / Polygon flows. Keeps LeftPanel
+   minimalist while giving the user a clear at-action choice.
+   ================================================================== */
+function ScanModelModal({ open, action, model, setModel, modelStatus, onConfirm, onCancel }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel();
+      if (e.key === "Enter") onConfirm();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onCancel, onConfirm]);
+
+  if (!open) return null;
+
+  const actionLabel = action === "scan"
+    ? "Scan rectangle"
+    : action === "polygon"
+      ? "Polygon scan"
+      : "Run detection";
+  const actionHint = action === "scan"
+    ? "After confirmation, drag a rectangle on the map to define the scan area."
+    : action === "polygon"
+      ? "After confirmation, click vertices on the map · double-click to close polygon."
+      : "";
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={onCancel}
+      style={{ alignItems: "center" }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480, padding: 0 }}
+      >
+        <div className="modal-head" style={{ paddingBottom: 12 }}>
+          <Icon name={action === "polygon" ? "polygon" : "grid"} size={16} />
+          <div className="modal-title">{actionLabel}</div>
+        </div>
+        <div style={{ padding: "0 20px 12px 20px" }}>
+          <ModelPicker model={model} setModel={setModel} modelStatus={modelStatus} />
+          {actionHint && (
+            <div className="field-help" style={{ marginTop: 12, padding: "8px 10px", background: "var(--accent-softer)", borderRadius: "var(--r-2)" }}>
+              {actionHint}
+            </div>
+          )}
+        </div>
+        <div style={{
+          display: "flex", gap: 8, padding: "12px 20px 20px 20px",
+          borderTop: "1px solid var(--border)", justifyContent: "flex-end",
+        }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" onClick={onConfirm}>
+            <Icon name="play" size={14} />
+            <span style={{ marginLeft: 6 }}>
+              {action === "polygon" ? "Start drawing" : "Start"}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
    Image view sidebar (progressive disclosure)
    ================================================================== */
 function ImageSidebar({
@@ -1772,12 +1832,25 @@ function App() {
   }, []);
 
   // -------- scan flow --------
-  const startScanRect = useCallback(() => {
-    setPolygonMode(false); setPendingPolygon(null); setScanMode(true);
-  }, []);
-  const startScanPoly = useCallback(() => {
-    setScanMode(false); setPendingPolygon(null); setPolygonMode(true);
-  }, []);
+  // Model is picked at the moment of action via a centered modal. The
+  // user clicks "Scan area" / "Polygon" → modal opens with model picker
+  // → on confirm, the actual drawing mode is entered.
+  const [pendingScanAction, setPendingScanAction] = useState(null); // "scan" | "polygon" | null
+
+  const requestScanRect = useCallback(() => setPendingScanAction("scan"), []);
+  const requestScanPoly = useCallback(() => setPendingScanAction("polygon"), []);
+
+  const confirmScanAction = useCallback(() => {
+    if (pendingScanAction === "scan") {
+      setPolygonMode(false); setPendingPolygon(null); setScanMode(true);
+    } else if (pendingScanAction === "polygon") {
+      setScanMode(false); setPendingPolygon(null); setPolygonMode(true);
+    }
+    setPendingScanAction(null);
+  }, [pendingScanAction]);
+
+  const cancelScanAction = useCallback(() => setPendingScanAction(null), []);
+
   const cancelDraw = useCallback(() => {
     setScanMode(false); setPolygonMode(false); setPendingPolygon(null);
   }, []);
@@ -2013,6 +2086,14 @@ function App() {
         onClose={() => setSettingsOpen(false)}
       />
 
+      <ScanModelModal
+        open={pendingScanAction !== null}
+        action={pendingScanAction}
+        model={model} setModel={setModel} modelStatus={modelStatus}
+        onConfirm={confirmScanAction}
+        onCancel={cancelScanAction}
+      />
+
       <div className={`view-shell ${view === "image" ? "layout-image" : ""}`}>
         {view === "image" && (
           <ImageSidebar
@@ -2039,7 +2120,7 @@ function App() {
             scans={scans}
             snapshots={snapshots}
             scanMode={scanMode} polygonMode={polygonMode}
-            onStartScan={startScanRect} onStartPolygon={startScanPoly}
+            onStartScan={requestScanRect} onStartPolygon={requestScanPoly}
             onCancel={cancelDraw}
             pendingPolygon={pendingPolygon}
             onStartPolygonScan={handleStartPolygonScan}
@@ -2049,7 +2130,6 @@ function App() {
             visibleCount={visibleCount}
             onOpenManager={() => setManagerOpen(true)}
             onToggleScanHidden={handleToggleScanHidden}
-            model={model} setModel={setModel} modelStatus={modelStatus}
           />
         )}
 
