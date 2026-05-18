@@ -39,6 +39,64 @@ The complete source tree of the prototype is organised in three top-level direct
 
 The system architecture follows a three-tier separation of concerns: the React 18 + Leaflet frontend communicates with the FastAPI backend via REST, which in turn dispatches inference requests to one of four pluggable model adapters (YOLOv8-seg, Mask R-CNN, DeepForest, DeepForest+SAM 2). Results are persisted in an SQLite database and returned to the frontend for interactive visualisation and export.
 
+The complete data flow from user-drawn rectangle to exported inventory is summarised in Figure 2.1.
+
+```
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │  PRESENTATION LAYER  (React 18 UMD + Leaflet, no build step)        │
+   │  ┌────────────────────────────────────────────────────────────────┐ │
+   │  │  Single-image view  │  City-map view  │  Scan area / Polygon   │ │
+   │  └────────────────────────────────────────────────────────────────┘ │
+   └──────────────────────────────────┬──────────────────────────────────┘
+                                      │ HTTP / NDJSON streaming
+   ┌──────────────────────────────────▼──────────────────────────────────┐
+   │  APPLICATION LAYER  (FastAPI + Pydantic, Python 3.12)               │
+   │                                                                     │
+   │   /api/upload       /api/capture_from_map      /api/scan_region    │
+   │   /api/predict      /api/scan_region/stream    /api/export/...     │
+   │                                                                     │
+   │   ┌────────────────┐   ┌───────────────────┐   ┌────────────────┐  │
+   │   │  Map capture   │   │  Region scanner   │   │   Geo module   │  │
+   │   │ (ESRI/Google)  │   │ (3-level tiling)  │   │ (4 geo modes)  │  │
+   │   └────────────────┘   └───────────────────┘   └────────────────┘  │
+   │                                                                     │
+   └────────┬───────────────┬───────────────┬──────────────┬─────────────┘
+            │               │               │              │
+   ┌────────▼─────┐ ┌───────▼────────┐ ┌────▼─────────┐ ┌──▼─────────────┐
+   │   YOLO       │ │  Mask R-CNN    │ │  DeepForest  │ │  DeepForest +  │
+   │   adapter    │ │  adapter       │ │  adapter     │ │  SAM 2 adapter │
+   │ (Ultralytics)│ │ (torchvision)  │ │ (deepforest) │ │ (sam2 1.1)     │
+   └────────┬─────┘ └───────┬────────┘ └──────┬───────┘ └────────┬───────┘
+            └───────────────┴────────────┬────┴──────────────────┘
+                                         │
+                              ┌──────────▼──────────┐
+                              │  Weighted Box       │
+                              │  Fusion ensemble    │
+                              │  (YOLO + DF)        │
+                              └──────────┬──────────┘
+                                         │ List<Detection>
+   ┌─────────────────────────────────────▼─────────────────────────────────┐
+   │  PERSISTENCE LAYER  (SQLite, storage/app.db, ON DELETE CASCADE)       │
+   │                                                                       │
+   │   ┌─────────────┐    ┌────────────┐    ┌──────────────────────┐       │
+   │   │ snapshots   │◄───┤   runs     │◄───┤    detections        │       │
+   │   └─────────────┘    └────────────┘    └──────────────────────┘       │
+   │                            ▲                                          │
+   │                     ┌──────┴──────┐                                   │
+   │                     │ scan_sessions│                                  │
+   │                     └─────────────┘                                   │
+   └───────────────────────────────────────────────────────────────────────┘
+                                         │
+   ┌─────────────────────────────────────▼─────────────────────────────────┐
+   │  EXPORT LAYER                                                         │
+   │  ┌─────────────┐    ┌──────────────┐    ┌──────────────────────────┐  │
+   │  │  GeoJSON    │    │     CSV      │    │  Standalone HTML (Leaflet)│  │
+   │  └─────────────┘    └──────────────┘    └──────────────────────────┘  │
+   └───────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 2.1 — Layered architecture of the proposed system.** Solid arrows denote a synchronous request / response; the ON-DELETE-CASCADE relations between SQLite tables ensure that deleting a snapshot or a scan-session also removes all dependent runs, detections and PNG files in a single operation.
+
 ## 2.2 Image input and pre-processing
 
 The system accepts three categories of input, each with its own pre-processing path.
@@ -47,12 +105,19 @@ The system accepts three categories of input, each with its own pre-processing p
 
 **GeoTIFF images** carry an affine transform and a coordinate reference system in their internal metadata. The backend parses this metadata with `rasterio.open()` and extracts the bounds in WGS-84 (EPSG:4326). For GeoTIFFs in other projections (a common case for satellite data delivered in UTM zones) the bounds are re-projected with `pyproj`. This path is the most accurate and is the recommended workflow for final, reproducible inventories.
 
-**In-browser map capture** is the third option, designed for the user who has neither a pre-downloaded GeoTIFF nor a screenshot but wants to inspect a specific area of the city interactively. The user draws a rectangle on a Leaflet map (visualised against the ESRI World Imagery basemap), specifies a zoom level between 17 and 19, and submits the request to the `/api/capture_from_map` endpoint. The backend then:
+**In-browser map capture** is the third option, designed for the user who has neither a pre-downloaded GeoTIFF nor a screenshot but wants to inspect a specific area of the city interactively. The user draws a rectangle on a Leaflet map and submits the request to the `/api/capture_from_map` endpoint (single-shot capture) or, more commonly, to `/api/scan_region` for an *Auto-Zoom Region Scan* that automatically subdivides a larger bounding box into a grid of sub-regions at a fixed zoom level of 19. The backend then:
 
 1. Converts the two corner coordinates from longitude / latitude into floating-point tile coordinates using the Web-Mercator projection: $x = (\lambda + 180) / 360 \cdot 2^z$ and $y = (1 - \log(\tan\phi + \sec\phi) / \pi) / 2 \cdot 2^z$, where $z$ is the zoom level.
-2. Computes the integer range of tiles that must be downloaded to cover the requested bounding box, with an upper limit of 144 tiles (i.e. a 12×12 grid, approximately 3 072 × 3 072 pixels at the standard tile size of 256 pixels). This limit protects the server from accidental bulk downloads.
-3. Downloads the tiles in parallel through a thread pool of eight workers, retrying each tile up to three times with the academic-project user-agent string mandated by the ESRI terms of use. Failed tiles are replaced by a small grey placeholder so that a single missing tile does not invalidate the entire capture.
-4. Stitches the tiles into a single canvas, crops the canvas to the exact bounding box (using the fractional part of the original tile coordinates as sub-tile offsets) and returns a PNG image with the geographic bounds embedded as part of the response.
+2. Computes the integer range of tiles that must be downloaded to cover the requested bounding box and, for large bounding boxes, splits the region into a grid of up to nine sub-bounding-boxes each capped at approximately 100 tiles, so the resulting per-tile downloads remain below a configurable `MAX_TILES` limit (default 400, ≈ 5 120 × 5 120 pixels per sub-region) that protects the server from accidental bulk downloads and out-of-memory failures.
+3. Downloads the tiles in parallel through a thread pool of eight workers from the chosen tile provider. Two providers are currently registered (Table 2.1a): the default **ESRI World Imagery** endpoint (max zoom 19, no API key required, stable) and an unofficial **Google Satellite** endpoint (max zoom 20, the same image base as Google Earth Pro — directly relevant because the YOLO and Mask R-CNN training data is composed of Google Earth Pro screenshots). The provider is selected per request through the optional `provider` field of the JSON body. Failed tiles are replaced by a small grey placeholder so that a single missing tile does not invalidate the entire capture.
+4. Stitches the tiles into a single canvas, crops the canvas to the exact bounding box (using the fractional part of the original tile coordinates as sub-tile offsets) and returns a PNG image with the geographic bounds embedded as part of the response. For multi-region scans each sub-region is persisted as an independent snapshot in the SQLite database (Section 2.10) and tagged with the parent scan-session identifier so that the user can later delete the entire scan in a single operation.
+
+**Table 2.1a — Tile providers registered in `backend/map_capture.py::TILE_PROVIDERS`.**
+
+| Provider key | Endpoint | Max zoom | Notes |
+|---|---|---|---|
+| `esri` (default) | `server.arcgisonline.com/.../World_Imagery/...` | 19 | Free, no API key, stable |
+| `google` | `mt{0–3}.google.com/vt/lyrs=s` | 20 | Same image base as Google Earth Pro (training data source); unofficial endpoint, used for academic prototyping only |
 
 Subsequent inference on the captured image proceeds as if the user had uploaded a GeoTIFF — the two corners are known with sub-pixel precision and the conversion module switches automatically into two-corner axis-aligned mode.
 
@@ -74,7 +139,7 @@ The same tiling-and-NMS pattern is used in three places: in `predict_tiled()` in
 
 YOLOv8 [@UltralyticsYOLO2023] is a single-stage anchor-free object detector that operates as a fully-convolutional network with a CSP-Darknet53 backbone, a Path Aggregation Network neck and three detection heads producing predictions at three scales (down-sampling factors of 8, 16 and 32). The segmentation variant `YOLOv8x-seg` extends this architecture with an additional **prototype mask head** that produces 32 prototype masks at one quarter the input resolution; each detected instance is then represented by a vector of 32 coefficients that, when linearly combined with the prototype masks and thresholded, produce a binary segmentation mask aligned with the detected bounding box. This design — borrowed from the YOLACT family of real-time instance segmenters — separates the per-pixel and the per-instance computations, so the cost of generating masks scales with the number of detections rather than with the number of pixels.
 
-The variant chosen for this work, `yolov8x-seg`, contains approximately 71 million parameters and is the largest of the YOLOv8 segmentation models. The choice of the extra-large variant is motivated by the small size of the training set: with only a few thousand polygon annotations available, the additional regularisation of a deeper, slower-but-more-expressive model is welcome.
+Three YOLOv8-seg variants are used in this work, corresponding to the three phases of the project's hyperparameter ablation reported in Chapter 3. The pre-ablation generations (Sections 3.3.1 – 3.3.6) used `yolov8x-seg` — the largest variant, approximately 71 million parameters — on the initial hypothesis that the extra capacity would improve performance on the small, moderately-noisy polygon dataset. Rounds 1 – 3 of the systematic ablation (Section 3.3.7) reversed that hypothesis with the medium-size `yolov8m-seg` (approximately 27 M parameters) outperforming both larger variants by 15 – 25 % relative on Box mAP@50 when trained from COCO weights with manually-tuned (v2-proven) augmentation. Round 4 (Section 3.3.8) then reversed the reversal: with **Ultralytics' default augmentation pipeline** instead of the manually-tuned one, the largest `yolov8x-seg` variant once again becomes the strongest single configuration, reaching Box mAP@50 = 0.315 on M14 — the headline empirical result of the diploma. The **final production checkpoint** is therefore `yolov8x-seg` trained from fresh COCO weights with `single_cls=True` and Ultralytics' default augmentation (aggressive HSV colour jitter, random erasing, zero geometric transformations). The intermediate `yolov8m-seg` variant of Round 1 remains in the project's archive under `weights/v3_runs/exp1_m_cocostart_*.pt` as a member of the cross-YOLO voting ensemble of Section 2.8.2 below.
 
 ### 2.4.2 Why instance segmentation rather than detection
 
@@ -119,9 +184,9 @@ The training of the v1 model was performed on a single workstation with an Intel
 
 Mixed-precision training was essential — without it the model with a batch size of two exceeded the available 8 GiB of VRAM. Even with AMP enabled, the peak measured VRAM usage was approximately 6.4 GiB. The same configuration with a batch size of four reproducibly triggered an out-of-memory error.
 
-The training was started with a maximum of 500 epochs and was allowed to early-stop with a patience of 100 epochs. The actual run stopped at epoch 397 after approximately one hour of wall-clock training, with the best checkpoint produced at epoch 296. The detailed numerical results of this training run are reported in Chapter 3.
+The training was started with a maximum of 500 epochs and was allowed to early-stop with a patience of 100 epochs. The actual run stopped at epoch 397 after approximately one hour of wall-clock training, with the best checkpoint produced at epoch 296.
 
-The version-2 run, currently in progress on the expanded dataset, follows the same hyper-parameters but with the v1 best checkpoint as the starting point in order to retain the learned crown priors and accelerate convergence.
+Two subsequent fine-tune runs were performed on the expanded v1 + v2 dataset (Chapter 3, Section 3.3.5) — a from-scratch retrain initialised from COCO weights and a continual-learning fine-tune initialised from the v1 best checkpoint — and a third run was performed on the merged v1 + v2 + v3 dataset (Section 3.3.6) once the May 2026 batch of additional photographs was annotated. The continual fine-tune trajectory v1 → v2-finetune → v3-finetune is the path that produced the final production checkpoint used by the backend (`weights/yolo_satellite.pt`). The detailed numerical results of all four YOLO runs are reported in Chapter 3.
 
 ### 2.4.5 Loss function
 
@@ -155,23 +220,27 @@ The Mask R-CNN branch consumes the exact same Astana polygon dataset as the YOLO
 
 ### 2.5.3 Training procedure
 
-The optimiser is stochastic gradient descent with momentum 0.9 and weight decay $5 \times 10^{-4}$, at an initial learning rate of $5 \times 10^{-3}$. The learning-rate scheduler is StepLR with `step_size = 10` and $\gamma = 0.5$, halving the learning rate every ten epochs; over twenty epochs the final learning rate reaches $0.005 \times 0.5^2 = 0.00125$. Batch size is fixed at 2, and mixed precision is enabled via `torch.amp.autocast("cuda")` with a `GradScaler` to prevent gradient underflow in fp16. Two data-preparation challenges required explicit workarounds: (i) COCO JSON files exported by CVAT contain Cyrillic filenames encoded as UTF-8, which `pycocotools` fails to parse under the Windows `cp1251` locale — resolved by loading the JSON with explicit `encoding="utf-8"` and populating the index manually; (ii) seventeen of the 3 270 training annotations had empty segmentation fields (bbox-only entries) — these were excluded rather than synthesised, sacrificing 0.5 % of training signal to preserve mask-head supervision quality.
+Two Mask R-CNN checkpoints exist in the project. The **v1 + v2 base** model was trained from the public `maskrcnn_resnet50_fpn_v2` torchvision COCO V1 weights with stochastic gradient descent (momentum 0.9, weight decay $5 \times 10^{-4}$), an initial learning rate of $5 \times 10^{-3}$, a `StepLR` scheduler halving the learning rate every 10 epochs, batch size 2 and mixed precision (AMP). The **v2 + v3 fine-tune** — which is the production checkpoint released under tag `maskrcnn-v2v3` and used for every Mask R-CNN result reported in Chapter 3 — warm-starts from the v1 + v2 base via the `--resume-from` flag and lowers the initial learning rate automatically to $1 \times 10^{-3}$, which is the appropriate scale for continuing training from an already-converged checkpoint. Both runs use the same data-preparation workarounds: (i) COCO JSON files exported by CVAT contain Cyrillic filenames encoded as UTF-8, which `pycocotools` fails to parse under the Windows `cp1251` locale — resolved by loading the JSON with explicit `encoding="utf-8"` and populating the index manually; (ii) the few training annotations with empty segmentation fields (bbox-only entries) were excluded rather than synthesised, sacrificing well under 1 % of training signal to preserve mask-head supervision quality.
 
-**Table 2.3 — Training hyper-parameters for the Mask R-CNN run.**
+The principal training-side improvement of the v2 + v3 fine-tune over the v1 + v2 base is a richer augmentation pipeline implemented through Albumentations: horizontal flip ($p$ = 0.5), vertical flip ($p$ = 0.3), random 90-degree rotation ($p$ = 0.5), random brightness / contrast adjustment ($p$ = 0.3) and HSV jitter ($p$ = 0.2). The pipeline is applied to the training split only and is a closer match to the Ultralytics-style augmentation used by the YOLO branch (Section 2.4.4) than the horizontal-flip-only configuration of the v1 + v2 base. Early-stopping is implemented on the validation `mask_map_50` metric with a patience of 5 epochs.
 
-| Parameter | Value |
-|---|---|
-| Base model | `maskrcnn_resnet50_fpn_v2` (torchvision COCO V1 weights) |
-| Framework | torchvision 0.20, PyTorch 2.5.1 + CUDA 12.1 |
-| Input resolution | 640 × 640 (same tiling as YOLO branch) |
-| Batch size | 2 |
-| Epochs | 20 |
-| Optimiser | SGD, momentum 0.9, weight decay $5 \times 10^{-4}$ |
-| Initial learning rate | $5 \times 10^{-3}$ |
-| LR scheduler | StepLR, step\_size=10, $\gamma=0.5$ |
-| Mixed-precision (AMP) | enabled (`torch.amp`, fp16 forward) |
-| GPU | NVIDIA RTX 4070 Laptop, 8 GiB VRAM |
-| Total training time | ≈ 1 h 50 min (≈ 5.5 min/epoch) |
+**Table 2.3 — Training hyper-parameters of the two Mask R-CNN checkpoints.**
+
+| Parameter | v1 + v2 base | v2 + v3 fine-tune (production) |
+|---|---|---|
+| Base model | `maskrcnn_resnet50_fpn_v2` (torchvision COCO V1) | v1 + v2 base (`weights/maskrcnn_astana.pt`) |
+| Framework | torchvision 0.20, PyTorch 2.5.1 + CUDA 12.1 | same |
+| Input resolution | 640 × 640 (same tiling as YOLO branch) | same |
+| Batch size | 2 | 2 |
+| Epochs (max) | 20 | 30 (early-stopped at 16, best at 11) |
+| Early-stop patience | — | 5 on `mask_map_50` |
+| Optimiser | SGD, momentum 0.9, weight decay $5 \times 10^{-4}$ | same |
+| Initial learning rate | $5 \times 10^{-3}$ | $1 \times 10^{-3}$ (auto-lowered via `--resume-from`) |
+| LR scheduler | StepLR, step\_size = 10, $\gamma = 0.5$ | same |
+| Augmentations | horizontal flip ($p$ = 0.5) | Albumentations: HFlip ($p$ = 0.5), VFlip ($p$ = 0.3), Rotate90 ($p$ = 0.5), RBC ($p$ = 0.3), HSV ($p$ = 0.2) |
+| Mixed-precision (AMP) | enabled | enabled |
+| GPU | NVIDIA RTX 4070 Laptop, 8 GiB phys. VRAM (peak ≈ 17 GiB through shared-memory extension) | same |
+| Total training time | ≈ 1 h 50 min | ≈ 1 h 30 min (early stop at epoch 16) |
 
 ### 2.5.4 Adapter integration
 
@@ -203,11 +272,27 @@ The choice of a patch size of 400 (rather than the 640 used by the YOLO branch) 
 
 ### 2.6.3 Fine-tuning on Astana data
 
-The pre-trained DeepForest model already performs reasonably well on Astana imagery — in early baseline experiments it detected approximately 67 % of visible trees out of the box, comparable to its reported behaviour on European urban scenes [@SofiaDeepForest2024]. To narrow the remaining domain gap a fine-tuning stage was performed by team member Anuar Totin on an **independent annotation set** maintained for the DeepForest branch. The dataset was assembled manually: satellite screenshots of Astana were captured from Google Earth and ESRI World Imagery, and every visible tree crown was labelled by hand as an axis-aligned bounding box. The annotated images were uploaded to Roboflow (workspace `bads-workspace`, project `astana-trees-ndi9r`) and split into training, validation and test subsets via the Roboflow platform. Version 4 of the project, used for fine-tuning, was exported in Pascal VOC format and downloaded via the Roboflow Python SDK. This dataset is held distinct from the YOLO polygon dataset described in Section 2.4. The motivation for the separate annotation set is twofold: first, DeepForest's RetinaNet head consumes bounding-box labels natively and benefits little from the polygon refinement that the YOLO branch requires; second, maintaining two independently-curated datasets reduces the risk of validation-set leakage between the two branches and gives a cleaner methodological story for the head-to-head comparisons of Chapter 3.
+A first DeepForest fine-tune (the `astana_trees_v4_10epochs.pl` checkpoint) was performed by team member Anuar Totin in early May 2026 on a separate bounding-box annotation set maintained at the time on the Roboflow platform (workspace `bads-workspace`, project `astana-trees-ndi9r`, version 4). Access to that Roboflow workspace has since been lost, and the v4 checkpoint is now retained only as a baseline for the ablation reported in Chapter 3 (Section 3.7.2). The production DeepForest checkpoint used by the deployed backend is the **v3 fine-tune** described below, which warm-starts from the v4 checkpoint and continues training on the same merged Astana CVAT polygon dataset that is used by the YOLO and Mask R-CNN branches.
 
-Fine-tuning is driven by the DeepForest `Trainer` interface, which is a thin wrapper around PyTorch Lightning. The configuration used for the fine-tune is documented in the `lightning_logs/` directory of the repository and includes: batch size 1, AdamW with learning rate $1 \times 10^{-3}$, ReduceLROnPlateau scheduler on `val_loss` with patience 10 and factor 0.5, horizontal-flip augmentation only, and a single training pass over the dataset per epoch (which matches the library's default `epochs: 1` setting and is appropriate given that DeepForest performs one full pass per call by convention). Multiple successive epochs are obtained by re-invoking the trainer.
+For the v3 fine-tune the CVAT polygon annotations are converted to DeepForest's bounding-box CSV format via the helper script `ml/coco_to_deepforest_csv.py` — every polygon is replaced by its axis-aligned bounding box, which is the input format expected by DeepForest's RetinaNet head. The same train / validation source-image split as the rest of the project (Section 3.2) is preserved: 63 training images / 4 733 boxes and 15 validation images / 726 boxes. The training is driven by the DeepForest `Trainer` interface — a thin wrapper around PyTorch Lightning — with the hyper-parameters listed in Table 2.3a. The effective training trajectory of the production weights is therefore **NEON pretrained → v4 (Roboflow) → v3 (CVAT)**.
 
-The fine-tuned weights are stored on disk as a Lightning checkpoint and re-loaded by the adapter through `torch.load()` followed by a non-strict `load_state_dict()`. The adapter's behaviour is fully backwards-compatible: if the fine-tuned checkpoint is not present, the model falls back automatically to the public `weecology/deepforest-tree` weights, so the system remains usable on machines that do not have the proprietary checkpoint.
+**Table 2.3a — Training hyper-parameters of the DeepForest v3 fine-tune (production).**
+
+| Parameter | Value |
+|---|---|
+| Architecture | RetinaNet (ResNet-50 + FPN), 32.1 M parameters |
+| Starting weights | `astana_trees_v4_10epochs.pl` |
+| Train / val images | 63 (16 v1 + 28 v2 + 19 v3) / 15 (5 v1 + 5 v2 + 5 v3) |
+| Train / val bounding boxes | 4 733 / 726 |
+| Optimiser | SGD with momentum (DeepForest default) |
+| Learning rate | $1 \times 10^{-4}$, no scheduler |
+| Batch size | 4 |
+| Epochs | 30 (single run) |
+| Augmentations | HorizontalFlip ($p$ = 0.5) |
+| GPU | NVIDIA RTX 4050 Laptop, 6 GiB VRAM |
+| Wall time | ≈ 8 minutes |
+
+The fine-tuned weights are stored on disk as a Lightning checkpoint (`weights/deepforest_astana_v3.pl`, published as a GitHub release under tag `v2.0`) and re-loaded by the adapter through `torch.load()` followed by a non-strict `load_state_dict()`. The adapter's behaviour is fully backwards-compatible: if the v3 fine-tune file is absent, the adapter falls back to the public `weecology/deepforest-tree` weights, so the system remains operational on machines that do not have the proprietary checkpoint, but the recall on Astana imagery drops correspondingly (Chapter 3, Section 3.5.1).
 
 ## 2.7 SAM 2 mask-refinement branch
 
@@ -228,7 +313,11 @@ Conceptually, this design treats SAM 2 as a **post-processing step** that decora
 
 ![*Web application showing the DeepForest + SAM 2 pipeline result on an Astana satellite tile. Each detected tree crown is rendered as a semi-transparent polygon mask derived by SAM 2 from the DeepForest bounding-box prompt, providing precise crown boundary outlines without any domain-specific segmentation training. The city-map view (right) accumulates detections across all processed snapshots.*](figures/ui_city_map_view.png)
 
-## 2.8 Ensemble via Weighted Box Fusion
+## 2.8 Ensemble strategies
+
+The system implements two complementary ensemble strategies described in the following sub-sections. The Weighted-Box-Fusion ensemble of Section 2.8.1 combines a YOLO checkpoint with a DeepForest checkpoint (cross-architecture, addressing the complementary failure modes between an instance-segmenter and a bounding-box-only detector); the cross-YOLO voting ensemble of Section 2.8.2 combines four YOLO checkpoints with each other (within-architecture, addressing per-checkpoint training-time variance and per-checkpoint stadium-roof-style failure modes).
+
+### 2.8.1 Weighted Box Fusion (YOLO + DeepForest)
 
 The YOLO and DeepForest branches are trained on the same data but with different network architectures, different patch sizes and different loss formulations. Their errors are therefore partly de-correlated: YOLO tends to over-segment large, dense canopies into several smaller crowns, while DeepForest tends to merge adjacent crowns into a single bounding box. An ensemble that combines the two should benefit from this complementarity.
 
@@ -252,6 +341,21 @@ The WBF procedure as implemented in the system is:
 5. De-normalise the coordinates back to pixel space and return the result.
 
 The implementation uses the open-source `ensemble-boxes` package from Roman Solovyev's reference repository. The IoU threshold $T_{\text{IoU}}$ is set to 0.55, slightly higher than the typical 0.5 used for plain NMS, in order to compensate for the systematic location offset between YOLO and DeepForest boxes (the two networks tend to localise the centre of a crown slightly differently due to their different receptive fields). The per-model weights are set to 1.0 for both branches in the current prototype; an ablation study of weight calibration is reserved for future work.
+
+### 2.8.2 Cross-YOLO voting ensemble (IoU-clustered, K-of-N majority vote)
+
+A complementary ensemble strategy that operates **within** the YOLO family rather than across architectures was added to the system in the late stage of the project, motivated by two observations from Chapter 3: the per-checkpoint training-time variance documented in Section 3.3.9 (sample standard deviation ≈ 0.028 Box mAP@50 across four replicates of the same configuration) and the qualitative cross-checkpoint complementarity discussed in Section 3.7.4 (different YOLO checkpoints with similar aggregate mAP detect substantially different per-detection subsets on the same input). The cross-YOLO ensemble averages out the per-checkpoint variance and discards single-checkpoint hallucinations through a majority-voting rule.
+
+**Algorithm.** Given $N$ member YOLO checkpoints, the ensemble (i) runs every member on the input image independently, (ii) pools all $M$ detections from the $N$ members into a single flat list tagged by member identity, (iii) clusters the pooled detections by box Intersection-over-Union using a union-find data structure (any two detections with $\text{IoU} \geq 0.5$ become part of the same cluster), (iv) **discards any cluster whose detections come from fewer than K distinct member models** (default K = 2), and (v) emits the highest-confidence detection from each surviving cluster as the cluster's representative. The complexity is $O(N M^2)$, dominated by the pairwise IoU computation rather than the union-find; on a typical Astana tile with M ≈ 750 per member the four-member ensemble runs end-to-end in approximately 4–5 seconds on the laptop GPU. The implementation lives in `backend/models/yolo_ensemble_adapter.py` (`MultiYOLOEnsembleAdapter`) and an equivalent CLI tool with the same algorithm is provided as `ml/v5_ensemble.py`.
+
+**Default member set.** Four YOLO checkpoints from the project archive are configured as the default ensemble members in the backend, chosen for the visual complementarity of their failure modes on Astana scenes:
+
+- **v4_x_clean** — the final production checkpoint (Round 4 winner, yolov8x-seg + Ultralytics defaults), strongest aggregate mAP, conservative on built-environment surfaces;
+- **exp1_m_cocostart** — yolov8m-seg with v2-proven augmentation (Round 1 winner), recovers more partially-occluded crowns than v4_x_clean;
+- **v4_s_clean** — yolov8s-seg with defaults, the smallest reasonable variant, most permissive (highest raw detection count, useful for recall-priority scenes);
+- **v2-finetune** — the previous-generation production checkpoint, most conservative on novel surface types (no stadium-roof false-positive regression of the Round 4 / exp1 generation).
+
+**Frontend integration.** The cross-YOLO ensemble is exposed in the frontend's hierarchical model picker under the **Ensemble → 4× YOLO vote** option (Section 2.11.3 of this chapter). The user can toggle between the WBF ensemble of Section 2.8.1 (cross-architecture: YOLO + DeepForest) and the cross-YOLO ensemble of this section at runtime without restarting the backend.
 
 ## 2.9 Geographic conversion
 
@@ -316,33 +420,32 @@ The application exposes two main views, switchable in the sidebar.
 
 **City-map view** is the aggregate-inspection mode. It queries the persistent database for the full collection of all snapshots ever processed by the system and renders every detected tree on a single Leaflet layer (with a safety cap of 50 000 detections to protect the browser). A side panel lists each snapshot with a per-snapshot summary (number of runs, total trees, last-used model, geographic centre) and a deletion action that cascades through the database and the disk. This view is the principal demonstration deliverable of the project: a single map of Astana that grows tree-by-tree as the user processes new districts, building up an organic city-wide inventory that the user can browse, query, and export at any time.
 
-### 2.11.2 Geographic configuration and map capture
+### 2.11.2 Geographic configuration and Auto-Zoom Region Scan
 
-In both views the user controls the geographic mode of the active snapshot through a dedicated panel. The four modes of Section 2.8 (None, two-corner, four-corner, GeoTIFF) are exposed as a segmented switch, and the user can enter corner coordinates either by typing numbers into form fields or by dragging draggable NW/SE markers directly on the map until the image overlay aligns visually with the basemap. Crucially, when the user moves the corner markers, the image overlay is rebound to the new bounds in real time, so the snapshot, the markers and the basemap stay coupled while the user finds the correct fit. The coordinates are written back to the database on the next inference run and persist across page reloads.
+In both views the user controls the geographic mode of the active snapshot through a dedicated panel. The four modes of Section 2.9 are exposed as a segmented switch, and the user can enter corner coordinates either by typing them into form fields or by dragging NW/SE markers directly on the map until the image overlay aligns visually with the basemap; when the user moves a marker, the image overlay is re-bound to the new bounds in real time. The coordinates are written back to the database on the next inference run and persist across page reloads.
 
-The `Capture from map` flow goes one step further. The user draws a rectangle on the basemap with the built-in Leaflet rectangle tool, picks a zoom level (typically 18 for street-level detail or 19 for the highest available resolution in central Astana) and submits the selection. The backend stitches the ESRI World Imagery tiles for the requested bounding box as described in Section 2.2 and returns a regular image snapshot with the geographic bounds embedded; the snapshot is then immediately available for inference without any further input from the user. This flow makes the system usable on areas of the city for which the user has neither a pre-downloaded GeoTIFF nor a high-resolution screenshot — a common situation for new districts under active construction, where archival aerial imagery does not yet exist.
+The principal map-capture workflow of the application is the **Auto-Zoom Region Scan**: the user draws a rectangle (or freely-shaped polygon) on the basemap, and the backend automatically subdivides the request into a grid of sub-bounding-boxes at the fixed zoom level of 19 — the highest available resolution for which the YOLO and DeepForest models were trained — and processes each sub-region in turn. Three protections combine to keep the operation tractable: a hard cap of nine sub-regions per request (corresponding to approximately a 1.5 × 1.5 km area at zoom 19), the per-sub-region `MAX_TILES` cap of Section 2.2, and the use of a streaming NDJSON response on the `/api/scan_region/stream` endpoint that lets the frontend show the user incremental progress events (`plan`, `capturing`, `predicting`, `sub_complete`, `done`) as the scan proceeds, rather than blocking on the full operation. Each successful sub-region is persisted as an independent snapshot in the database (Section 2.10) and tagged with the parent scan-session identifier, so a single `DELETE /api/scans/{id}` request cascades through all its sub-region snapshots, runs, detections and PNG files in one operation. A polygon-shaped scan additionally applies a `shapely.Polygon.contains` filter on every detection centroid, retaining only those that fall inside the user-drawn polygon — useful for inventories of irregular districts, parks or river-front green corridors.
 
-### 2.11.3 Detection display modes
+### 2.11.3 Detection display modes and aggregate visualisation
 
-Every detection produced by the backend carries three independent geometric representations: a centre point (latitude / longitude of the bounding-box centroid), an axis-aligned bounding box (four corners in pixel space, lifted into geographic space through the active geo-conversion mode), and a polygon mask (for YOLO and SAM-refined branches, a closed sequence of vertices following the projected crown outline). The frontend exposes these as three mutually-exclusive rendering modes through a segmented control:
-
-- **Point** — each detection is a small circle at its centroid. Useful for inspecting density and overall coverage on coarse zoom levels.
-- **Box** — each detection is rendered as a `L.polygon` formed by the four geographic corners of its bounding box. The four-corner representation is important in `corners_4` mode, where the image is rotated relative to north and a rectangle in pixel space becomes a non-axis-aligned quadrilateral in geographic space.
-- **Polygon** — each detection is rendered as a `L.polygon` formed by the projected crown mask. This is the default and the principal visualisation deliverable of the project.
-
-The three modes operate on the same underlying detection list; switching between them is instantaneous and does not require a backend round-trip. When a particular detection lacks data for the currently-selected mode (for example, a DeepForest detection that has no polygon mask because DeepForest is a bounding-box-only model), the frontend falls back automatically to point rendering, so the detection never silently disappears from the map.
+Every detection produced by the backend carries three independent geometric representations: a centre point (latitude / longitude of the bounding-box centroid), an axis-aligned bounding box (four corners in pixel space, lifted into geographic space through the active geo-conversion mode), and a polygon mask (for YOLO, Mask R-CNN and SAM 2-refined branches, a closed sequence of vertices following the projected crown outline). The frontend exposes these as four mutually-exclusive rendering modes through a segmented control: **Point** (circle at centroid; useful for inspecting density on coarse zoom levels), **Box** (geographic quadrilateral, important in four-corner geo-mode where the image is rotated relative to north), **Polygon** (default, projected crown mask) and **Heat-map** (kernel-density estimate weighted by per-detection confidence via the `leaflet.heat` plugin, particularly informative on the city-map view at 1 000+ detections where "hot" and "cold" districts emerge visually). Switching modes is instantaneous and does not require a backend round-trip; when a particular detection lacks data for the currently-selected mode (e.g. a DeepForest detection without a polygon mask), the frontend falls back automatically to point rendering so the detection never silently disappears from the map.
 
 ### 2.11.4 REST endpoints
 
-The backend exposes a complete REST API documented automatically by FastAPI's built-in OpenAPI integration at `/docs`. Table 2.3 summarises the endpoints used by the frontend and by the export workflows.
+The backend exposes a complete REST API documented automatically by FastAPI's built-in OpenAPI integration at `/docs`. Table 2.4 summarises the endpoints used by the frontend and by the export workflows.
 
 **Table 2.4 — REST endpoints exposed by the backend.**
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/status` | Health check and aggregate counts (snapshots, runs, total trees) |
+| `GET` | `/api/providers` | List of tile providers with URL templates and max-zoom (used by the frontend to build the provider dropdown and the Leaflet basemap) |
 | `POST` | `/api/upload` | Upload a satellite image; returns an `ImageMeta` with assigned id |
-| `POST` | `/api/capture_from_map` | Stitch ESRI tiles for `(nw, se, zoom)` and return an `ImageMeta` |
+| `POST` | `/api/capture_from_map` | Stitch tiles for `(nw, se, zoom, provider)` and return an `ImageMeta` |
+| `POST` | `/api/scan_region` | Auto-Zoom Region Scan: subdivide bbox into sub-regions at z = 19, capture + predict each, persist as separate snapshots |
+| `POST` | `/api/scan_region/stream` | Same as above with an NDJSON streaming progress response; accepts optional `polygon` for point-in-polygon filtering |
+| `GET` | `/api/scans` | List scan-sessions with bbox, zoom, provider, model, sub-region counts, total trees, duration, status |
+| `DELETE` | `/api/scans/{id}` | Cascade-delete a scan-session and all its sub-region snapshots / runs / detections / PNG files |
 | `GET` | `/api/image/{id}` | Serve the raw image PNG |
 | `GET` | `/api/image/{id}/meta` | Image metadata |
 | `POST` | `/api/predict` | Run inference: `{image_id, model, confidence, geo}` |

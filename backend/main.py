@@ -36,6 +36,7 @@ from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
 from .models.deepforest_sam2_adapter import DeepForestSAM2Adapter
 from .models.ensemble_adapter import EnsembleAdapter
+from .models.yolo_ensemble_adapter import MultiYOLOEnsembleAdapter
 from .models.maskrcnn_adapter import MaskRCNNAdapter
 from .models.yolo_adapter import YOLOAdapter
 from .schemas import (
@@ -142,8 +143,24 @@ log.info("CORS allowed origins: %s", _cors_origins)
 registry = ModelRegistry()
 
 
+def _register_yolo_variant(weights_path: Path, kind: ModelKind, display_name: str) -> None:
+    """Регистрация YOLO variant под конкретным ModelKind. Используется для
+    debug-выбора между v2 / v3-run1 / v3-run2 / production. Override class
+    attributes `kind` + `name` на instance, чтобы один и тот же adapter-класс
+    мог появиться под разными ключами в registry."""
+    if not weights_path.exists():
+        log.info("YOLO variant %s weights missing at %s — skipping", kind.value, weights_path)
+        return
+    adapter = YOLOAdapter(weights_path=str(weights_path))
+    adapter.kind = kind
+    adapter.name = display_name
+    registry.register(adapter)
+    log.info("YOLO variant registered: %s -> %s", kind.value, weights_path.name)
+
+
 def _load_models() -> None:
     """Регистрируем все доступные адаптеры. Веса грузятся лениво при первом predict."""
+    # Production YOLO (whatever is at yolo_satellite.pt сейчас)
     yolo_path = WEIGHTS / "yolo_satellite.pt"
     if yolo_path.exists():
         yolo = YOLOAdapter(weights_path=str(yolo_path))
@@ -151,6 +168,39 @@ def _load_models() -> None:
         log.info("YOLO adapter registered: %s", yolo_path)
     else:
         log.warning("YOLO weights missing at %s — endpoint вернёт 503", yolo_path)
+
+    # Debug variants — позволяют пользователю переключаться между моделями для
+    # сравнения качества на конкретных сценах (например v3 даёт false positives
+    # на стадионных крышах а v2 не давала — можно сравнить side-by-side через
+    # выбор модели в UI). Все архивные веса остаются на диске.
+    _register_yolo_variant(
+        WEIGHTS / "archive" / "yolo" / "yolo_satellite_v2_finetune.pt",
+        ModelKind.YOLO_V2,
+        "YOLOv8x · v2-finetune (mAP@50 0.187)",
+    )
+    # v3 run1 / run2 / exp1 — все архивы в weights/v3_runs/.
+    for pattern, kind, label in [
+        ("v3_finetune_run1_*.pt", ModelKind.YOLO_V3_RUN1, "YOLOv8x · v3 run 1 (mAP@50 0.268)"),
+        ("v3_finetune_run2_*.pt", ModelKind.YOLO_V3_RUN2, "YOLOv8x · v3 run 2 (mAP@50 0.246)"),
+        ("exp1_m_cocostart_*.pt", ModelKind.YOLO_V3_EXP1, "YOLOv8m · v3 exp1 tuned (mAP@50 0.308)"),
+    ]:
+        matches = sorted((WEIGHTS / "v3_runs").glob(pattern))
+        if matches:
+            # Ignore PROD_BACKUP suffix-ed файлы — это duplicate of run1.
+            real = [m for m in matches if "PROD_BACKUP" not in m.name]
+            if real:
+                _register_yolo_variant(real[0], kind, label)
+
+    # v4 clean sweep — Ultralytics defaults, без manual tuning. v4_x_clean это
+    # фактический CHAMPION (mAP@50 0.315) — best single-model на merged val.
+    for pattern, kind, label in [
+        ("v4_x_clean_*.pt", ModelKind.YOLO_V4_X, "YOLOv8x · v4 champion (mAP@50 0.315)"),
+        ("v4_m_clean_*.pt", ModelKind.YOLO_V4_M, "YOLOv8m · v4 (mAP@50 0.291)"),
+        ("v4_s_clean_*.pt", ModelKind.YOLO_V4_S, "YOLOv8s · v4 fast (mAP@50 0.281)"),
+    ]:
+        matches = sorted((WEIGHTS / "v4_clean").glob(pattern))
+        if matches:
+            _register_yolo_variant(matches[0], kind, label)
 
     df_ckpt = WEIGHTS / "deepforest_astana.pl"
     df = DeepForestAdapter(checkpoint_path=str(df_ckpt) if df_ckpt.exists() else None)
@@ -164,6 +214,26 @@ def _load_models() -> None:
         )
         registry.register(ensemble)
         log.info("Ensemble adapter registered")
+
+    # Cross-YOLO ensemble — vote_2 over 4 user-selected variants.
+    # Uses YOLOAdapter instances already in registry. Skips silently if any
+    # member is missing.
+    yolo_ens_members = []
+    for kind in [ModelKind.YOLO_V4_X, ModelKind.YOLO_V3_EXP1,
+                 ModelKind.YOLO_V4_S, ModelKind.YOLO_V2]:
+        if kind in registry:
+            yolo_ens_members.append((kind.value, registry.get(kind)))
+    if len(yolo_ens_members) >= 2:
+        yolo_ensemble = MultiYOLOEnsembleAdapter(
+            members=yolo_ens_members,
+            min_models=2,
+            iou_threshold=0.5,
+        )
+        registry.register(yolo_ensemble)
+        log.info(
+            "Cross-YOLO ensemble registered (%d members, vote_2)",
+            len(yolo_ens_members),
+        )
 
     sam2_ckpt = WEIGHTS / "sam2_hiera_base_plus.pt"
     df_sam2 = DeepForestSAM2Adapter(

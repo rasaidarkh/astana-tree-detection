@@ -49,7 +49,9 @@ class DeepForestSAM2Adapter(ModelAdapter):
         self._df._load()
         self._df._loaded = True
 
-        # Load SAM2
+        # Load SAM2 — graceful degrade: if package is missing or model fails to
+        # load, adapter falls back to DeepForest-only output (boxes without
+        # refined polygon masks). Users see DF detections in UI instead of 0.
         try:
             import torch
             from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -64,9 +66,19 @@ class DeepForestSAM2Adapter(ModelAdapter):
             else:
                 self._predictor = SAM2ImagePredictor.from_pretrained(SAM2_MODEL_ID, device=device)
                 log.info("SAM2 loaded from HuggingFace: %s (device=%s)", SAM2_MODEL_ID, device)
+        except ModuleNotFoundError as e:
+            log.warning(
+                "SAM2 package not installed (%s) — falling back to DeepForest-only "
+                "boxes without polygon refinement. Install with `pip install sam2` "
+                "to enable crown-mask post-processing.",
+                e,
+            )
+            self._predictor = None
         except Exception as e:
-            log.error("SAM2 failed to load: %s", e)
-            raise
+            log.warning(
+                "SAM2 failed to load (%s) — falling back to DeepForest-only.", e,
+            )
+            self._predictor = None
 
     def _predict_raw(self, image_path: str, confidence: float) -> list[Detection]:
         # Step 1: DeepForest bboxes
@@ -74,10 +86,20 @@ class DeepForestSAM2Adapter(ModelAdapter):
         if not detections:
             return []
 
-        # Step 2: Load image for SAM2
-        image_bgr = cv2.imread(image_path)
+        # If SAM2 unavailable (not installed / load failed), return DF
+        # detections as-is with no polygon refinement. UI still shows boxes.
+        if self._predictor is None:
+            return detections
+
+        # Step 2: Load image for SAM2 — np.fromfile + imdecode handles Cyrillic
+        # paths correctly on Windows (cv2.imread returns None silently for them).
+        try:
+            image_bgr = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        except Exception as e:
+            log.warning("SAM2: image read failed (%s) — returning DF boxes only", e)
+            return detections
         if image_bgr is None:
-            log.warning("SAM2: could not read image %s, returning DF detections without masks", image_path)
+            log.warning("SAM2: imdecode returned None for %s — DF boxes only", image_path)
             return detections
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 

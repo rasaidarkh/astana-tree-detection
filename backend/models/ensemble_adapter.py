@@ -40,12 +40,11 @@ class EnsembleAdapter(ModelAdapter):
     def _predict_raw(self, image_path: str, confidence: float) -> list[Detection]:
         from ensemble_boxes import weighted_boxes_fusion
 
-        # Получаем размер изображения для нормализации боксов
-        import cv2
-        img = cv2.imread(image_path)
-        if img is None:
-            raise FileNotFoundError(image_path)
-        h, w = img.shape[:2]
+        # Получаем размер изображения для нормализации боксов.
+        # PIL (вместо cv2.imread) надёжнее на Windows-путях с кириллицей.
+        from PIL import Image
+        with Image.open(image_path) as pil:
+            w, h = pil.size
 
         yolo_dets = self._yolo.predict(image_path, confidence=confidence)
         df_dets = self._df.predict(image_path, confidence=confidence)

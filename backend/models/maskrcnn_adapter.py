@@ -47,13 +47,17 @@ class MaskRCNNAdapter(ModelAdapter):
         self,
         checkpoint_path: Optional[str] = None,
         device: Optional[str] = None,
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.05,
         mask_threshold: float = 0.5,
         tile_size: int = DEFAULT_TILE_SIZE,
         overlap: int = DEFAULT_OVERLAP,
         single_shot_limit: int = SINGLE_SHOT_LIMIT,
         **kwargs,
     ):
+        # Lowered floor from 0.5 → 0.05 — the adapter used to override any
+        # user-supplied confidence below 0.5 via `max(confidence, 0.5)`, which
+        # produced 0-detection scenes on tiles where MRCNN scores everything
+        # below 0.5. Now the floor is just a safety net against degenerate 0.0.
         super().__init__(
             checkpoint_path=checkpoint_path,
             device=device,

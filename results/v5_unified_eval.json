@@ -1,0 +1,250 @@
+[
+  {
+    "model": "v4_x_clean (champ)",
+    "weights": "weights\\v4_clean\\v4_x_clean_v3val0.313_mergedval0.315.pt",
+    "note": "yolov8x-seg (71M) Ultralytics defaults — new best 0.315",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3192419566151826,
+        "box_map": 0.1280533963551914,
+        "box_p": 0.458341598640554,
+        "box_r": 0.35271317829457366,
+        "mask_map50": 0.28522358948528337,
+        "mask_map": 0.09369399530384262
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.31286693318269376,
+        "box_map": 0.10185467337408108,
+        "box_p": 0.42921481658407806,
+        "box_r": 0.3641851106639839,
+        "mask_map50": 0.2972058962173614,
+        "mask_map": 0.09100670783223155
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.31450622047570037,
+        "box_map": 0.1101576131006963,
+        "box_p": 0.4591693344425376,
+        "box_r": 0.33060750569739183,
+        "mask_map50": 0.2889134786806125,
+        "mask_map": 0.0908104967946219
+      }
+    }
+  },
+  {
+    "model": "exp1_m (tuned)",
+    "weights": "weights\\v3_runs\\exp1_m_cocostart_v3val0.287_mergedval0.308.pt",
+    "note": "yolov8m-seg (27M) v2-proven aug — original 0.308 (lucky run)",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.366467009944124,
+        "box_map": 0.1363340623586567,
+        "box_p": 0.45669173696020515,
+        "box_r": 0.3682170542635659,
+        "mask_map50": 0.3506034365494588,
+        "mask_map": 0.10841444186150861
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.28701394405339625,
+        "box_map": 0.09735291660186189,
+        "box_p": 0.45565883876942825,
+        "box_r": 0.30985915492957744,
+        "mask_map50": 0.2889144023713148,
+        "mask_map": 0.09277034712569213
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.30779757220545767,
+        "box_map": 0.10989131236139885,
+        "box_p": 0.46521783757438384,
+        "box_r": 0.31788079470198677,
+        "mask_map50": 0.3051781121696451,
+        "mask_map": 0.09658895170333467
+      }
+    }
+  },
+  {
+    "model": "v4_m_clean",
+    "weights": "weights\\v4_clean\\v4_m_clean_v3val0.267_mergedval0.291.pt",
+    "note": "yolov8m-seg (27M) Ultralytics defaults — 0.291",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3444383362760383,
+        "box_map": 0.1334070716962551,
+        "box_p": 0.4817192115726724,
+        "box_r": 0.3530508182081422,
+        "mask_map50": 0.32470093937096844,
+        "mask_map": 0.10523005095390114
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.2672013265882225,
+        "box_map": 0.0883091271487522,
+        "box_p": 0.45355892236411915,
+        "box_r": 0.32595573440643866,
+        "mask_map50": 0.2653358508299776,
+        "mask_map": 0.08579318417829088
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.2905888539569991,
+        "box_map": 0.10171003232692992,
+        "box_p": 0.43522317002777505,
+        "box_r": 0.34172185430463575,
+        "mask_map50": 0.2796548337105591,
+        "mask_map": 0.0901841084466868
+      }
+    }
+  },
+  {
+    "model": "exp17 chain random",
+    "weights": "weights\\v3_runs\\exp17_random_chain_3stage_cumulative_v3val0.257_mergedval0.287.pt",
+    "note": "yolov8m-seg 3-stage random chain — 0.287",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3462192823976069,
+        "box_map": 0.138192583658227,
+        "box_p": 0.393220954384016,
+        "box_r": 0.39147286821705424,
+        "mask_map50": 0.32706554766575247,
+        "mask_map": 0.10697006046078827
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.2570621155602629,
+        "box_map": 0.08550329847547855,
+        "box_p": 0.3779814474679279,
+        "box_r": 0.29979879275653926,
+        "mask_map50": 0.25109303058646537,
+        "mask_map": 0.08578432461985655
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.28705120040094956,
+        "box_map": 0.10224917253299162,
+        "box_p": 0.37715253672377674,
+        "box_r": 0.33245033112582784,
+        "mask_map50": 0.2776629047779561,
+        "mask_map": 0.09179950723358488
+      }
+    }
+  },
+  {
+    "model": "exp15 v2v3 only",
+    "weights": "weights\\v3_runs\\exp15_m_v2v3_only_v3val0.291_mergedval0.286.pt",
+    "note": "yolov8m-seg drop-v1 train — 0.286, best v3-val (with v4_x)",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3136729864435844,
+        "box_map": 0.10655857397843249,
+        "box_p": 0.3496085840790237,
+        "box_r": 0.3992248062015504,
+        "mask_map50": 0.2823786741419363,
+        "mask_map": 0.07453052476602282
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.29100367945491107,
+        "box_map": 0.09914095344506525,
+        "box_p": 0.40795834644509343,
+        "box_r": 0.33400402414486924,
+        "mask_map50": 0.2697612051393397,
+        "mask_map": 0.08709795929130254
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.2858375325648463,
+        "box_map": 0.09817614176684633,
+        "box_p": 0.3753839393002698,
+        "box_r": 0.35894039735099337,
+        "mask_map50": 0.265461934648559,
+        "mask_map": 0.07897545593337288
+      }
+    }
+  },
+  {
+    "model": "exp12 low-lr finish",
+    "weights": "weights\\v3_runs\\exp12_m_chain_aggressive_lowlr_v3val0.256_mergedval0.286.pt",
+    "note": "yolov8m-seg exp1.pt → v3-only lr=0.0001 — 0.286",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3368239195864407,
+        "box_map": 0.13385129854409283,
+        "box_p": 0.4228962751008695,
+        "box_r": 0.3449612403100775,
+        "mask_map50": 0.32429588715532903,
+        "mask_map": 0.0966690179270033
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.2563023047754094,
+        "box_map": 0.09147422455765,
+        "box_p": 0.4512270531132569,
+        "box_r": 0.2937625754527163,
+        "mask_map50": 0.2811243113691363,
+        "mask_map": 0.08743666416270415
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.28644975011250223,
+        "box_map": 0.10559133622849234,
+        "box_p": 0.4260465461217399,
+        "box_r": 0.3337748344370861,
+        "mask_map50": 0.2944871662871857,
+        "mask_map": 0.08882833659159364
+      }
+    }
+  },
+  {
+    "model": "v4_s_clean",
+    "weights": "weights\\v4_clean\\v4_s_clean_v3val0.254_mergedval0.281.pt",
+    "note": "yolov8s-seg (12M) Ultralytics defaults — 0.281",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.3291987135703188,
+        "box_map": 0.12350071039892221,
+        "box_p": 0.4507525006194566,
+        "box_r": 0.35271317829457366,
+        "mask_map50": 0.29437719605476664,
+        "mask_map": 0.09278594710176624
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.2537922724426748,
+        "box_map": 0.0860910871154668,
+        "box_p": 0.38660645609549465,
+        "box_r": 0.32595573440643866,
+        "mask_map50": 0.26372636831792307,
+        "mask_map": 0.08561772413395886
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.2809839993446094,
+        "box_map": 0.09794834666325927,
+        "box_p": 0.42287861732730375,
+        "box_r": 0.3218543046357616,
+        "mask_map50": 0.2696388282712452,
+        "mask_map": 0.08512454752377864
+      }
+    }
+  },
+  {
+    "model": "v2-finetune (legacy)",
+    "weights": "weights\\archive\\yolo\\yolo_satellite_v2_finetune.pt",
+    "note": "yolov8x-seg v2 production (pre-v3) — old baseline 0.167",
+    "metrics": {
+      "v2-val (10 tiles, 258 polys)": {
+        "box_map50": 0.36292200549831205,
+        "box_map": 0.12874442226186059,
+        "box_p": 0.4249596740842214,
+        "box_r": 0.39147286821705424,
+        "mask_map50": 0.3208143782019436,
+        "mask_map": 0.10219951700713134
+      },
+      "v3-val (7 tiles, 497 polys)": {
+        "box_map50": 0.08113753607369194,
+        "box_map": 0.02653126671926468,
+        "box_p": 0.21800540533038396,
+        "box_r": 0.158953722334004,
+        "mask_map50": 0.0992883959616851,
+        "mask_map": 0.032035759531194544
+      },
+      "merged (17 tiles, 755 polys)": {
+        "box_map50": 0.16670006942222532,
+        "box_map": 0.05694609896977123,
+        "box_p": 0.2865809996974428,
+        "box_r": 0.2582781456953642,
+        "mask_map50": 0.16926294893888,
+        "mask_map": 0.053799522695085145
+      }
+    }
+  }
+]
