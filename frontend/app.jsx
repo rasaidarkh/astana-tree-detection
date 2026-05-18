@@ -122,6 +122,7 @@ function LeftPanel({
   visibleCount,
   onOpenManager,
   onToggleScanHidden,
+  model, setModel, modelStatus,
 }) {
   const t = (aggregateStats && aggregateStats.total_trees) || 0;
   const s = (aggregateStats && aggregateStats.snapshot_count) || 0;
@@ -141,6 +142,14 @@ function LeftPanel({
   return (
     <aside className="left-panel">
       <div className="lp-scroll">
+
+        {/* ── model picker (shown above scan actions so the user knows
+              which checkpoint will be used) ── */}
+        {!drawing && !hasPending && setModel && modelStatus && (
+          <div style={{ marginBottom: 12 }}>
+            <ModelPicker model={model} setModel={setModel} modelStatus={modelStatus} />
+          </div>
+        )}
 
         {/* ── primary actions ── */}
         {!drawing && !hasPending && (
@@ -794,7 +803,7 @@ function SnapshotCard({ snap, onRename, onDelete }) {
 /* ==================================================================
    Settings popover (top-right, accessed via gear)
    ================================================================== */
-function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, modelStatus, model, setModel, onClose }) {
+function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, modelStatus, model, onClose }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
@@ -805,34 +814,9 @@ function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, mo
   if (!open) return null;
 
   const models = modelStatus?.models || {};
-  // Available models, sorted: yolo* first (детекторы), then others
-  const availableEntries = Object.entries(models).filter(([_, m]) => m.available);
-  const yoloOpts = availableEntries.filter(([k]) => k.startsWith("yolo"));
-  const otherOpts = availableEntries.filter(([k]) => !k.startsWith("yolo"));
-  const orderedOpts = [...yoloOpts, ...otherOpts];
 
   return (
     <div className="settings-popover popover" ref={ref}>
-      <div className="popover-row">
-        <div className="popover-label">Detection model</div>
-        <select
-          className="select-full"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-        >
-          {orderedOpts.map(([k, m]) => (
-            <option key={k} value={k}>
-              {m.name || k}
-            </option>
-          ))}
-        </select>
-        <div className="field-help">
-          Used for all scans and predictions. Switch between YOLO variants to
-          compare quality on different scenes (e.g. v2 is more conservative
-          on unusual surfaces like stadium roofs).
-        </div>
-      </div>
-
       <div className="popover-row">
         <div className="popover-label">Satellite imagery</div>
         <select
@@ -847,24 +831,180 @@ function SettingsPopover({ open, tileProvider, setTileProvider, providersMap, mo
                 <option value="esri">Esri World Imagery</option>
               </>)}
         </select>
-        <div className="field-help">Source for both map display and scan capture.</div>
+        <div className="field-help">
+          Source for both map display and scan capture. The detection model is
+          picked from the sidebar's Detection section, not here.
+        </div>
       </div>
 
       <div className="popover-row">
-        <div className="popover-label">Status</div>
+        <div className="popover-label">Model status</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {Object.entries(models).map(([k, m]) => (
-            <div key={k} className="row" style={{ fontSize: 11 }}>
-              <span className="status-dot" style={{ background: m.available ? "var(--success)" : "var(--text-3)" }}></span>
-              <span style={{ flex: 1, fontWeight: k === model ? 600 : 400 }}>
-                {m.name || k}
-              </span>
-              <span className="muted mono" style={{ fontSize: 10 }}>
-                {k === model ? "selected · " : ""}{m.available ? (m.loaded ? "ready" : "lazy") : "—"}
-              </span>
-            </div>
-          ))}
+          {Object.entries(models)
+            .filter(([k]) => k !== "yolo")
+            .map(([k, m]) => (
+              <div key={k} className="row" style={{ fontSize: 11 }}>
+                <span className="status-dot" style={{ background: m.available ? "var(--success)" : "var(--text-3)" }}></span>
+                <span style={{ flex: 1, fontWeight: k === model ? 600 : 400 }}>
+                  {m.name || k}
+                </span>
+                <span className="muted mono" style={{ fontSize: 10 }}>
+                  {k === model ? "active · " : ""}{m.available ? (m.loaded ? "ready" : "lazy") : "—"}
+                </span>
+              </div>
+            ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================================================================
+   Model picker — hierarchical (family → variant).
+
+   Row 1: family selector (YOLO / DeepForest / Mask R-CNN / Ensemble).
+   Row 2: variant selector inside the active family.
+   Skips Row 2 when family has only one variant (Mask R-CNN, Ensemble).
+   ================================================================== */
+
+// Family definitions — ordered. Each variant has a short pill label;
+// hover-title shows the full backend label with mAP if registered.
+const MODEL_FAMILIES = [
+  {
+    id: "yolo",
+    label: "YOLOv8",
+    variants: [
+      { kind: "yolo_v4_x",    short: "v4 x · champ" },
+      { kind: "yolo_v4_m",    short: "v4 m" },
+      { kind: "yolo_v4_s",    short: "v4 s · fast" },
+      { kind: "yolo_v3_exp1", short: "v3 exp1" },
+      { kind: "yolo_v3_run1", short: "v3 run 1" },
+      { kind: "yolo_v3_run2", short: "v3 run 2" },
+      { kind: "yolo_v2",      short: "v2 legacy" },
+    ],
+  },
+  {
+    id: "deepforest",
+    label: "DeepForest",
+    variants: [
+      { kind: "deepforest_sam2", short: "with SAM 2" },
+      { kind: "deepforest",      short: "boxes only" },
+    ],
+  },
+  {
+    id: "maskrcnn",
+    label: "Mask R-CNN",
+    variants: [
+      { kind: "maskrcnn", short: "R50-FPN v2" },
+    ],
+  },
+  {
+    id: "ensemble",
+    label: "Ensemble",
+    variants: [
+      { kind: "ensemble", short: "WBF (YOLO + DF)" },
+    ],
+  },
+];
+
+// Reverse lookup: ModelKind value → family id
+const KIND_TO_FAMILY = {};
+for (const fam of MODEL_FAMILIES) {
+  for (const v of fam.variants) KIND_TO_FAMILY[v.kind] = fam.id;
+}
+
+function _familyForModel(model) {
+  return KIND_TO_FAMILY[model] || "yolo";
+}
+
+function ModelPicker({ model, setModel, modelStatus }) {
+  const models = modelStatus?.models || {};
+  const currentFamilyId = _familyForModel(model);
+  // Local "shown" family — user can browse other families without
+  // changing the active model until they pick a variant.
+  const [shownFamily, setShownFamily] = useState(currentFamilyId);
+  // Keep shown family in sync if model is changed externally (e.g. user
+  // selects from popover or from a deep link)
+  useEffect(() => { setShownFamily(currentFamilyId); }, [currentFamilyId]);
+
+  const shownDef = MODEL_FAMILIES.find((f) => f.id === shownFamily) || MODEL_FAMILIES[0];
+  const availableVariants = shownDef.variants.filter((v) => models[v.kind]);
+
+  const FamilyBtn = ({ fam }) => {
+    const active = shownFamily === fam.id;
+    const isCurrent = currentFamilyId === fam.id;  // model currently in this family
+    const anyAvail = fam.variants.some((v) => models[v.kind]?.available);
+    return (
+      <button
+        type="button"
+        className={`seg-btn ${active ? "active" : ""}`}
+        onClick={() => setShownFamily(fam.id)}
+        disabled={!anyAvail}
+        style={{ flex: 1, justifyContent: "center", position: "relative" }}
+        title={fam.label}
+      >
+        {fam.label}
+        {isCurrent && !active && (
+          <span
+            style={{
+              position: "absolute", top: 4, right: 6,
+              width: 6, height: 6, borderRadius: "50%",
+              background: "var(--accent)",
+            }}
+            title="model active"
+          />
+        )}
+      </button>
+    );
+  };
+
+  const VariantBtn = ({ v }) => {
+    const m = models[v.kind];
+    const available = !!m?.available;
+    const active = model === v.kind;
+    return (
+      <button
+        type="button"
+        className={`seg-btn ${active ? "active" : ""}`}
+        onClick={() => available && setModel(v.kind)}
+        disabled={!available}
+        style={{ flex: 1, justifyContent: "center", whiteSpace: "nowrap", fontSize: 11 }}
+        title={m?.name || v.kind}
+      >
+        {v.short}
+      </button>
+    );
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div>
+        <div className="field-label">Detector</div>
+        <div
+          className="control-group"
+          style={{ background: "var(--surface-2)", boxShadow: "none", borderColor: "var(--border)", marginTop: 4 }}
+        >
+          {MODEL_FAMILIES.map((fam) => <FamilyBtn key={fam.id} fam={fam} />)}
+        </div>
+      </div>
+
+      {availableVariants.length > 1 && (
+        <div>
+          <div className="field-label">{shownDef.label} variant</div>
+          <div
+            className="control-group"
+            style={{
+              background: "var(--surface-2)", boxShadow: "none", borderColor: "var(--border)",
+              marginTop: 4, flexWrap: "wrap",
+            }}
+          >
+            {availableVariants.map((v) => <VariantBtn key={v.kind} v={v} />)}
+          </div>
+        </div>
+      )}
+
+      <div className="field-help" style={{ marginTop: 2 }}>
+        Active: <b>{models[model]?.name || model}</b>
       </div>
     </div>
   );
@@ -983,18 +1123,7 @@ function ImageSidebar({
           <div className="section">
             <div className="section-title">3 · Detection</div>
             <div className="field">
-              <label className="field-label">Model</label>
-              <select
-                className="select-full"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {Object.entries(modelStatus?.models || {}).map(([k, m]) => (
-                  <option key={k} value={k} disabled={!m.available}>
-                    {m.name || k}{m.available ? "" : " (unavailable)"}
-                  </option>
-                ))}
-              </select>
+              <ModelPicker model={model} setModel={setModel} modelStatus={modelStatus} />
             </div>
             <div className="field">
               <label className="field-label" style={{ display: "flex", justifyContent: "space-between" }}>
@@ -1522,7 +1651,7 @@ function MapLegend({ trees, threshold, filter }) {
 function App() {
   // ---- view ----
   const [view, setView] = useState("map");
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ---- providers ----
@@ -1554,7 +1683,10 @@ function App() {
   const [lastFinishedScan, setLastFinishedScan] = useState(null);
 
   // ---- model + threshold (shared) ----
-  const [model, setModel] = useState("yolo");
+  // Default to v4_x — the actual measured champion across all 28 experiments
+  // (mAP@50 0.315 on merged val, beats prior exp1 0.308). Picker handles
+  // graceful fallback if checkpoint isn't registered.
+  const [model, setModel] = useState("yolo_v4_x");
   const [threshold, setThreshold] = useState(0.25);
   const [filter, setFilter] = useState({ high: true, med: true, low: true });
   const [displayMode, setDisplayMode] = useState("point");
@@ -1595,6 +1727,22 @@ function App() {
       .then(setModelStatus)
       .catch((e) => setModelStatus({ models: {}, _error: e?.message || "down" }));
   }, []);
+
+  // Fallback model selection — if backend doesn't have the default model
+  // (e.g. running an older version without v4_x_clean registered), pick the
+  // first available variant from MODEL_FAMILIES priority order.
+  useEffect(() => {
+    if (!modelStatus?.models) return;
+    if (modelStatus.models[model]?.available) return;  // current is OK
+    for (const fam of MODEL_FAMILIES) {
+      for (const v of fam.variants) {
+        if (modelStatus.models[v.kind]?.available) {
+          setModel(v.kind);
+          return;
+        }
+      }
+    }
+  }, [modelStatus, model]);
 
   const refreshAggregate = useCallback(async () => {
     setAggLoading(true);
@@ -1861,7 +2009,7 @@ function App() {
         tileProvider={tileProvider} setTileProvider={setTileProvider}
         providersMap={providersMap}
         modelStatus={modelStatus}
-        model={model} setModel={setModel}
+        model={model}
         onClose={() => setSettingsOpen(false)}
       />
 
@@ -1901,6 +2049,7 @@ function App() {
             visibleCount={visibleCount}
             onOpenManager={() => setManagerOpen(true)}
             onToggleScanHidden={handleToggleScanHidden}
+            model={model} setModel={setModel} modelStatus={modelStatus}
           />
         )}
 

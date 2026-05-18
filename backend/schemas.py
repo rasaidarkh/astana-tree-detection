@@ -9,11 +9,14 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ModelKind(str, Enum):
-    YOLO = "yolo"                            # current production (= best of v3 experiments)
-    YOLO_V2 = "yolo_v2"                      # v2-finetune (pre-v3, conservative, fewer FP)
-    YOLO_V3_RUN1 = "yolo_v3_run1"            # v3 run1 (yolov8x-seg, val=v3-only)
-    YOLO_V3_RUN2 = "yolo_v3_run2"            # v3 run2 (cleaner aug, plateau ep5)
-    YOLO_V3_EXP1 = "yolo_v3_exp1"            # v3 exp1: yolov8m-seg from COCO — Box mAP50 0.308 (new prod)
+    YOLO = "yolo"                            # generic alias (= weights/yolo_satellite.pt, hidden from UI)
+    YOLO_V2 = "yolo_v2"                      # v2-finetune (pre-v3, mAP@50 0.187)
+    YOLO_V3_RUN1 = "yolo_v3_run1"            # v3 run1 yolov8x (mAP@50 0.268)
+    YOLO_V3_RUN2 = "yolo_v3_run2"            # v3 run2 yolov8x (mAP@50 0.246)
+    YOLO_V3_EXP1 = "yolo_v3_exp1"            # v3 exp1 yolov8m from COCO (mAP@50 0.308)
+    YOLO_V4_X = "yolo_v4_x"                  # v4 yolov8x defaults — CHAMPION (mAP@50 0.315)
+    YOLO_V4_M = "yolo_v4_m"                  # v4 yolov8m defaults (mAP@50 0.291)
+    YOLO_V4_S = "yolo_v4_s"                  # v4 yolov8s defaults (mAP@50 0.281)
     DEEPFOREST = "deepforest"
     ENSEMBLE = "ensemble"
     DEEPFOREST_SAM2 = "deepforest_sam2"

@@ -100,6 +100,7 @@ img, svg { display: block; max-width: 100%; }
   --text-1:          #FAFAF9;
   --text-2:          #A8A29E;
   --text-3:          #78716C;
+  --text-inv:        #0C0A09;
   --border:          #292524;
   --border-strong:   #44403C;
   --border-hover:    #57534E;
@@ -416,6 +417,45 @@ img, svg { display: block; max-width: 100%; }
   transition: all 150ms ease;
 }
 .chip-btn:hover { background: var(--border); }
+
+/* ---------- Model picker (2-column grid of chips) ---------- */
+.model-chip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+.model-chip {
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: all 120ms ease;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.model-chip:hover:not(:disabled):not(.active) {
+  color: var(--text-1);
+  background: var(--border);
+  border-color: var(--border-hover);
+}
+.model-chip.active {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 110, 86, 0.25);
+}
+.model-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* ---------- Filter popover ---------- */
 .popover {

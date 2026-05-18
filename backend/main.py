@@ -175,13 +175,13 @@ def _load_models() -> None:
     _register_yolo_variant(
         WEIGHTS / "archive" / "yolo" / "yolo_satellite_v2_finetune.pt",
         ModelKind.YOLO_V2,
-        "YOLOv8-seg v2-finetune (conservative, pre-v3)",
+        "YOLOv8x · v2-finetune (mAP@50 0.187)",
     )
     # v3 run1 / run2 / exp1 — все архивы в weights/v3_runs/.
     for pattern, kind, label in [
-        ("v3_finetune_run1_*.pt", ModelKind.YOLO_V3_RUN1, "YOLOv8x-seg v3 run1 (val=v3-only)"),
-        ("v3_finetune_run2_*.pt", ModelKind.YOLO_V3_RUN2, "YOLOv8x-seg v3 run2 (cleaner aug, val=merged)"),
-        ("exp1_m_cocostart_*.pt", ModelKind.YOLO_V3_EXP1, "YOLOv8m-seg v3 exp1 (COCO start, Box mAP50 0.308)"),
+        ("v3_finetune_run1_*.pt", ModelKind.YOLO_V3_RUN1, "YOLOv8x · v3 run 1 (mAP@50 0.268)"),
+        ("v3_finetune_run2_*.pt", ModelKind.YOLO_V3_RUN2, "YOLOv8x · v3 run 2 (mAP@50 0.246)"),
+        ("exp1_m_cocostart_*.pt", ModelKind.YOLO_V3_EXP1, "YOLOv8m · v3 exp1 tuned (mAP@50 0.308)"),
     ]:
         matches = sorted((WEIGHTS / "v3_runs").glob(pattern))
         if matches:
@@ -189,6 +189,17 @@ def _load_models() -> None:
             real = [m for m in matches if "PROD_BACKUP" not in m.name]
             if real:
                 _register_yolo_variant(real[0], kind, label)
+
+    # v4 clean sweep — Ultralytics defaults, без manual tuning. v4_x_clean это
+    # фактический CHAMPION (mAP@50 0.315) — best single-model на merged val.
+    for pattern, kind, label in [
+        ("v4_x_clean_*.pt", ModelKind.YOLO_V4_X, "YOLOv8x · v4 champion (mAP@50 0.315)"),
+        ("v4_m_clean_*.pt", ModelKind.YOLO_V4_M, "YOLOv8m · v4 (mAP@50 0.291)"),
+        ("v4_s_clean_*.pt", ModelKind.YOLO_V4_S, "YOLOv8s · v4 fast (mAP@50 0.281)"),
+    ]:
+        matches = sorted((WEIGHTS / "v4_clean").glob(pattern))
+        if matches:
+            _register_yolo_variant(matches[0], kind, label)
 
     df_ckpt = WEIGHTS / "deepforest_astana.pl"
     df = DeepForestAdapter(checkpoint_path=str(df_ckpt) if df_ckpt.exists() else None)
