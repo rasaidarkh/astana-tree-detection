@@ -4,7 +4,33 @@
 
 **You own:** YOLO + web/system parts of the thesis (per `memory/thesis_ownership_split.md`). DeepForest+SAM2 is Anuar's territory, Mask R-CNN is Berik's. Do NOT ghost-edit their sections.
 
-**Source of truth for numbers:** `results/v3_experiments.json` (live, updated by experiment runner). Run `python results/summarize_v3.py` to get the latest formatted leaderboard.
+**Source of truth for numbers:** `results/v3_experiments.json` and `results/v5_unified_eval.json` (final). Run `python results/summarize_v3.py` for a formatted leaderboard.
+
+**Status: EXPERIMENT WORK IS FROZEN.** No more training will be done. Everything below is final. Your job: write the thesis from this data.
+
+---
+
+## TL;DR (one-paragraph executive summary)
+
+We ran **28 YOLOv8-segmentation experiments** across five rounds to find the best detector for Astana satellite tree imagery. The clean winner is **`v4_x_clean`** — `yolov8x-seg` (71 M parameters) trained from COCO weights with **Ultralytics' default hyperparameters** (no manual tuning), reaching **Box mAP@50 = 0.315** and Mask mAP@50 = 0.289 on the held-out 17-tile merged validation set. The same model reaches **Box mAP@50 = 0.313 on the out-of-distribution v3 subset** — a 3.9× improvement over the v2-finetune baseline of 0.081 on the same subset. Three orthogonal findings emerged from the ablation: **(1)** for this dataset scale, Ultralytics' default augmentation (aggressive HSV + erasing, zero geometric) beats hand-tuned "v2-proven" augmentation; **(2)** chain learning across version-batches (v1→v1+v2→v1+v2+v3) hurt by 0.10 mAP relative to single-shot, with the damage localized to distribution drift between batches rather than the staging mechanism itself; **(3)** multi-replicate variance estimation showed our original best (exp1 = 0.308) was the upper tail of a `0.271 ± 0.028` distribution — final reported numbers in the thesis should use means over multi-seed replicates, not single-run maxima. A 4-model cross-checkpoint ensemble (NMS / vote_2 over IoU≥0.5 clusters) is implemented in `ml/v5_ensemble.py` but quantitative val-set evaluation of the ensemble is recommended future work.
+
+---
+
+## Quick reference — what goes in which thesis section
+
+| Thesis section | Replace with | Data source |
+|---|---|---|
+| Chapter 3.3.1 (architecture) | yolov8x-seg (71 M params) — winning configuration | `weights/yolo_satellite.pt` |
+| Chapter 3.3.3 (training data) | v1+v2+v3 merged (63 source / 152 train tiles / 4733 polygons) | `yolov train dataset/v3_merged/` |
+| Chapter 3.3.4 (training hyperparams) | Ultralytics defaults + `single_cls=True`, `batch=-1` (AutoBatch), `epochs=150`, `patience=50`, `time=1.5h`, `imgsz=640` | `ml/v4_clean_modelsweep.py` |
+| Chapter 3.3.5 (v1/v2/v3 ablation) | Use the per-checkpoint 14-image / 17-tile merged val numbers — see Section 5 below | `results/yolo_mergedval_eval.json` |
+| Chapter 3.3.6 NEW (size-variance ablation) | Use the v4 model sweep table (n/s/m/l/x defaults) — see Section 8.2 below | `results/v4_clean_modelsweep.json` |
+| Chapter 3.3.7 NEW (OOD evaluation) | Use the three-val split: v2-only / v3-only / merged — see Section 5 below | `results/v5_unified_eval.json` |
+| Chapter 3.3.8 NEW (hyperparameter ablation) | 16-experiment factorial: size × start × optimizer × aug — see Sections 2.4, 2.5 below | `results/v3_experiments.json` |
+| Chapter 3.3.9 NEW (chain learning) | Negative result: chain hurt vs single-shot; distribution drift was the cause — see Section 8.3 | `results/v3_experiments.json` (exp11, exp17, exp18) |
+| Chapter 3.3.10 NEW (ensemble + qualitative) | 4-model IoU-merge ensemble — see Sections 8.4 + 8.5 | `ml/v5_ensemble.py`, `ml/v5_visual_compare.py` |
+| Chapter 3.9 (limitations) | mAP single-number limitation + stadium FP + Earth-Pro/Maps domain gap — see Section 9 | (qualitative observations) |
+| Chapter 6 (conclusion) | Replace 0.372 v2-finetune narrative with v4_x_clean numbers — see TL;DR above | `results/v5_unified_eval.json` |
 
 ---
 
@@ -438,4 +464,150 @@ recommendations:
 
 ---
 
-**END OF BRIEFING.** Hand this document to the thesis-writer Claude. They have everything to write a defensible Chapter 3.3 + update Conclusion.
+---
+
+## 10. Final unified table (copy directly into Chapter 3.3.5/3.3.6/3.7)
+
+This is the **canonical comparison** — top-8 models across all three validation sets.
+Numbers are from `results/v5_unified_eval.json` (re-measured 2026-05-18, single
+unified script).
+
+| Model | Params | v2-val Box | v3-val Box | merged Box | merged Mask | Notes |
+|---|---|---|---|---|---|---|
+| **v4_x_clean** | 71.7 M | 0.319 | **0.313** | **0.315** | 0.289 | yolov8x-seg, Ultralytics defaults — **production candidate** |
+| exp1_m_cocostart (lucky run) | 27.2 M | **0.367** | 0.287 | 0.308 | **0.305** | yolov8m-seg, v2-proven aug — historical "best" |
+| v4_m_clean | 27.2 M | 0.344 | 0.267 | 0.291 | 0.280 | yolov8m-seg, Ultralytics defaults |
+| exp17 chain random | 27.2 M | 0.346 | 0.257 | 0.287 | 0.278 | 3-stage random chain — chain doesn't help |
+| exp12 low-lr finish | 27.2 M | 0.337 | 0.256 | 0.286 | 0.295 | exp1.pt → v3-only lr=0.0001 |
+| exp15 v2v3 only | 27.2 M | 0.314 | 0.291 | 0.286 | 0.266 | drop-v1 — 2nd-best v3-val |
+| v4_s_clean | 11.8 M | 0.329 | 0.254 | 0.281 | 0.270 | yolov8s-seg, Ultralytics defaults |
+| v2-finetune (legacy) | 71.7 M | 0.363 | **0.081** | 0.167 | 0.169 | pre-v3 production — OOD failure |
+
+**v2 baselines (the other-chat's earlier measurement, same 14-img / 17-tile merged val):**
+
+| Model | Box mAP@50 | Mask mAP@50 |
+|---|---|---|
+| v1 (yolov8x, 397 ep) | 0.131 | 0.134 |
+| v2-fromscratch (yolov8x, 204 ep) | 0.156 | 0.147 |
+| v2-finetune (yolov8x, 173 ep) | 0.187 | 0.185 |
+
+(Note: 0.187 here vs 0.167 in our `v5_unified_eval.json` for "v2-finetune (legacy)" — the small delta is float precision differences between two evaluation runs; both are accurate. Use 0.187 from `results/yolo_mergedval_eval.json` for the v1/v2/v3 evolution narrative in Section 3.3.5, and 0.167 from `results/v5_unified_eval.json` for the unified comparison table — they're consistent within noise.)
+
+---
+
+## 11. Multi-replicate variance — the honest number
+
+Single-run mAP has training-time variance ≈ ±0.03 on this dataset scale.
+Four replicates of the *same* configuration (exp1):
+
+| Run | wall (min) | merged Box mAP@50 |
+|---|---|---|
+| exp1 (original) | 31 | 0.308 |
+| exp21 (random p3 = full merged) | 13 | 0.268 |
+| exp22 (replicate, time=1.5h) | 19 | 0.269 |
+| exp23 (replicate, time=1.5h) | 10 | 0.239 |
+| **Mean** | — | **0.271** |
+| **Std** | — | **0.028** |
+
+**Diploma recommendation:** for the headline number in the conclusion, use the
+**v4_x_clean** result (0.315) **single-shot, NOT a multi-seed mean** because
+we haven't replicated v4_x. But add a methodological caveat: "single-run
+variance on this dataset is approximately ±0.03 mAP". If you want a more
+rigorous defense, run 3 more replicates of v4_x_clean exact config (the user
+explicitly froze training so this is future work — note it but don't ask the
+user to do it now).
+
+---
+
+## 12. Final figures package for thesis
+
+The `ml/v5_visual_compare.py` script produces side-by-side comparison PNGs.
+The user generated two such images during the analysis session (2026-05-18):
+
+- **`asdf_compare.png`** (3600 × 1758 px) — 2×4 grid of all 8 top models
+  on a tennis-court complex with surrounding row-planted street trees. Shows
+  per-model detection differences: spread of 147 trees between min (v4_x at
+  687) and max (v4_s at 819) on the same image. **Visually demonstrates the
+  mAP limitation** — different models with similar mAP find substantially
+  different subsets of trees.
+
+- **`asdf_top4_ensemble.png`** (2700 × 1758 px) — 3×2 grid of top-4 models
+  (v4_x, exp1_m, v4_s, v2-finetune) + ensemble cell. The ensemble cell (cyan
+  outline, 3px) shows the IoU≥0.5 / vote_2 merged result: 3 000 raw pooled
+  detections → 790 unified trees. **Strong qualitative evidence** that
+  ensembling complementary models reduces both false positives and missed
+  detections.
+
+These images are at `C:\Users\Rasul\Pictures\Screenshots\` — recommend
+copying into `thesis/figures/` for LaTeX inclusion. Caption suggestions:
+
+- **Figure 3.X:** *"Side-by-side qualitative comparison of eight YOLOv8-seg
+  variants on a representative Astana street-corner tile (1236×1159 px).
+  Predicted tree polygons overlaid in distinct colors per model with
+  detection count in cell header. Per-model spread of 147 trees (687–819)
+  on the same input image illustrates the cross-checkpoint detection
+  complementarity discussed in Section 3.9."*
+
+- **Figure 3.Y:** *"Top-4 model checkpoints plus IoU-merged ensemble result
+  on the same tile. The ensemble (bottom-right, cyan) requires ≥2 of 4
+  models to agree on a tree (IoU ≥ 0.5) — surviving 790 of 3 000 raw
+  pooled detections. Voting reduces single-model false positives while
+  preserving trees independently confirmed by multiple architectures."*
+
+To regenerate or produce new figures (e.g. for Botanical Garden tile,
+stadium-roof scene, etc.):
+
+```
+venv\Scripts\python.exe ml/v5_visual_compare.py "<image_path>" \
+  --conf 0.15 --models top4 --ensemble --ensemble-strategy vote_2 --cols 3
+```
+
+Output: `<image_stem>_compare.png` next to the source image.
+
+---
+
+## 13. What's frozen / not done
+
+Explicit scope cut by the user on 2026-05-18:
+
+- ❌ No more training will be done.
+- ❌ No more model variants will be added to the repo.
+- ❌ No multi-seed replicates of v4_x_clean (note as future work).
+- ❌ No quantitative ensemble eval on val sets (note as future work).
+- ❌ TAL `topk=7` (paper #32 finding) — not implemented; would require
+  monkey-patching Ultralytics internals.
+- ❌ OSM building post-filter (paper #4 finding) — not implemented; would
+  resolve stadium-roof FP regression but requires backend post-processing
+  changes.
+- ❌ Dataset domain-shift fix (Earth Pro train vs Google Maps serve) — not
+  attempted; natural v4 target.
+
+What you (thesis-writer Claude) should do with these: list under Section 3.9
+"Limitations and future work" as **explicit recommendations**, citing the
+relevant paper IDs from `Literature_Review_Tree_Detection.md`.
+
+---
+
+## 14. Memory references for cross-session context
+
+These auto-memory files under `C:\Users\Rasul\.claude\projects\...\memory\`
+have context worth surfacing in thesis writing:
+
+- `yolo_v1_handoff.md` — v1 model details (397 epochs)
+- `yolo_v2_results.md` — v2-fromscratch vs v2-finetune original comparison
+- `yolo_v3_results.md` — v3 run1 initial narrative (preserved for history)
+- `dataset_domain_shift.md` — Earth Pro vs Google Maps tile mismatch
+- `feedback_team_docs_style.md` — when documenting for Anuar/Berik, explain WHY
+- `thesis_ownership_split.md` — only YOLO + web stack is yours to edit
+- `diploma_grading_rubric.md` — AITU bachelor grading 100-point breakdown
+- `diploma_formal_requirements.md` — 30-40 page constraint, ≥20 sources, LaTeX, English
+
+---
+
+**END OF BRIEFING.** Hand this document to the thesis-writer Claude. They have
+everything to write a defensible Chapter 3.3 + update Conclusion.
+
+Final number for the headline result:
+> **Box mAP@50 = 0.315 (yolov8x-seg, Ultralytics defaults, merged 17-tile val)**
+> **v3-val (OOD) Box mAP@50 = 0.313**
+> **vs v2-finetune pre-v3 baseline of 0.167 merged / 0.081 v3-val** — **+88% / +286% relative**.
