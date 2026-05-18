@@ -2192,7 +2192,45 @@ function App() {
 }
 
 /* ==================================================================
+   Error boundary — turns silent white-screen crashes into visible errors
+   ================================================================== */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, info: null };
+  }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    this.setState({ info });
+    console.error("[ErrorBoundary] caught:", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          padding: 24, fontFamily: "monospace",
+          background: "#1c1917", color: "#fef3c7",
+          minHeight: "100vh", whiteSpace: "pre-wrap",
+        }}>
+          <h2 style={{ color: "#fca5a5" }}>UI crashed — please send this to Claude</h2>
+          <div style={{ marginTop: 12 }}>
+            <b>Error:</b> {String(this.state.error)}
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <b>Component stack:</b>
+            <div style={{ fontSize: 11, opacity: 0.8, marginTop: 4 }}>
+              {this.state.info?.componentStack || "(no stack)"}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* ==================================================================
    Mount
    ================================================================== */
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+root.render(<ErrorBoundary><App /></ErrorBoundary>);
