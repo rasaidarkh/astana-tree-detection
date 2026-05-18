@@ -575,9 +575,7 @@ The 3 000-to-790 reduction is dominated by cross-checkpoint duplicates — most 
 
 A full quantitative M14 evaluation of this ensemble — Box mAP@50 versus the individual checkpoints in Table 3.5 — is currently in progress at the time of writing and is reported in Section 3.7.5 of the next thesis revision. The implementation itself is production-ready and the option is selectable from the frontend at runtime.
 
-### 3.7.5 Cross-model comparison with the literature
-
-### 3.7.4 Comparison with the literature
+### 3.7.5 Comparison with the literature
 
 Table 3.6 contextualises the obtained numbers against the published baselines compiled in Chapter 1.
 
