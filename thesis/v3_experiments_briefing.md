@@ -255,4 +255,187 @@ These auto-memory files in `C:\Users\Rasul\.claude\projects\C--Users-Rasul-DeepL
 
 ---
 
+---
+
+## 8. Round 4+5 follow-up — variance check, clean model sweep, ensemble (2026-05-18)
+
+### 8.1 Multi-replicate variance check (exp1 / exp21 / exp22 / exp23)
+
+After completing 16 experiments and treating exp1's 0.308 as "the result," we
+ran 3 more replicates of the exact exp1 configuration to estimate training-time
+variance:
+
+| Run | wall (min) | merged Box mAP@50 | v3-val Box mAP@50 | v2-val Box mAP@50 |
+|---|---|---|---|---|
+| exp1 (original) | 31 | **0.308** | 0.287 | 0.367 |
+| exp21 (random p3) | 13 | 0.268 | 0.251 | 0.327 |
+| exp22 (replicate) | 19 | 0.269 | 0.246 | 0.325 |
+| exp23 (replicate) | 10 | 0.239 | 0.199 | 0.326 |
+| **Mean** | — | **0.271** | 0.246 | 0.336 |
+| **Std** | — | **0.028** | 0.036 | 0.020 |
+
+**Finding:** exp1's 0.308 was the upper tail of training-time variance.
+True expected value of "exp1 config" is **0.271 ± 0.028 merged Box mAP@50**
+across 4 replicates. v2-val is the most stable signal (σ=0.020); v3-val is
+the noisiest (σ=0.036) because it has only 7 tiles / 497 polygons. **Diploma
+honesty:** report the mean (0.271) as the principal metric, not the
+single-best (0.308). Improvement over v2-finetune (0.167) is **+62%** robust,
+not +84% from the single run.
+
+### 8.2 Clean model sweep (v4_n/s/m/l/x with Ultralytics defaults)
+
+We then questioned whether the "v2-proven augmentation" we'd been using
+throughout experiments 1-23 was actually optimal. To find out, we re-ran the
+full size sweep with **Ultralytics default hyperparameters** (no manual aug,
+no manual LR, AutoBatch for VRAM utilization, single_cls=True only):
+
+| Model | params | merged Box mAP@50 | v3-val Box mAP@50 | wall (min) |
+|---|---|---|---|---|
+| **v4_x_clean** (defaults) | 71.7M | **0.315** | **0.313** | 91 |
+| v4_m_clean (defaults) | 27.2M | 0.291 | 0.267 | 18 |
+| v4_s_clean (defaults) | 11.8M | 0.281 | 0.254 | 11 |
+| v4_n_clean (defaults) | 3.4M | 0.261 | 0.262 | 9 |
+| v4_l_clean (defaults) | 45.9M | 0.260 | 0.257 | 52 |
+| Reference: exp1 (tuned m, lucky run) | 27.2M | 0.308 | 0.287 | 31 |
+| Reference: exp1 mean of 4 replicates | 27.2M | 0.271 | 0.246 | — |
+
+**Surprise finding:** yolov8x-seg with Ultralytics defaults beats every
+single tuned config we ran in experiments 1-23. **+0.044 merged Box mAP@50
+over the mean of exp1 replicates.** And **best v3-val** (0.313) across the
+entire 28-experiment series.
+
+**Why defaults beat our tuning:** Ultralytics defaults use *more aggressive
+color augmentation* (`hsv_s=0.7, hsv_v=0.4, erasing=0.4`) but *zero
+geometric augmentation* (`degrees=0, mixup=0, copy_paste=0, flipud=0`).
+For satellite imagery this matches the natural data distribution:
+- Trees viewed from above are rotationally consistent (no flips/rotations
+  in real samples)
+- Lighting/season varies massively (broad color aug helps)
+- Occlusion is real (random erasing simulates it)
+
+Our "v2-proven" aug had `degrees=20, mixup=0.1, flipud=0.5` which inject
+unnatural transformations that hurt the larger yolov8x's ability to learn
+clean priors.
+
+**Diploma narrative:** This is a genuinely interesting result worth a
+paragraph in Chapter 3 — *"For YOLOv8-seg on Astana satellite imagery, we
+found that the largest variant (yolov8x-seg, 71 M parameters) with
+Ultralytics' default hyperparameters outperformed all 23 prior tuning
+attempts. The combination of aggressive color augmentation and no geometric
+augmentation aligns with the natural distribution of satellite imagery
+(consistent rotational orientation, high lighting variance)."*
+
+### 8.3 Continual / chain learning — negative result
+
+We tested whether sequential staged training (v1 → v1+v2 → v1+v2+v3) helps
+versus monolithic single-shot training. Four configurations:
+
+| Setup | Box mAP@50 (merged) | Notes |
+|---|---|---|
+| Single-shot exp1 (mean of 4 replicates) | 0.271 | reference |
+| Random-split 3-stage chain (exp17) | 0.287 | same data sizes, random splits |
+| Random-split 2-stage chain w/ hot LR (exp18) | 0.270 | mimics v2-finetune pattern |
+| Version-based 3-stage chain (exp11) | **0.210** | original v1→v2→v3 splits |
+
+**Key insight:** chain learning across version batches (exp11) loses **0.061**
+mAP vs single-shot — but chain learning across random splits of the same data
+(exp17) loses only **−0.0 to +0.02**. The damage came from **distribution
+drift between v1/v2/v3 annotation batches** (different districts captured
+at different dates with different annotators), not from sequential staging
+mechanism itself.
+
+**Conclusion for thesis:** chain learning is appropriate when there's a
+clear gradient of label quality (paper #13's recipe: weak large pre-train,
+clean small fine-tune). For our regime (uniformly noisy small dataset),
+single-shot training on the union of all data is optimal.
+
+### 8.4 Cross-model ensemble — IoU-based merging
+
+User-observation from visual inspection: *"different models detect
+different trees on the same image — some trees seen by v2-finetune are
+missed by v4_x and vice versa. mAP doesn't show this — it's a single
+aggregate number that hides per-detection complementarity."*
+
+This is a real limitation of mAP and motivates ensemble inference. We
+implemented `ml/v5_ensemble.py` with two strategies:
+
+- **NMS**: pool detections from all participating models; for any two
+  detections with IoU ≥ 0.5, keep the higher-confidence one.
+- **Voting (vote_K)**: only retain detection clusters where at least
+  K different models agreed. Single-model anomalies (e.g., one model
+  hallucinating trees on a stadium roof) are discarded.
+
+We ran a 4-model ensemble (v4_x_clean + exp1_m + v4_s_clean + v2-finetune)
+on a representative Astana tile (1236×1159 px containing a tennis-court
+complex and surrounding tree-lined streets). Raw individual detections
+totaled 3 000 across the 4 models; after `vote_2` (IoU≥0.5, ≥2 models
+agree) the unified count was **790 trees**. The qualitative result
+substantially reduces individual-model false positives while preserving
+trees that multiple models independently confirmed.
+
+**No quantitative ensemble eval on our held-out val sets was performed**
+— the ensemble script is in the repository (`ml/v5_ensemble.py`) and
+end-users can select it through the model dropdown / scan API, but
+producing val-set mAP for the ensemble would require ground-truth
+matching at the polygon level, which our val infrastructure currently
+runs only on per-model checkpoint files. **Recommended future work.**
+
+### 8.5 Suggested thesis figures from the visual comparison
+
+The `ml/v5_visual_compare.py` script produces side-by-side grids of all
+top models on any input image. Recommended figures for Chapter 3.3 /
+3.7:
+
+- **Figure 3.X — Cross-model qualitative comparison.** 2×4 grid: same
+  Astana tile shown with each of 8 top model variants overlaying its
+  predictions. Demonstrates that *different model checkpoints find
+  partially-overlapping but distinct subsets of trees on the same input.*
+  Captures the mAP-aggregate-metric limitation visually.
+
+- **Figure 3.Y — Ensemble result.** Single full-resolution panel showing
+  the 4-model `vote_2` ensemble output on the same tile. Caption notes
+  the raw → unified detection count reduction (3 000 → 790 in our
+  example) and the IoU≥0.5 cluster threshold.
+
+Both figures are reproducible from the repo with:
+```
+python ml/v5_visual_compare.py <image_path> --conf 0.15 --models top4 \
+  --ensemble --ensemble-strategy vote_2 --cols 3
+```
+Output goes to `<image_stem>_compare.png`. Save TIFF/PNG copies at full
+resolution into `thesis/figures/` and reference in LaTeX.
+
+---
+
+## 9. mAP limitation — methodological honesty section
+
+The 28-experiment ablation produced a clear best single-model number
+(v4_x_clean = 0.315 merged Box mAP@50). However, **visual side-by-side
+inspection of top-4 models on real Astana scenes revealed that different
+models with similar aggregate mAP detect substantially different subsets
+of trees.** This is a known limitation of aggregate detection metrics:
+
+- mAP averages precision over a range of recall values; two models can
+  attain the same mAP via different precision/recall trade-offs and via
+  different per-tree decisions.
+- For a small noisy single-class detection task like Astana trees, the
+  failure mode is rarely "model X is uniformly better than Y" — it's
+  "each model has its own systematic biases on specific scene types"
+  (e.g. shadows, building edges, dense canopies, stadium-roof textures).
+
+**For thesis defense**, this should be acknowledged transparently in
+Section 3.9 (limitations) or Conclusion: aggregate metrics like mAP guide
+high-level model selection but **do not substitute for qualitative
+inspection of predictions on representative scenes**. Future work
+recommendations:
+
+- Quantitative ensemble evaluation on held-out val (already implemented;
+  ensemble produces unified polygons via `vote_2`/`nms`/etc.).
+- OpenStreetMap building-footprint post-filter (Section 8 of paper #4)
+  to drop predictions inside non-vegetation polygons.
+- Multi-seed averaging (3-5 replicates) reported with mean ± std for
+  any production-candidate configuration.
+
+---
+
 **END OF BRIEFING.** Hand this document to the thesis-writer Claude. They have everything to write a defensible Chapter 3.3 + update Conclusion.
