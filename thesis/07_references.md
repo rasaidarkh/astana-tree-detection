@@ -48,7 +48,7 @@
 
 24. **Huerta R. E., Yépez F. D., Lozano-García D. F., Guerra Cobián V. H., Ferriño Fierro A. L., de León Gómez H., Cavazos González R. A., Vargas-Martínez A.** Mapping Urban Green Spaces at the Metropolitan Level Using Very High Resolution Satellite Imagery and Deep Learning Techniques for Semantic Segmentation. *Remote Sensing*, 2021, vol. 13, no. 11, art. 2031.
 
-25. **Ravi N., Gabeur V., Hu Y.-T., Hu R., Ryali C., Ma T., Khedr M., Rädle R., Rolland C., Gustafson L., Mintun E., Pan J., Alwala K. V., Carion N., Wu C.-Y., Girshick R., Dollár P., Feichtenhofer C.** SAM 2: Segment Anything in Images and Videos. *arXiv preprint*, 2024, arXiv:2408.00714. Meta AI Research.
+25. **Kirillov A., Mintun E., Ravi N., Mao H., Rolland C., Gustafson L., Xiao T., Whitehead S., Berg A. C., Lo W.-Y., Dollár P., Girshick R.** Segment Anything. *arXiv preprint*, 2023, arXiv:2304.02643. Meta AI Research.
 
 26. **Solovyev R., Wang W., Gabruseva T.** Weighted Boxes Fusion: Ensembling Boxes from Different Object Detection Models. *Image and Vision Computing*, 2021, vol. 107, art. 104117.
 

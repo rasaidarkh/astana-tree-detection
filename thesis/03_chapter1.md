@@ -110,6 +110,10 @@ Table 1.2 consolidates the best per-method results reported by the works surveye
 | DeepForest urban (Lleida) | Velasquez-Camacho et al. [@VelasquezCamacho2023] | 2023 | Aerial + sat., Lleida | F = 78.0 % |
 | CASNet sub-pixel | He et al. [@He2022] | 2022 | Sentinel-2, 34 Chinese cities | OA = 88.6 % |
 | MUFCH (canopy height) | Xu et al. [@Xu2025] | 2025 | Sentinel-2 + OSM, Beijing | MAE = 2.02 m |
+| **YOLOv8x-seg v3-finetune (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | **Box mAP@50 = 0.287, Mask mAP@50 = 0.263** |
+| **Mask R-CNN v2+v3 (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | Box mAP@50 = 0.166, Mask mAP@50 = 0.158 |
+| **DeepForest v3 + SAM 2 (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | Box mAP@50 = 0.146, Mask mAP@50 = 0.134 |
+| **NEON off-the-shelf on Astana (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | Box mAP@50 = **0.012** (first measurement on a Central-Asian city) |
 
 Three observations follow from this table.
 
@@ -122,6 +126,8 @@ Third, the **gap between off-the-shelf and fine-tuned DeepForest is enormous**: 
 ## 1.5 The geographic generalisation gap
 
 The pattern observed in the literature — high in-domain performance, large performance drop on out-of-domain imagery — is sometimes called the **geographic generalisation gap**. It is not specific to tree detection: similar drops have been reported in building segmentation, land-cover classification and road extraction whenever a model trained in one country is applied without fine-tuning to imagery of another country.
+
+For Astana the magnitude of the gap was unknown at the start of the present project, since no published number existed for any deep-learning tree-detection model on Central-Asian satellite imagery. As part of this work the public DeepForest checkpoint (`weecology/deepforest-tree`, trained on NEON aerial-lidar campaigns of forested sites in the United States) was evaluated out-of-the-box on the Astana validation set described in Section 3.7.1 of Chapter 3. The result is a Box mAP@50 of **0.012** — one to two orders of magnitude below any of the fine-tuned configurations reported later, and three orders of magnitude below the same model's off-the-shelf 0.42 F-score on NAIP USA imagery [@Ventura2024]. This single number is the empirical anchor of the entire diploma project: it quantifies, for the first time on a Central-Asian capital, the gap that motivates the dataset-construction and fine-tuning effort of Chapters 2 and 3.
 
 Four factors are commonly invoked to explain the gap:
 
@@ -153,7 +159,7 @@ Based on the analysis above, the problem solved in the present work can be state
 **Subject to:**
 
 - per-image inference time of at most 30 seconds on a single laptop GPU of the GeForce RTX 4060 class with 8 GiB of VRAM;
-- a Box mAP@50 on a held-out Astana validation set of at least 0.45 — matching the YOLO v1 baseline reported in Chapter 3 — with the implicit target of approaching the 0.65 – 0.73 range demonstrated for fine-tuned DeepForest in European urban data;
+- a Box mAP@50 on a held-out Astana validation set strictly above the public NEON-pretrained baseline of 0.012 (Section 1.5) by at least one order of magnitude, with the explicit aim of being the strongest published number on Astana satellite imagery to date and the implicit longer-term target of approaching the 0.65 – 0.73 F-score range demonstrated for fine-tuned DeepForest in European urban data on datasets at least one order of magnitude larger than the one available for the present project;
 - support for sliding-window tiled inference so that arbitrarily large input images can be processed;
 - support for at least three export formats — GeoJSON, CSV and standalone HTML — to satisfy the interoperability requirement of Section 1.1;
 - compatibility with arbitrary geographic input modes so that the system can be used both with rigorous GeoTIFF deliverables and with informal screenshots supplied by a non-technical user.

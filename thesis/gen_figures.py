@@ -81,18 +81,24 @@ except Exception as e:
     print(f"SKIP yolo_v2_finetune_training_curves: {e}")
 
 
-# ── Figure 3: All three YOLO runs — mAP@50 comparison ───────────────────────
+# ── Figure 3: All four YOLO runs — mAP@50 comparison ────────────────────────
 try:
     dv1  = load_csv("astana_tiled_x_max")
     dv2s = load_csv("astana_tiled_x_v2_fromscratch")
     dv2f = load_csv("astana_tiled_x_v2_finetune")
+    try:
+        dv3 = load_csv("astana_tiled_x_v3_finetune")
+    except Exception:
+        dv3 = None
 
     fig, ax = plt.subplots(figsize=(9, 4))
-    ax.plot(dv1["epoch"],  dv1["metrics/mAP50(B)"],  label="v1 (397 ep.)")
-    ax.plot(dv2s["epoch"], dv2s["metrics/mAP50(B)"], label="v2-fromscratch (204 ep.)")
-    ax.plot(dv2f["epoch"], dv2f["metrics/mAP50(B)"], label="v2-finetune (99 ep.)", linewidth=2)
-    ax.set_xlabel("Epoch"); ax.set_ylabel("Box mAP@50 (validation)")
-    ax.set_title("YOLOv8x-seg — Box mAP@50 across three training runs")
+    ax.plot(dv1["epoch"],  dv1["metrics/mAP50(B)"],  label="v1 (397 ep.)", alpha=0.6)
+    ax.plot(dv2s["epoch"], dv2s["metrics/mAP50(B)"], label="v2-fromscratch (204 ep.)", alpha=0.6)
+    ax.plot(dv2f["epoch"], dv2f["metrics/mAP50(B)"], label="v2-finetune (173 ep.)", linewidth=1.5)
+    if dv3 is not None:
+        ax.plot(dv3["epoch"], dv3["metrics/mAP50(B)"], label="v3-finetune (run1, ≈ 133 ep.)", linewidth=2.0, color="#C00000")
+    ax.set_xlabel("Epoch"); ax.set_ylabel("Box mAP@50 (training-time val)")
+    ax.set_title("YOLOv8x-seg — Box mAP@50 across the four training runs")
     ax.legend(); ax.grid(alpha=0.3)
     fig.tight_layout()
     out = os.path.join(FIGURES, "yolo_all_runs_map50.png")
@@ -103,34 +109,36 @@ except Exception as e:
     print(f"SKIP yolo_all_runs_map50: {e}")
 
 
-# ── Figure 4: Model comparison bar chart ─────────────────────────────────────
+# ── Figure 4: Cross-model comparison bar chart on M14 (canonical Table 3.5) ─
+# All numbers in this block are computed on the same 14-image / 702-polygon
+# merged val (M14, see Section 3.7.1). Sources:
+#   - YOLO v1/v2-fs/v2-ft/v3-ft: results/yolo_mergedval_eval.json (this work)
+#   - Mask R-CNN v2+v3:           results/maskrcnn_14img_eval/metrics.json
+#   - DeepForest v3 + SAM 2:      results/df_sam2_14img_eval/metrics.json
 try:
-    models  = ["YOLOv8\nv1", "YOLOv8\nv2-scratch", "YOLOv8\nv2-finetune",
-               "Mask\nR-CNN", "DeepForest\n(fine-tuned)", "Ensemble\nYOLO+DF"]
-    box_map = [0.265, 0.319, 0.372, 0.241, None, 0.51]
-    mask_map = [0.240, 0.288, 0.331, 0.226, None, None]
+    models   = ["YOLO\nv1", "DF v3\n+ SAM 2", "YOLO\nv2-scratch",
+                "Mask\nR-CNN\nv2+v3", "YOLO\nv2-ft", "YOLO\nv3-run1\n(x-seg)",
+                "YOLO\nv3 prod\n(m-seg, exp1)"]
+    box_map  = [0.131, 0.146, 0.156, 0.166, 0.187, 0.268, 0.308]
+    mask_map = [0.134, 0.134, 0.147, 0.158, 0.185, 0.244, 0.305]
 
     x = np.arange(len(models))
     w = 0.35
     fig, ax = plt.subplots(figsize=(11, 5))
-    b1 = [v if v is not None else 0 for v in box_map]
-    b2 = [v if v is not None else 0 for v in mask_map]
-    bars1 = ax.bar(x - w/2, b1, w, label="Box mAP@50",  color="#4472C4")
-    bars2 = ax.bar(x + w/2, b2, w, label="Mask mAP@50", color="#ED7D31")
+    bars1 = ax.bar(x - w/2, box_map,  w, label="Box mAP@50",  color="#4472C4")
+    bars2 = ax.bar(x + w/2, mask_map, w, label="Mask mAP@50", color="#ED7D31")
 
     for bar, val in zip(bars1, box_map):
-        if val:
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
-                    f"{val:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
+                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
     for bar, val in zip(bars2, mask_map):
-        if val:
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
-                    f"{val:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
+                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
 
-    ax.set_xticks(x); ax.set_xticklabels(models)
-    ax.set_ylabel("mAP@50"); ax.set_ylim(0, 0.65)
-    ax.set_title("Model Comparison — Box and Mask mAP@50 on Astana v2 Validation Set")
-    ax.legend(); ax.grid(axis="y", alpha=0.3)
+    ax.set_xticks(x); ax.set_xticklabels(models, fontsize=9)
+    ax.set_ylabel("mAP@50"); ax.set_ylim(0, 0.38)
+    ax.set_title("Cross-model comparison on the 14-image M14 validation set (702 polygons)")
+    ax.legend(loc="upper left"); ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     out = os.path.join(FIGURES, "model_comparison_barchart.png")
     fig.savefig(out, bbox_inches="tight")
