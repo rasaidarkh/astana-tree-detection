@@ -18,7 +18,8 @@ class ModelKind(str, Enum):
     YOLO_V4_M = "yolo_v4_m"                  # v4 yolov8m defaults (mAP@50 0.291)
     YOLO_V4_S = "yolo_v4_s"                  # v4 yolov8s defaults (mAP@50 0.281)
     DEEPFOREST = "deepforest"
-    ENSEMBLE = "ensemble"
+    ENSEMBLE = "ensemble"                    # WBF (YOLO + DeepForest)
+    YOLO_ENSEMBLE = "yolo_ensemble"          # vote_2 across top YOLO variants
     DEEPFOREST_SAM2 = "deepforest_sam2"
     MASKRCNN = "maskrcnn"
 

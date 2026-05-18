@@ -36,6 +36,7 @@ from .models.base import ModelAdapter
 from .models.deepforest_adapter import DeepForestAdapter
 from .models.deepforest_sam2_adapter import DeepForestSAM2Adapter
 from .models.ensemble_adapter import EnsembleAdapter
+from .models.yolo_ensemble_adapter import MultiYOLOEnsembleAdapter
 from .models.maskrcnn_adapter import MaskRCNNAdapter
 from .models.yolo_adapter import YOLOAdapter
 from .schemas import (
@@ -213,6 +214,26 @@ def _load_models() -> None:
         )
         registry.register(ensemble)
         log.info("Ensemble adapter registered")
+
+    # Cross-YOLO ensemble — vote_2 over 4 user-selected variants.
+    # Uses YOLOAdapter instances already in registry. Skips silently if any
+    # member is missing.
+    yolo_ens_members = []
+    for kind in [ModelKind.YOLO_V4_X, ModelKind.YOLO_V3_EXP1,
+                 ModelKind.YOLO_V4_S, ModelKind.YOLO_V2]:
+        if kind in registry:
+            yolo_ens_members.append((kind.value, registry.get(kind)))
+    if len(yolo_ens_members) >= 2:
+        yolo_ensemble = MultiYOLOEnsembleAdapter(
+            members=yolo_ens_members,
+            min_models=2,
+            iou_threshold=0.5,
+        )
+        registry.register(yolo_ensemble)
+        log.info(
+            "Cross-YOLO ensemble registered (%d members, vote_2)",
+            len(yolo_ens_members),
+        )
 
     sam2_ckpt = WEIGHTS / "sam2_hiera_base_plus.pt"
     df_sam2 = DeepForestSAM2Adapter(

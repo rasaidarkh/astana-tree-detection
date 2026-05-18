@@ -893,7 +893,8 @@ const MODEL_FAMILIES = [
     id: "ensemble",
     label: "Ensemble",
     variants: [
-      { kind: "ensemble", short: "WBF (YOLO + DF)" },
+      { kind: "yolo_ensemble", short: "4× YOLO vote" },
+      { kind: "ensemble",      short: "WBF (YOLO + DF)" },
     ],
   },
 ];
