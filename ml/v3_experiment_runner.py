@@ -130,6 +130,64 @@ EXPERIMENTS = [
             lr0=0.01,
         ),
     },
+    # ===== Round 2 (exp6-10) — adaptive, based on Round 1 results =====
+    # Winner of Round 1: exp1_m_cocostart (yolov8m-seg from COCO, Box mAP50 0.308 on merged val).
+    # Confirms Google's hypothesis: smaller model better on noisy small dataset. Now we
+    # probe along 5 orthogonal axes от exp1's setup.
+    {
+        "id": "exp6_m_imgsz896",
+        "description": "yolov8m-seg from COCO + imgsz=896 — higher resolution for small crowns (20-40px range moves to 28-56px)",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp6_m_imgsz896",
+            batch=2,           # batch=4 at 896 will OOM on 8GB
+            imgsz=896,
+        ),
+    },
+    {
+        "id": "exp7_s_cocostart",
+        "description": "yolov8s-seg (12M params) from COCO — continue size-down sweep, test if even smaller generalizes better",
+        "weights_start": "yolov8s-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp7_s_cocostart",
+            batch=8,           # s-seg is light, can fit more
+        ),
+    },
+    {
+        "id": "exp8_m_dropout015",
+        "description": "yolov8m-seg from COCO + dropout=0.15 — extra regularization для noisy polygon labels",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp8_m_dropout015",
+            batch=4,
+            dropout=0.15,
+        ),
+    },
+    {
+        "id": "exp9_m_heavy_aug",
+        "description": "yolov8m-seg from COCO + heavier aug (mixup=0.3, copy_paste=0.3) — opposite of run2's 'less aug', test if more diversity helps small dataset",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp9_m_heavy_aug",
+            batch=4,
+            mixup=0.3,
+            copy_paste=0.3,
+            mosaic=1.0,
+            erasing=0.4,
+        ),
+    },
+    {
+        "id": "exp10_m_chain_from_exp1",
+        "description": "yolov8m-seg chained — start from exp1's best.pt, continue with lr=0.0005 для gentle polish (continuation finetune)",
+        # `exp1_m_cocostart_v3val0.287_mergedval0.308.pt` — exp1 best.pt
+        "weights_start": str(PROJECT_ROOT / "weights" / "v3_runs" / "exp1_m_cocostart_v3val0.287_mergedval0.308.pt"),
+        "train_overrides": dict(
+            name="v3_exp10_m_chain",
+            batch=4,
+            optimizer="AdamW",
+            lr0=0.0005,         # very gentle for already-trained model
+        ),
+    },
 ]
 
 

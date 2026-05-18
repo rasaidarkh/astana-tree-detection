@@ -177,14 +177,18 @@ def _load_models() -> None:
         ModelKind.YOLO_V2,
         "YOLOv8-seg v2-finetune (conservative, pre-v3)",
     )
-    # v3 run1 / run2 — ищем через glob так как имена включают метрики в названии.
-    for run_idx, kind, label in [
-        (1, ModelKind.YOLO_V3_RUN1, "YOLOv8-seg v3 run1 (v2 hyperparams, val=v3-only)"),
-        (2, ModelKind.YOLO_V3_RUN2, "YOLOv8-seg v3 run2 (cleaner aug, val=merged)"),
+    # v3 run1 / run2 / exp1 — все архивы в weights/v3_runs/.
+    for pattern, kind, label in [
+        ("v3_finetune_run1_*.pt", ModelKind.YOLO_V3_RUN1, "YOLOv8x-seg v3 run1 (val=v3-only)"),
+        ("v3_finetune_run2_*.pt", ModelKind.YOLO_V3_RUN2, "YOLOv8x-seg v3 run2 (cleaner aug, val=merged)"),
+        ("exp1_m_cocostart_*.pt", ModelKind.YOLO_V3_EXP1, "YOLOv8m-seg v3 exp1 (COCO start, Box mAP50 0.308)"),
     ]:
-        matches = sorted((WEIGHTS / "v3_runs").glob(f"v3_finetune_run{run_idx}_*.pt"))
+        matches = sorted((WEIGHTS / "v3_runs").glob(pattern))
         if matches:
-            _register_yolo_variant(matches[0], kind, label)
+            # Ignore PROD_BACKUP suffix-ed файлы — это duplicate of run1.
+            real = [m for m in matches if "PROD_BACKUP" not in m.name]
+            if real:
+                _register_yolo_variant(real[0], kind, label)
 
     df_ckpt = WEIGHTS / "deepforest_astana.pl"
     df = DeepForestAdapter(checkpoint_path=str(df_ckpt) if df_ckpt.exists() else None)
