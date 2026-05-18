@@ -188,6 +188,72 @@ EXPERIMENTS = [
             lr0=0.0005,         # very gentle for already-trained model
         ),
     },
+    # ===== Round 3 (exp12-16) — paper-informed =====
+    # Базируются на находках агента из 31 research papers (см. v3_chain_trainer.py
+    # для exp11 = 3-stage chain, paper #13 recipe).
+    {
+        "id": "exp12_m_chain_aggressive_lowlr",
+        "description": "Paper #7+#14: exp1 best.pt → fine-tune v3-only with lr=0.0001 patience=12 — aggressive low-LR finish",
+        "weights_start": str(PROJECT_ROOT / "weights" / "v3_runs" / "exp1_m_cocostart_v3val0.287_mergedval0.308.pt"),
+        "train_overrides": dict(
+            name="v3_exp12_m_aggressive_lowlr",
+            batch=4,
+            optimizer="AdamW",
+            lr0=0.0001,         # paper #7: "most noticeable F-score gain at this LR"
+            data=str(PROJECT_ROOT / "yolov train dataset" / "v3_yolo_v3val_tiled" / "dataset.yaml"),
+            patience=12,        # paper #14: overfit fast on small sets
+            epochs=60,
+        ),
+    },
+    {
+        "id": "exp13_m_freeze_unfreeze",
+        "description": "Paper #27 recipe: freeze=10 (backbone) for first 40 epochs at lr=0.001, then unfreeze + lr=0.0001 for 50 more",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp13_m_freeze_unfreeze",
+            batch=4,
+            optimizer="AdamW",
+            lr0=0.001,
+            freeze=10,          # freeze first 10 layers ≈ backbone
+            epochs=90,          # 40 frozen + 50 unfrozen ≈ 90, real stop via patience
+            patience=20,
+        ),
+    },
+    {
+        "id": "exp14_m_aug_paper21",
+        "description": "Paper #21 aug ranges proven on YOLOv8-v12 satellite trees: degrees=21, shear=15, hsv_v=0.44",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp14_m_aug_paper21",
+            batch=4,
+            degrees=21.0,
+            shear=15.0,
+            hsv_v=0.44,
+            # rest = exp1 defaults
+        ),
+    },
+    {
+        "id": "exp15_m_v2v3_only",
+        "description": "Drop noisier v1 from train, keep v2+v3 only (48 imgs, 102 tiles vs 152 with v1). Quality > quantity?",
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp15_m_v2v3only",
+            batch=4,
+            data=str(PROJECT_ROOT / "yolov train dataset" / "v2v3_yolo_mergedval_tiled" / "dataset.yaml"),
+        ),
+    },
+    {
+        "id": "exp16_m_imgsz_pretrain_then_640",
+        "description": "Hybrid: train at imgsz=896 first 30 ep (more spatial detail), then continue at imgsz=640 for fine convergence",
+        # This is a hack: just train at 768 (compromise) for full run, since Ultralytics
+        # doesn't support mid-run imgsz change. Tests if compromise resolution helps where 896 hurt.
+        "weights_start": "yolov8m-seg.pt",
+        "train_overrides": dict(
+            name="v3_exp16_m_imgsz768",
+            batch=3,            # batch=4 OOM at 768
+            imgsz=768,
+        ),
+    },
 ]
 
 
