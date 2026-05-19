@@ -117,7 +117,101 @@ def md_to_latex(md_text: str) -> str:
         r"\\(section|subsection|subsubsection|paragraph)\{(?:\d+(?:\.\d+)*\.?)\s+(.+?)\}",
         r"\\\1{\2}", tex,
     )
+
+    # Pandoc emits longtables with equal-width p{...} columns regardless of
+    # content. The result is that 2-character cells get the same width as
+    # 50-character cells — model names wrap awkwardly while short numerics
+    # have wasted space. Replace pandoc's auto-width spec with a content-
+    # aware allocation: first column wider (row label), middle columns auto
+    # (`l`), last column flexible (`p{}`) for notes/comments. Also strip the
+    # `\begin{minipage}` wrappers pandoc adds around every header cell —
+    # they add awkward vertical padding without contributing to the layout.
+    tex = _fix_longtable_styles(tex)
+
     return tex
+
+
+def _fix_longtable_styles(latex: str) -> str:
+    """Rework pandoc's verbose longtable column specs into content-aware
+    p{} widths. Pandoc's default behaviour is to give every column an equal
+    1/N share of the typeblock, which makes long-text cells wrap awkwardly
+    while short cells waste horizontal space. We scan the table body, find
+    the longest cell per column, and allocate widths proportional to those
+    maxima — clamped to a [6%, 45%] range and renormalised to 92% of
+    \\linewidth so tabcolseps fit comfortably."""
+
+    # First strip the minipage wrapper that pandoc adds around every header
+    # cell. We do this BEFORE width allocation so the header content is part
+    # of the per-column length statistics.
+    latex = re.sub(
+        r"\\begin\{minipage\}\[b\]\{\\linewidth\}\\raggedright\s*"
+        r"(.+?)"
+        r"\s*\\end\{minipage\}",
+        lambda m: r"\textbf{" + m.group(1).strip() + r"}",
+        latex,
+        flags=re.DOTALL,
+    )
+
+    # Match a complete longtable environment so we can read its body to size
+    # the columns. The non-greedy `(.+?)` between the opening brace and
+    # `\end{longtable}` captures the column-header + body region.
+    table_re = re.compile(
+        r"(\\begin\{longtable\}\[\]\{@\{\}\s*"
+        r"((?:>\{\\raggedright\\arraybackslash\}p\{\(\\linewidth - \d+\\tabcolsep\) \* \\real\{[\d.]+\}\}\s*)+)"
+        r"@\{\}\})"
+        r"(.+?)"
+        r"(\\end\{longtable\})",
+        re.DOTALL,
+    )
+
+    def _strip_for_length(cell: str) -> str:
+        """Approximate the visual length of a LaTeX cell by stripping
+        commands but keeping their arguments. \\textbf{X} -> X."""
+        s = cell
+        s = re.sub(r"\\(textbf|texttt|emph|textit|textsf|textsc)\{([^{}]*)\}", r"\2", s)
+        s = re.sub(r"\\[a-zA-Z]+\*?\s*", "", s)  # drop remaining commands
+        s = re.sub(r"\{|\}", "", s)
+        return s.strip()
+
+    def replace_table(m: re.Match) -> str:
+        spec_block = m.group(2)
+        body = m.group(3)
+        n = len(re.findall(r"\\real\{([\d.]+)\}", spec_block))
+
+        # Extract every row: rows end with `\\` followed by a newline. The
+        # header row and body rows look the same to this regex.
+        rows: list[list[str]] = []
+        for raw_row in re.findall(r"(?<![\\&])((?:[^\\]|\\(?!\\))*?)\\\\(?:\s|$)", body):
+            cells = raw_row.split("&")
+            if len(cells) == n:
+                rows.append([_strip_for_length(c) for c in cells])
+
+        if not rows:
+            # Fallback to even widths if we couldn't parse.
+            even = round(0.92 / n, 3)
+            specs = [rf"p{{{even}\linewidth}}" for _ in range(n)]
+        else:
+            # Use the maximum cell length per column as the width signal.
+            # Clamp to [3, 60] characters so a single very-long cell doesn't
+            # dominate. Then convert to a width fraction summing to 0.92.
+            max_chars = [3] * n
+            for row in rows:
+                for i, cell in enumerate(row):
+                    max_chars[i] = max(max_chars[i], min(60, len(cell)))
+            total = sum(max_chars)
+            widths = [round(0.92 * c / total, 3) for c in max_chars]
+            # Apply per-column minimum so very-short columns still have room
+            # for at least one short word.
+            widths = [max(0.06, w) for w in widths]
+            # Renormalise after the floor adjustment.
+            s = sum(widths)
+            widths = [round(0.92 * w / s, 3) for w in widths]
+            specs = [rf"p{{{w}\linewidth}}" for w in widths]
+
+        new_open = r"\begin{longtable}[]{@{}" + " ".join(specs) + r"@{}}"
+        return new_open + body + m.group(4)
+
+    return table_re.sub(replace_table, latex)
 
 
 def write(path: Path, content: str) -> None:
@@ -136,8 +230,7 @@ def _strip_chapter_header(latex: str, expected_title: str | None = None) -> str:
 # ============ Frontmatter ============
 
 def make_title_tex() -> str:
-    """AITU-style title page using the same primitives as the supplied
-    title.tex placeholder."""
+    """AITU-style title page (clean rules-around-title layout)."""
     return r"""%
 % File: title.tex (generated by build_latex.py)
 %
@@ -145,39 +238,35 @@ def make_title_tex() -> str:
 \begin{SingleSpace}
 \calccentering{\unitlength}
 \begin{adjustwidth*}{\unitlength}{-\unitlength}
-\vspace*{4mm}
+\vspace*{10mm}
 \begin{center}
-{\normalsize\bfseries LIMITED LIABILITY PARTNERSHIP}\\[0.5mm]
-{\normalsize\bfseries ASTANA IT UNIVERSITY}\\[3mm]
-
 \rule[0.5ex]{\linewidth}{2pt}\vspace*{-\baselineskip}\vspace*{3.2pt}
-\rule[0.5ex]{\linewidth}{1pt}\\[3mm]
-
-{\large\bfseries DIPLOMA PROJECT}\\[3mm]
-
-{\normalsize\bfseries Topic:}\\[1mm]
-{\large\bfseries Development of a Deep Learning Model for\\
-Automated Tree Recognition and Green Space Mapping\\
-in Urban Environments}\\[3mm]
-
+\rule[0.5ex]{\linewidth}{1pt}\\[\baselineskip]
+{
+\linespread{1.6}\selectfont
+{\HUGE Development of a Deep Learning Model for Automated Tree Recognition and Green Space Mapping in Urban Environments}\\[4mm]
+}
 \rule[0.5ex]{\linewidth}{1pt}\vspace*{-\baselineskip}\vspace{3.2pt}
-\rule[0.5ex]{\linewidth}{2pt}\\[3mm]
-
-\includegraphics[scale=0.6]{logos/AITU.png}\\[3mm]
-
-{\normalsize\itshape By}\\[1mm]
-{\normalsize\bfseries Totin Anuar}\\
-{\normalsize\bfseries Aidarkhanov Rasul}\\
-{\normalsize\bfseries Sharipov Berik}\\[3mm]
-
-\begin{minipage}{12cm}
-\centering
-{\small Educational Program: 6B06101 --- Computer Science\\[0.5mm]
-Scientific Supervisor: Syndar Satbayev\\[0.5mm]
-\itshape School of Artificial Intelligence and Data Science, Astana IT University}
-\end{minipage}\\[3mm]
-
-{\normalsize\textsc{Astana, 2026}}
+\rule[0.5ex]{\linewidth}{2pt}\\
+\vspace{6mm}
+{\large By}\\
+\vspace{5mm}
+{\large\textsc{Totin Anuar,\\[2mm] Aidarkhanov Rasul,\\[2mm] Sharipov Berik}}\\
+\vspace{8mm}
+\includegraphics[width=2.5cm]{logos/AITU.png}\\
+\vspace{5mm}
+{\large School of Artificial Intelligence and Data Science\\
+\textsc{Astana IT University}}\\
+\vspace{18mm}
+\begin{minipage}{9cm}
+\centering{6B06101 --- Computer Science}\\[2mm]
+\centering{Group: IT-2304}\\[2mm]
+\centering{Supervisor: Syndar Satbayev}
+\end{minipage}\\
+\vspace{16mm}
+{\large\textsc{June 2026}}\\[2mm]
+{\large\textsc{Astana, Kazakhstan}}
+\vspace{10mm}
 \end{center}
 \end{adjustwidth*}
 \end{SingleSpace}

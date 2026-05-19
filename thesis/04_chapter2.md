@@ -4,51 +4,19 @@ This chapter describes the technical design of the system. Section 2.1 gives a t
 
 ## 2.1 System architecture overview
 
-The system follows a classical three-tier separation of concerns: a thin **presentation layer** (a single-page React 18 application served by FastAPI, with React, Babel-standalone and Leaflet loaded directly from a CDN — no Node.js build step), an **application layer** (a FastAPI REST backend in Python 3.11) and a **model layer** (four pluggable deep-learning adapters that wrap the underlying frameworks). The system architecture is summarised in Figure 2.1.
+The system follows a classical three-tier separation of concerns: a thin **presentation layer** (a single-page React 18 application served by FastAPI, with React, Babel-standalone and Leaflet loaded directly from a CDN — no Node.js build step), an **application layer** (a FastAPI REST backend in Python 3.11) and a **model layer** (four pluggable deep-learning adapters that wrap the underlying frameworks). The five layers and their respective responsibilities are summarised in Table 2.1.
 
-```
-   ┌─────────────────────────────────────────────────────────────────────┐
-   │  PRESENTATION LAYER  (React 18 UMD + Leaflet, no build step)        │
-   │  ┌────────────────────────────────────────────────────────────────┐ │
-   │  │  Single-image view  │  City-map view  │  Scan area / Polygon   │ │
-   │  └────────────────────────────────────────────────────────────────┘ │
-   └──────────────────────────────────┬──────────────────────────────────┘
-                                      │ HTTP / NDJSON streaming
-   ┌──────────────────────────────────▼──────────────────────────────────┐
-   │  APPLICATION LAYER  (FastAPI + Pydantic, Python 3.11)               │
-   │                                                                     │
-   │   /api/upload       /api/capture_from_map      /api/scan_region    │
-   │   /api/predict      /api/scan_region/stream    /api/export/...     │
-   │                                                                     │
-   │   ┌────────────────┐   ┌───────────────────┐   ┌────────────────┐  │
-   │   │  Map capture   │   │  Region scanner   │   │   Geo module   │  │
-   │   │ (ESRI/Google)  │   │ (3-level tiling)  │   │ (4 geo modes)  │  │
-   │   └────────────────┘   └───────────────────┘   └────────────────┘  │
-   └────────┬───────────────┬───────────────┬──────────────┬─────────────┘
-            │               │               │              │
-   ┌────────▼─────┐ ┌───────▼────────┐ ┌────▼─────────┐ ┌──▼─────────────┐
-   │   YOLO       │ │  Mask R-CNN    │ │  DeepForest  │ │  DeepForest +  │
-   │   adapter    │ │  adapter       │ │  adapter     │ │  SAM 2 adapter │
-   │ (Ultralytics)│ │ (torchvision)  │ │ (deepforest) │ │ (sam2 1.1)     │
-   └────────┬─────┘ └───────┬────────┘ └──────┬───────┘ └────────┬───────┘
-            └───────────────┴────────────┬────┴──────────────────┘
-                                         │
-                              ┌──────────▼──────────┐
-                              │  WBF + cross-YOLO   │
-                              │  ensembles          │
-                              └──────────┬──────────┘
-                                         │ List<Detection>
-   ┌─────────────────────────────────────▼─────────────────────────────────┐
-   │  PERSISTENCE LAYER  (SQLite, storage/app.db, ON DELETE CASCADE)       │
-   │   snapshots ◄── runs ◄── detections     scan_sessions                 │
-   └───────────────────────────────────────┬───────────────────────────────┘
-                                           │
-   ┌───────────────────────────────────────▼───────────────────────────────┐
-   │  EXPORT LAYER     GeoJSON      CSV      Standalone HTML (Leaflet)     │
-   └───────────────────────────────────────────────────────────────────────┘
-```
+**Table 2.1 — Layered architecture of the system and the responsibilities of each layer.**
 
-**Figure 2.1 — Layered architecture of the proposed system.** Solid arrows denote a synchronous request / response; the ON-DELETE-CASCADE relations between SQLite tables ensure that deleting a snapshot or a scan-session also removes all dependent runs, detections and PNG files in a single operation.
+| Layer | Technology | Responsibility | Key components |
+|---|---|---|---|
+| Presentation | React 18 (UMD) + Leaflet + Babel-standalone, no build step | Interactive map, image upload, detection visualisation, model selector, export buttons | Single-image view, City-map view, Scan-area / Polygon-scan workflows |
+| Application | FastAPI + Pydantic + Uvicorn, Python 3.11 | REST API, request validation, lazy model loading, NDJSON streaming progress, geographic conversion | `/api/upload`, `/api/capture_from_map`, `/api/predict`, `/api/scan_region/stream`, `/api/export/{job}/{format}` |
+| Model | PyTorch 2.5 + CUDA 12.1 + Ultralytics 8.4 + DeepForest 1.5 + sam2 1.1 + torchvision 0.20 | Inference on satellite tiles via the adapter pattern; tiled inference + global NMS | YOLO, Mask R-CNN, DeepForest, DeepForest+SAM 2, WBF ensemble, cross-YOLO 4-vote ensemble |
+| Persistence | SQLite (`storage/app.db`) with `ON DELETE CASCADE` foreign keys | Persist every snapshot, run and detection ever produced by the system | `snapshots`, `runs`, `detections`, `scan_sessions` tables |
+| Export | Python serialisers + Leaflet HTML template | Deliver the inventory in GIS-compatible formats | GeoJSON (QGIS / ArcGIS), CSV (Excel), standalone HTML (browser-only) |
+
+The data flow through the system can be summarised as follows. The user opens the web interface and either uploads a satellite image as a file (PNG, JPG, TIFF or GeoTIFF) or selects an area directly on a Leaflet map; in the latter case the backend downloads the appropriate ESRI World Imagery or Google Satellite tiles, stitches and crops them, and returns the resulting image with embedded geographic bounds. The image is stored on the server and assigned an opaque identifier; image dimensions and, if available, GeoTIFF projection metadata are extracted via the `rasterio` library. The user selects one of four detection backends (YOLO, Mask R-CNN, DeepForest, DeepForest+SAM 2) or one of two ensembles (WBF, cross-YOLO vote) and a confidence threshold, and triggers inference; the corresponding adapter is loaded lazily on first request and reused for subsequent calls. For images larger than the network's native input resolution, the adapter performs sliding-window tiled inference, runs the model on each tile and aggregates the per-tile predictions through Non-Maximum Suppression to produce a single global set of detections. Each detection is annotated with geographic coordinates via the geographic-conversion module, which supports four operating modes depending on the metadata available. The result is stored as an immutable job record, returned to the frontend for interactive visualisation on a Leaflet map, and made available for export in three formats.
 
 A key architectural decision is the use of the **adapter pattern** for the model layer: every model adheres to a single abstract base class with a `predict(image_path, confidence) -> List[Detection]` method, so new models can be added without changes to the rest of the system. The base class provides lazy initialisation, automatic weight loading from a `weights/` directory and exception conversion to FastAPI HTTP responses. The complete source tree is organised in three top-level directories — `backend/`, `frontend/` and `ml/` — at approximately 6 000 lines of code.
 
@@ -75,7 +43,23 @@ YOLOv8 [@UltralyticsYOLO2023] is a single-stage anchor-free object detector. The
 
 **Training data and pre-processing.** The training data is a collection of Astana satellite screenshots taken from Google Earth and ESRI World Imagery at zoom levels 17 – 19. The annotation effort proceeded in three iterations (v1 / v2 / v3) totalling approximately 100 source images and ≈ 8 700 polygon-level annotations after tiling. The class taxonomy is deliberately minimal — a single class "Tree" (in the source: "Дерево") — because the satellite resolution available does not allow reliable species discrimination. The dataset is split at the source-image level (no tile from a single source leaks between splits). Two custom Python tools support the workflow: `ml/coco_to_yolo_seg.py` converts CVAT-exported COCO 1.0 annotation files into the polygon-line format expected by Ultralytics YOLO, with sanitisation of Cyrillic filenames into ASCII to avoid Windows-path issues; and `ml/tile_dataset.py` performs the sliding-window tiling itself using Shapely for polygon clipping, dropping any clipped fragment whose area falls below 25 square pixels.
 
-**Training procedure.** Three YOLOv8-seg variants are used in this work, corresponding to three phases of the project's hyperparameter ablation reported in Chapter 3. The pre-ablation generations used `yolov8x-seg` (≈ 71 M parameters) on the initial hypothesis that the extra capacity would improve performance. Rounds 1 – 3 of the systematic ablation reversed that hypothesis with the medium-size `yolov8m-seg` (≈ 27 M parameters) outperforming both larger variants by 15 – 25 % relative when trained from COCO weights with manually-tuned augmentation. Round 4 then reversed the reversal: with **Ultralytics' default augmentation pipeline** instead of the manually-tuned one, the largest `yolov8x-seg` becomes the strongest single configuration, reaching Box mAP@50 = 0.315 on M14 — the headline empirical result of the diploma. The **final production checkpoint** is therefore `yolov8x-seg` trained from fresh COCO weights with `single_cls=True` and Ultralytics' default augmentation, on the single laptop GPU (NVIDIA GeForce RTX 4060, 8 GiB VRAM); mixed-precision training (AMP) was essential to fit batch size 2 in memory.
+**Training procedure.** Three YOLOv8-seg variants are used in this work, corresponding to three phases of the project's hyperparameter ablation reported in Chapter 3. The pre-ablation generations used `yolov8x-seg` (≈ 71 M parameters) on the initial hypothesis that the extra capacity would improve performance. Rounds 1 – 3 of the systematic ablation reversed that hypothesis with the medium-size `yolov8m-seg` (≈ 27 M parameters) outperforming both larger variants by 15 – 25 % relative when trained from COCO weights with manually-tuned augmentation. Round 4 then reversed the reversal: with **Ultralytics' default augmentation pipeline** instead of the manually-tuned one, the largest `yolov8x-seg` becomes the strongest single configuration, reaching Box mAP@50 = 0.315 on M14 — the headline empirical result of the diploma. The **final production checkpoint** is therefore `yolov8x-seg` trained from fresh COCO weights with `single_cls=True` and Ultralytics' default augmentation, on the single laptop GPU (NVIDIA GeForce RTX 4060, 8 GiB VRAM); mixed-precision training (AMP) was essential to fit batch size 2 in memory. The principal hyper-parameters of the production training run are summarised in Table 2.3.
+
+**Table 2.3 — Hyper-parameters of the YOLOv8x-seg v4_x_clean production training run.**
+
+| Parameter | Value |
+|---|---|
+| Base model | `yolov8x-seg.pt` (COCO pre-trained, 71.4 M params) |
+| Input resolution | 640 × 640 |
+| Batch size | AutoBatch (Ultralytics 60 % VRAM heuristic, ≈ 2 on RTX 4060 8 GiB) |
+| Epochs (max) | 150 |
+| Early-stopping patience | 50 on validation mAP@50 |
+| Time cap | 1.5 hours |
+| Optimiser | AdamW, lr = 0.001 (auto-selected by Ultralytics for small datasets) |
+| Augmentation | Ultralytics defaults: HSV-S 0.7, HSV-V 0.4, random erasing 0.4, **no geometric** (degrees=0, mixup=0, copy-paste=0, flipud=0) |
+| Single-class mode | `single_cls=True` |
+| Mixed-precision (AMP) | enabled |
+| Wall-clock time | ≈ 91 minutes |
 
 **Loss function.** The training objective of YOLOv8-seg is the weighted sum of four components — a bounding-box regression loss, a per-class classification loss, a Distribution Focal Loss for the discrete-bin regression head, and a per-pixel mask loss:
 
@@ -152,34 +136,18 @@ In addition to the coordinate conversion, the geographic module estimates the **
 
 ## 2.9 Persistent storage layer
 
-All results are written to a local SQLite database at `storage/app.db` rather than kept in a Python process dictionary. The schema consists of four tables linked by foreign keys with `ON DELETE CASCADE`:
+All results are written to a local SQLite database at `storage/app.db` rather than kept in a Python process dictionary. The schema consists of four tables linked by foreign keys with `ON DELETE CASCADE`. The tables and their principal columns are described in Table 2.2.
 
-```
-   ┌────────────────┐    ┌──────────────────┐    ┌───────────────────────┐
-   │   snapshots    │◄───┤      runs        │◄───┤      detections       │
-   │────────────────│    │──────────────────│    │───────────────────────│
-   │ id (PK)        │    │ job_id (PK)      │    │ id (PK)               │
-   │ file_path      │    │ snapshot_id (FK) │    │ run_id (FK)           │
-   │ bounds_nw,se   │    │ model            │    │ bbox_px, bbox_geo     │
-   │ geo_mode       │    │ confidence_thr   │    │ polygon_mask          │
-   │ scan_id (FK?)  │    │ duration_ms      │    │ confidence            │
-   │ created_at     │    │ created_at       │    │ area_px, area_m2      │
-   └────────────────┘    └──────────────────┘    │ lon, lat (centroid)   │
-           ▲                                     └───────────────────────┘
-           │
-   ┌───────┴────────┐
-   │ scan_sessions  │
-   │────────────────│
-   │ id (PK)        │
-   │ bbox_nw, se    │
-   │ zoom, provider │
-   │ model          │
-   │ sub_region_cnt │
-   │ status         │
-   └────────────────┘
-```
+**Table 2.2 — SQLite schema of the persistence layer (`storage/app.db`).**
 
-**Figure 2.2 — SQLite schema (`storage/app.db`).** Foreign keys cascade on delete: removing a snapshot deletes its runs, its detections and its PNG file on disk; removing a scan-session removes all its child snapshots in a single statement.
+| Table | Principal columns | Foreign keys | Cardinality (typical) |
+|---|---|---|---|
+| `snapshots` | `id`, `file_path`, `bounds_nw`, `bounds_se`, `geo_mode`, `scan_id`, `created_at` | `scan_id` → `scan_sessions(id)` ON DELETE SET NULL | 1 row per uploaded or captured satellite image |
+| `runs` | `job_id`, `snapshot_id`, `model`, `confidence_threshold`, `duration_ms`, `created_at` | `snapshot_id` → `snapshots(id)` ON DELETE CASCADE | 1 row per model invocation on a snapshot |
+| `detections` | `id`, `run_id`, `bbox_px`, `bbox_geo`, `polygon_mask`, `confidence`, `area_px`, `area_m2`, `lon`, `lat` | `run_id` → `runs(job_id)` ON DELETE CASCADE | 1 row per detected tree (300 – 800 per typical 1 km² capture) |
+| `scan_sessions` | `id`, `bbox_nw`, `bbox_se`, `zoom`, `provider`, `model`, `sub_region_cnt`, `status` | — | 1 row per Auto-Zoom Region Scan session |
+
+The relationships form a chain: `scan_sessions` ← `snapshots` ← `runs` ← `detections`, with cascade on the inner two foreign keys. Deleting a scan-session via `DELETE /api/scans/{id}` therefore propagates through all its sub-region snapshots, runs, detections and the PNG files on disk in a single SQL statement (with a complementary `os.unlink` on the file paths returned by the cascade).
 
 The persistence layer is implemented in `backend/db.py` and is used by every read and write path. The schema has three practical consequences. First, restarting the FastAPI process loses no detections — a critical property for a tool operated by a non-developer end user. Second, the city-map view (Section 2.10) can query the database for every detection ever produced with a single SQL statement and visualise them all on a single Leaflet layer; this is the principal aggregate-inspection workflow of the application. Third, snapshot deletion is implemented via a single `DELETE FROM snapshots WHERE id = ?` statement; the cascading foreign keys then remove all dependent runs, detections and the source image file from disk.
 
@@ -191,13 +159,25 @@ The frontend is a single-page React 18 application served by FastAPI at the root
 
 ### 2.10.1 Two view modes
 
-The application exposes two main views, switchable in the sidebar. **Single-image view** is the workflow for a single satellite image: the user uploads a PNG, JPG or GeoTIFF (or captures one interactively from the map), selects a detection model and a confidence threshold, clicks *Run detection* and watches a progress indicator while the backend performs inference. The result is then visualised in three coordinated panels: a Leaflet map with the image overlaid as a semi-transparent layer and the detections rendered on top; a statistics panel showing the tree count, the green-coverage percentage, the mean confidence and the analysed area in hectares; and a confidence-filter slider that interactively hides or shows low-confidence detections without re-running the model.
+The application exposes two main views, switchable in the sidebar. **Single-image view** is the workflow for a single satellite image: the user uploads a PNG, JPG or GeoTIFF (or captures one interactively from the map), selects a detection model and a confidence threshold, clicks *Run detection* and watches a progress indicator while the backend performs inference. The result is then visualised in three coordinated panels: a Leaflet map with the image overlaid as a semi-transparent layer and the detections rendered on top; a statistics panel showing the tree count, the green-coverage percentage, the mean confidence and the analysed area in hectares; and a confidence-filter slider that interactively hides or shows low-confidence detections without re-running the model. The complete single-image workflow is illustrated in Figure 2.1.
 
 ![*Single-image view of the web application. The left panel shows the image upload zone, model selector (YOLO / Mask R-CNN / DeepForest / DeepForest+SAM 2 / Ensemble), confidence threshold, four-mode geographic referencing controls and the three export buttons (GeoJSON, CSV, HTML). The main panel displays the Leaflet satellite basemap with the uploaded image overlay and detected tree crowns rendered as polygon masks.*](figures/ui_single_image_view.png)
+
+The full interface — sidebar, basemap, draw-polygon control, geographic-mode switcher and export panel — is shown in Figure 2.2. The dark-mode-default styling is a deliberate choice: detection polygons rendered as semi-transparent fills are easier to read against a dark satellite-imagery background, and the reduced visual contrast is more comfortable for the long inspection sessions a *Zelenstroy* operator would conduct.
+
+![*Full interface of the application in dark mode. The sidebar contains all per-snapshot controls (upload, model picker, confidence slider, geographic-mode switcher, export). The main panel shows the Leaflet basemap with two overlaid layers: the captured satellite tile (semi-transparent) and the detected tree-crown polygons. The status bar reports the inference duration, model name, total detection count and average confidence.*](figures/ui_full_interface.png)
+
+A representative single-image detection result on a dense residential Astana scene is shown in Figure 2.3, illustrating the crown-polygon rendering that the YOLO and DeepForest+SAM 2 branches produce.
+
+![*Single-image detection result on a dense residential Astana tile. Each detected tree crown is rendered as a semi-transparent polygon mask with the per-detection confidence score visible on hover. The colour-coded confidence levels (green ≥ 70 %, yellow 50 – 70 %, red < 50 %) help the operator triage detections visually.*](figures/ui_with_detections.png)
 
 **City-map view** is the aggregate-inspection mode. It queries the persistent database for the full collection of all snapshots ever processed by the system and renders every detected tree on a single Leaflet layer (with a safety cap of 50 000 detections to protect the browser). A side panel lists each snapshot with a per-snapshot summary (number of runs, total trees, last-used model, geographic centre) and a deletion action that cascades through the database and the disk. This view is the principal demonstration deliverable of the project: a single map of Astana that grows tree-by-tree as the user processes new districts, building up an organic city-wide inventory.
 
 ![*City-map view showing 1 031 detected trees across three processed Astana snapshots. Crown polygons are colour-coded by confidence (green: high ≥ 70 %, yellow: medium 50–70 %, red: low < 50 %). The left panel shows aggregate statistics and a per-snapshot list. This view is the principal operational deliverable of the system, enabling city-wide tree inventory accumulation over time.*](figures/ui_city_map_view.png)
+
+Zooming into a single district on the city-map view (Figure 2.5) reveals the per-tree resolution that the system maintains across the entire inventory; every polygon is the original mask produced by the model, not a marker or cluster, so the inventory can be inspected at any zoom level without loss of geometric fidelity.
+
+![*City-map view zoomed to a single Astana district. At this zoom level individual crown polygons are visible and the operator can inspect any specific detection by clicking it; a popup then shows the confidence, the crown area in square metres and the source snapshot.*](figures/ui_city_map_zoomed.png)
 
 ### 2.10.2 Geographic configuration and Auto-Zoom Region Scan
 

@@ -30,23 +30,23 @@ A 23-experiment hyperparameter ablation of the YOLO branch was conducted along s
 
 **Table 3.2 — Master ablation of the YOLO branch, sorted by M14 Box mAP@50. The full 23-experiment grid is available in `results/v3_experiments.json` and `results/v4_clean_modelsweep.json`.**
 
-| # | Configuration | Backbone | Params | Start | Augmentation | Box mAP@50 | Mask mAP@50 |
-|---|---|---|---|---|---|---|---|
-| **v4_x_clean (FINAL production)** | yolov8x-seg + Ultralytics defaults | x-seg | 71 M | COCO (fresh) | defaults (HSV+erasing, no geo) | **0.315** | **0.289** |
-| exp1 v3 m-seg (lucky single run) | yolov8m-seg + v2-proven aug | m-seg | 27 M | COCO (fresh) | v2-proven | 0.308 | 0.305 |
-| v4_m_clean | yolov8m-seg + defaults | m-seg | 27 M | COCO (fresh) | defaults | 0.291 | 0.280 |
-| exp10 | continuation from exp1, lr = 5×10⁻⁴ | m-seg | 27 M | exp1 | v2-proven | 0.283 | — |
-| v4_s_clean | yolov8s-seg + defaults | s-seg | 12 M | COCO (fresh) | defaults | 0.281 | 0.270 |
-| exp12 | exp1 → v3-only fine-tune | m-seg | 27 M | exp1 | v2-proven | 0.286 | — |
-| exp5 | yolov8l-seg + v2-finetune warm-start, SGD | l-seg | 46 M | v2-finetune | v2-proven | 0.273 | 0.247 |
-| **exp1 v3 m-seg (4-replicate mean ± std)** | yolov8m-seg | m-seg | 27 M | COCO (fresh) | v2-proven | **0.271 ± 0.028** | — |
-| v4_n_clean | yolov8n-seg + defaults | n-seg | 3 M | COCO (fresh) | defaults | 0.261 | 0.251 |
-| v4_l_clean | yolov8l-seg + defaults | l-seg | 46 M | COCO (fresh) | defaults | 0.260 | 0.253 |
-| v3-finetune-run1 | yolov8x-seg + v2-proven aug | x-seg | 71 M | v2-finetune | v2-proven | 0.220 (v3 only) | 0.187 (M14) |
-| exp11 | 3-stage continual chain v1 → v1+v2 → v1+v2+v3 | m-seg | 27 M | COCO | v2-proven | 0.210 | — |
-| v2-finetune (was production) | yolov8x-seg + v2-proven aug | x-seg | 71 M | v1 best.pt | v2-proven | 0.187 | 0.185 |
-| v2-fromscratch | yolov8x-seg | x-seg | 71 M | COCO | v2-proven | 0.156 | 0.147 |
-| v1 (16 train imgs) | yolov8x-seg | x-seg | 71 M | COCO | v1 hand-tuned | 0.131 | 0.134 |
+| Run | Configuration | Box mAP@50 | Mask mAP@50 |
+|---|---|---|---|
+| **v4_x_clean (FINAL prod.)** | yolov8x-seg (71 M), COCO start, Ultralytics defaults | **0.315** | **0.289** |
+| exp1 v3 m-seg (lucky run) | yolov8m-seg (27 M), COCO start, v2-proven aug | 0.308 | 0.305 |
+| v4_m_clean | yolov8m-seg (27 M), COCO start, defaults | 0.291 | 0.280 |
+| exp12 | exp1 → v3-only fine-tune | 0.286 | — |
+| exp10 | continuation from exp1, lr = 5×10⁻⁴ | 0.283 | — |
+| v4_s_clean | yolov8s-seg (12 M), COCO start, defaults | 0.281 | 0.270 |
+| exp5 | yolov8l-seg (46 M), v2-finetune warm-start, SGD | 0.273 | 0.247 |
+| **exp1 (4-replicate mean ± std)** | yolov8m-seg (27 M), v2-proven aug | **0.271 ± 0.028** | — |
+| v4_n_clean | yolov8n-seg (3 M), COCO start, defaults | 0.261 | 0.251 |
+| v4_l_clean | yolov8l-seg (46 M), COCO start, defaults | 0.260 | 0.253 |
+| v3-finetune-run1 | yolov8x-seg (71 M), v2-finetune warm-start, v2-proven aug | 0.220 | 0.187 |
+| exp11 | 3-stage chain v1 → v1+v2 → v1+v2+v3 (m-seg) | 0.210 | — |
+| v2-finetune (was prod.) | yolov8x-seg (71 M), v1 warm-start, v2-proven aug | 0.187 | 0.185 |
+| v2-fromscratch | yolov8x-seg (71 M), COCO start, v2-proven aug | 0.156 | 0.147 |
+| v1 (16 train imgs) | yolov8x-seg (71 M), COCO start, v1 hand-tuned aug | 0.131 | 0.134 |
 
 Six empirical findings emerge from this ablation.
 
@@ -93,7 +93,24 @@ Five empirical observations follow from this table.
 
 **(5) The SAM 2 mask-refinement stage brings the Mask mAP@50 of the DeepForest branch from zero (no native mask output) to 0.134** — comparable in magnitude to the Mask mAP@50 of YOLO v1 (0.134) and not far behind that of Mask R-CNN v2+v3 (0.158). The Box quality of the DeepForest predictions does not change with SAM 2 (the model is a pure post-processor of the bounding-box detector).
 
-A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown in Figure 3.1, and a four-tile strip of v2-finetune predictions on the version-2 validation set is shown in Figure 3.2. Both figures are reproducible from `thesis/gen_qualitative_figures.py`.
+The cross-model ranking visualised as a bar chart is shown in Figure 3.1.
+
+![*Visual comparison of Box mAP@50 and Mask mAP@50 for the seven principal model configurations on the M14 validation set. The YOLOv8x-seg v4_x_clean production model is the strongest on both metrics; the previous YOLOv8x-seg v3-finetune-run1 intermediate checkpoint sits in the second tier; the three smaller-gap Astana-fine-tuned branches (DeepForest+SAM 2, Mask R-CNN v2+v3, YOLO v2-finetune) cluster in the 0.13 – 0.19 range; the NEON pretrained and Roboflow-v4 checkpoints are near zero, confirming the necessity of Astana-domain fine-tuning.*](figures/model_comparison_barchart.png)
+
+A useful complementary view of the same numbers is the breakdown by **validation subset**. The aggregate M14 metric mixes the in-distribution v1 / v2 subset with the out-of-distribution v3 subset; because the entire motivation for the v3 dataset extension was the OOD failure of v2-finetune on v3 imagery, it is informative to look at the two subsets separately. Table 3.4 reports the v2-only and v3-only Box mAP@50 of every YOLO checkpoint in the project, together with the OOD recovery ratio (v3-only divided by v2-only).
+
+**Table 3.4 — Per-distribution evaluation of the YOLO checkpoint chain. The v2-finetune → v4_x_clean transition closes essentially all of the OOD gap.**
+
+| Checkpoint | v2-only Box mAP@50 | v3-only Box mAP@50 | OOD ratio (v3 / v2) |
+|---|---|---|---|
+| v2-finetune | 0.363 | **0.081** | 0.22 |
+| v3-finetune-run1 (yolov8x v2-proven aug) | 0.334 | 0.220 | 0.66 |
+| exp1 v3 m-seg (lucky single run) | 0.367 | 0.287 | 0.78 |
+| **v4_x_clean (FINAL production)** | **0.319** | **0.313** | **0.98** |
+
+The OOD ratio rises monotonically along the project's checkpoint chain — from 22 % at the v2-finetune baseline through 78 % at the exp1 intermediate to **98 % at the v4_x_clean production**. By Round 4 the model performs almost identically on previously-seen and previously-unseen Astana districts. The residual asymmetry of 2 % is within the noise floor measured in Section 3.2 and is no longer a quantitative target for further dataset expansion; instead the future-work direction shifts to broadening the test-time distribution itself (built-environment scenes, river-front imagery, multi-season acquisitions).
+
+A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown in Figure 3.2, and a four-tile strip of v2-finetune predictions on the version-2 validation set is shown in Figure 3.3. Both figures are reproducible from `thesis/gen_qualitative_figures.py`.
 
 ![*Like-for-like qualitative comparison on the held-out validation tile `img_val_007` (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 prediction in blue. Right: YOLOv8x-seg v2-finetune prediction in orange. The v2-finetune model recovers a substantially larger fraction of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge.*](figures/yolo_v1_vs_v2_finetune_comparison.png)
 
@@ -103,9 +120,29 @@ A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown
 
 ### 3.4.1 YOLOv8-seg
 
-The YOLO branch was trained iteratively across three dataset batches (v1, v2, v3) before the systematic ablation of Section 3.2 selected the v4_x_clean configuration as the final production checkpoint. Several methodological observations from the iterative process inform the final result. The v1 run (16 training images, 4 validation tiles, 94 polygons) early-stopped at epoch 397 of 500 after ≈ 1 hour of wall-clock training, with the best checkpoint at epoch 296. The v2 round added 57 source images annotated with **model-in-the-loop pre-labelling** using the v1 checkpoint (≈ 70 % annotation-time reduction per image vs from-scratch). Two v2 training strategies were compared on a single like-for-like validation set: **v2-fromscratch** (started from COCO weights, trained on full merged v1+v2) reached Box mAP@50 = 0.319, while **v2-finetune** (started from v1 best.pt, continued only on the new v2 images) reached **Box mAP@50 = 0.372** — a 17 % relative gain. This result emphasises the sensitivity of pre-training transfer to the precise composition of the fine-tuning set.
+The YOLO branch was trained iteratively across three dataset batches (v1, v2, v3) before the systematic ablation of Section 3.2 selected the v4_x_clean configuration as the final production checkpoint. Several methodological observations from the iterative process inform the final result. The v1 run (16 training images, 4 validation tiles, 94 polygons) early-stopped at epoch 397 of 500 after ≈ 1 hour of wall-clock training, with the best checkpoint at epoch 296. The training and validation loss curves for this run are reproduced in Figure 3.4 below.
+
+![*Ultralytics-generated training and validation curves for the YOLOv8x-seg v1 run. Top row: box-regression, segmentation, classification and Distribution Focal Loss on the training set. Bottom row: the same losses on the validation set together with Box / Mask precision, recall, mAP@50 and mAP@50:95 over the 397 trained epochs. The early-stopping criterion fired at epoch 397 because no improvement in the best validation segmentation loss had been observed for 100 consecutive epochs.*](figures/yolo_v1_results.png)
+
+Three loss components are visible in the curves: box loss (the IoU-based regression loss for bounding-box localisation, decreasing from approximately 2.6 at epoch 1 to approximately 0.45 at the best epoch 296); segmentation loss (binary cross-entropy on the predicted mask, decreasing from approximately 4.5 to approximately 1.2); and classification + Distribution Focal Loss (both decreasing monotonically). The validation curves follow the training trajectory but are noisier because of the very small validation tile count (4 tiles in v1).
+
+The v2 round added 57 source images annotated with **model-in-the-loop pre-labelling** using the v1 checkpoint (≈ 70 % annotation-time reduction per image vs from-scratch). Two v2 training strategies were compared on a single like-for-like validation set: **v2-fromscratch** (started from COCO weights, trained on full merged v1+v2) reached Box mAP@50 = 0.319, while **v2-finetune** (started from v1 best.pt, continued only on the new v2 images) reached **Box mAP@50 = 0.372** — a 17 % relative gain. This result emphasises the sensitivity of pre-training transfer to the precise composition of the fine-tuning set. The v2-finetune training curves are shown in Figure 3.5.
+
+![*Ultralytics-generated training and validation curves for the YOLOv8x-seg v2-finetune run over its 173 trained epochs (best checkpoint at epoch 99). The relative regularity of the validation loss compared to the v1 run reflects the larger version-2 validation set and the slower effective learning rate that comes from fine-tuning the already-converged v1 checkpoint on the new-image subset only.*](figures/yolo_v2_finetune_results.png)
 
 A critical preliminary measurement before launching the v3 fine-tune was an evaluation of v2-finetune on the new v3 imagery: Box mAP@50 = **0.0811** on the v3-only validation set, a factor of approximately 4.5 below the same checkpoint's 0.363 on the v2-only set. This confirmed a substantial out-of-distribution gap — the central motivation for the systematic ablation that followed. The final v4_x_clean checkpoint recovers essentially all of the v2-distribution performance (0.319 on v2-only) while also reaching 0.313 on the v3-only set — an **OOD recovery ratio of 0.98**, up from 0.22 at the v2-finetune baseline.
+
+The progression of the headline Box mAP@50 metric across all YOLO runs in the project, including the systematic ablation experiments of Section 3.2, is visualised in Figure 3.6.
+
+![*Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.268 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4_x_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 % improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.*](figures/yolo_all_runs_map50.png)
+
+The per-detection precision-recall trade-off of the v2-finetune checkpoint is shown in Figure 3.7. The Box and Mask PR curves are produced by sweeping the inference confidence threshold from 1.0 to 0.0 and integrating the resulting Precision-Recall trajectory; the area under each curve is the corresponding mAP@50.
+
+![*Box and Mask precision-recall curves of the YOLOv8x-seg v2-finetune checkpoint on the version-2 validation set. The Box curve reaches mAP@50 = 0.372 (area under curve) and the Mask curve reaches Mask mAP@50 = 0.331. Both curves exhibit the typical "knee" at recall ≈ 0.4 where precision begins to drop sharply — the operating point that any production confidence threshold should be calibrated against.*](figures/yolo_v2_finetune_box_pr_curve.png)
+
+Finally, the per-class confusion matrix is informative for understanding the dominant false-positive failure modes. In a single-class detection setting the confusion matrix has two non-trivial cells: True Positives (predicted tree matches a ground-truth tree) and False Positives (predicted tree on background). Figure 3.8 shows the confusion matrix of the v2-finetune checkpoint at the default confidence threshold of 0.25.
+
+![*Confusion matrix of the YOLOv8x-seg v2-finetune checkpoint on the version-2 validation set at confidence threshold 0.25. The True Positive cell (top left) contains the matched predictions, while the False Positive cell (bottom left) contains the predictions made on background — predominantly shadows of buildings and small ornamental shrubs that the model has learned to detect at low confidence. The False Negative count (top right) is dominated by heavily-shadowed crowns in the centre of dense canopies, where the boundary between two adjacent trees is genuinely ambiguous even to a human annotator.*](figures/yolo_v2_finetune_confusion_matrix.png)
 
 ### 3.4.2 Mask R-CNN
 
