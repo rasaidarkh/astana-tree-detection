@@ -179,7 +179,7 @@ def _fix_longtable_styles(latex: str) -> str:
         n = len(re.findall(r"\\real\{([\d.]+)\}", spec_block))
 
         # Extract every row: rows end with `\\` followed by a newline. The
-        # header row and body rows look the same to this regex.
+        # first row is the header; subsequent rows are the body.
         rows: list[list[str]] = []
         for raw_row in re.findall(r"(?<![\\&])((?:[^\\]|\\(?!\\))*?)\\\\(?:\s|$)", body):
             cells = raw_row.split("&")
@@ -187,28 +187,65 @@ def _fix_longtable_styles(latex: str) -> str:
                 rows.append([_strip_for_length(c) for c in cells])
 
         if not rows:
-            # Fallback to even widths if we couldn't parse.
             even = round(0.92 / n, 3)
             specs = [rf"p{{{even}\linewidth}}" for _ in range(n)]
         else:
-            # Use the maximum cell length per column as the width signal.
-            # Clamp to [3, 60] characters so a single very-long cell doesn't
-            # dominate. Then convert to a width fraction summing to 0.92.
-            max_chars = [3] * n
-            for row in rows:
+            # Strategy: treat the column header as a hard minimum-content
+            # length (so the header never gets squeezed below its own text
+            # width) and use body content as the "preferred" length. The
+            # natural width of a column is then max(header, body) clamped to
+            # a sensible range, and we allocate proportionally to natural
+            # widths with a per-column floor so short columns still have room.
+            header_row = rows[0]
+            body_rows = rows[1:] if len(rows) > 1 else rows
+
+            # Clamp header length to [4, 18] — headers above 18 chars are
+            # rare and usually have spaces that can wrap onto a second line.
+            header_chars = [max(4, min(18, len(c))) for c in header_row]
+            # Clamp body content per cell to [4, 30] then take max per column.
+            body_chars = [4] * n
+            for row in body_rows:
                 for i, cell in enumerate(row):
-                    max_chars[i] = max(max_chars[i], min(60, len(cell)))
-            total = sum(max_chars)
-            widths = [round(0.92 * c / total, 3) for c in max_chars]
-            # Apply per-column minimum so very-short columns still have room
-            # for at least one short word.
-            widths = [max(0.06, w) for w in widths]
-            # Renormalise after the floor adjustment.
+                    body_chars[i] = max(body_chars[i], min(30, len(cell)))
+            # Natural width signal = max(header, body).
+            natural = [max(h, b) for h, b in zip(header_chars, body_chars)]
+
+            total = sum(natural)
+            # Allocate within a typeblock budget that depends on N: wider
+            # tables get a smaller budget so per-column floor still fits.
+            budget = 0.95 if n <= 5 else 0.97
+            raw_widths = [budget * c / total for c in natural]
+
+            # Per-column floor — different for narrow vs wide tables.
+            # For a 7-col table at floor=0.10 we'd need 0.70 just for floors,
+            # which leaves no headroom for content variation — so the floor
+            # is scaled down for wider tables.
+            floor = {2: 0.25, 3: 0.15, 4: 0.12, 5: 0.10}.get(n, 0.09)
+            widths = [max(floor, w) for w in raw_widths]
+
+            # Renormalise so widths sum to `budget` without exceeding it.
             s = sum(widths)
-            widths = [round(0.92 * w / s, 3) for w in widths]
-            specs = [rf"p{{{w}\linewidth}}" for w in widths]
+            if s > budget:
+                widths = [w * budget / s for w in widths]
+
+            # Wrap each p{} in `>{\raggedright\arraybackslash}` so text is
+            # left-aligned (ragged-right edge) instead of justified. Justified
+            # cells try to stretch words to fill the line, and when a cell
+            # contains a long unbreakable monospace identifier
+            # (e.g. `confidence_threshold`, 20 chars), justification can
+            # cause letters to overlap or run past the cell boundary.
+            # Ragged-right gives LaTeX freedom to break wherever it can.
+            specs = [
+                rf">{{\raggedright\arraybackslash}}p{{{round(w, 3)}\linewidth}}"
+                for w in widths
+            ]
 
         new_open = r"\begin{longtable}[]{@{}" + " ".join(specs) + r"@{}}"
+
+        # For wide tables (≥ 6 cols) wrap the whole longtable in `\small`
+        # so the content fits without further width squeezing.
+        if n >= 6:
+            return r"{\small " + new_open + body + m.group(4) + "}"
         return new_open + body + m.group(4)
 
     return table_re.sub(replace_table, latex)

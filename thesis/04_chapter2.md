@@ -140,12 +140,12 @@ All results are written to a local SQLite database at `storage/app.db` rather th
 
 **Table 2.2 — SQLite schema of the persistence layer (`storage/app.db`).**
 
-| Table | Principal columns | Foreign keys | Cardinality (typical) |
+| Table | What it stores | Foreign key | Typical cardinality |
 |---|---|---|---|
-| `snapshots` | `id`, `file_path`, `bounds_nw`, `bounds_se`, `geo_mode`, `scan_id`, `created_at` | `scan_id` → `scan_sessions(id)` ON DELETE SET NULL | 1 row per uploaded or captured satellite image |
-| `runs` | `job_id`, `snapshot_id`, `model`, `confidence_threshold`, `duration_ms`, `created_at` | `snapshot_id` → `snapshots(id)` ON DELETE CASCADE | 1 row per model invocation on a snapshot |
-| `detections` | `id`, `run_id`, `bbox_px`, `bbox_geo`, `polygon_mask`, `confidence`, `area_px`, `area_m2`, `lon`, `lat` | `run_id` → `runs(job_id)` ON DELETE CASCADE | 1 row per detected tree (300 – 800 per typical 1 km² capture) |
-| `scan_sessions` | `id`, `bbox_nw`, `bbox_se`, `zoom`, `provider`, `model`, `sub_region_cnt`, `status` | — | 1 row per Auto-Zoom Region Scan session |
+| `snapshots` | One row per uploaded or captured image — file path, geographic bounds, geo-conversion mode | `scan_id` → `scan_sessions(id)`, ON DELETE SET NULL | 1 per image |
+| `runs` | One row per model invocation on a snapshot — model name, confidence threshold, duration | `snapshot_id` → `snapshots(id)`, ON DELETE CASCADE | 1 per inference |
+| `detections` | One row per detected tree — pixel + geographic bbox, polygon mask, confidence, crown area | `run_id` → `runs(job_id)`, ON DELETE CASCADE | 300 – 800 per typical 1 km² capture |
+| `scan_sessions` | One row per Auto-Zoom Region Scan — bbox, zoom, provider, model, sub-region count, status | — | 1 per scan |
 
 The relationships form a chain: `scan_sessions` ← `snapshots` ← `runs` ← `detections`, with cascade on the inner two foreign keys. Deleting a scan-session via `DELETE /api/scans/{id}` therefore propagates through all its sub-region snapshots, runs, detections and the PNG files on disk in a single SQL statement (with a complementary `os.unlink` on the file paths returned by the cascade).
 
@@ -178,6 +178,10 @@ The **Map view** is the principal demonstration deliverable of the project. It q
 * **Recent scans** — a chronological list of the six most-recent scan sessions, each with a status dot (green = completed, amber = running), the display name (auto-generated as `Scan <short-id>` or user-renamed), the per-scan tree count, time-ago timestamp, and the model used. Each row carries an eye icon that toggles the scan's visibility on the aggregate layer — useful for isolating a single district visually. The *Manage* link opens the Library modal described in § 2.10.5 below.
 
 The same screen exposes a **Display strip** anchored to the bottom-right corner of the map (visible in Figure 2.1) with two control groups: a four-button segmented control to switch the **rendering mode** of the aggregate layer (Point / BBox / Polygon / Heat) and a *Filters* chip that opens an in-context popover with the same min-confidence slider as the left panel. Switching modes is instantaneous and does not require a re-fetch: every detection in the backend response carries three geometric representations — a centre point, an axis-aligned bounding box, and a polygon mask — and the frontend simply re-renders. The **Heat mode** uses the `leaflet.heat` plugin to produce a kernel-density visualisation weighted by per-detection confidence; the **Polygon mode** is the default whenever every detection in the active selection carries a mask, and the frontend falls back automatically to **Point** for any detection without geometry (most often a DeepForest detection rendered before SAM 2 mask refinement).
+
+A real-world example of the aggregate layer at scale is shown in Figure 2.3 — a single Auto-Zoom Region Scan over the Astana Botanical Park (left-bank district, approximately 1 × 1 km), captured at zoom 19 with the v4_x_clean production checkpoint. The scan produces several thousand individual tree-crown detections rendered as yellow / green bounding boxes on the basemap; the colour encodes confidence tier (yellow / orange = low–medium, green = high). The aggregate counter in the left panel reports **51 348** total trees across all 14 stored scans, of which **13 749** are currently visible at the active zoom and filter settings.
+
+![*Real-world scan of the Astana Botanical Park (zoom 19, v4_x_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues — a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale.*](figures/ui_canopy_botanical_park.jpg)
 
 ### 2.10.3 Action-aware model picker (centred modal)
 

@@ -12,11 +12,11 @@ This chapter reports the experimental evaluation of the system described in Chap
 
 **Table 3.1 — Astana dataset iterations.**
 
-| Batch | Date | Src imgs | Tiles | Polygons | Tile-level mean | Annotation effort |
-|---|---|---|---|---|---|---|
-| v1 | April 2026 | 20 | 62 | ≈ 4 444 | ≈ 72 polys/tile | from scratch, ≈ 25 min/img |
-| v2 | May 2026 | + 57 | 121 | ≈ 8 030 | ≈ 66 polys/tile | model-in-the-loop (v1), ≈ 7 min/img |
-| v3 | May 2026 | + 24 | ≈ 142 | ≈ 8 700 | ≈ 70 polys/tile | model-in-the-loop (v2-finetune), ≈ 4 min/img |
+| Batch | Date | Source images | Tiles after 640+128 sliding-window | Annotation effort |
+|---|---|---|---|---|
+| v1 | April 2026 | 20 imgs | 62 tiles, ≈ 4 444 polygons (≈ 72 polys/tile) | from scratch, ≈ 25 min/img |
+| v2 | May 2026 | + 57 imgs | 121 tiles, ≈ 8 030 polygons (≈ 66 polys/tile) | model-in-the-loop (v1), ≈ 7 min/img |
+| v3 | May 2026 | + 24 imgs | ≈ 142 tiles, ≈ 8 700 polygons (≈ 70 polys/tile) | model-in-the-loop (v2-finetune), ≈ 4 min/img |
 
 Source-image-level splits prevent any tile from a single source image leaking between train and validation. The data-preparation pipeline lives in four reusable scripts in the `ml/` directory of the repository (`coco_to_yolo_seg.py`, `tile_dataset.py`, `merge_coco.py`, `split_coco.py`).
 
@@ -95,7 +95,7 @@ Five empirical observations follow from this table.
 
 The cross-model ranking visualised as a bar chart is shown in Figure 3.1.
 
-![*Visual comparison of Box mAP@50 and Mask mAP@50 for the seven principal model configurations on the M14 validation set. The YOLOv8x-seg v4_x_clean production model is the strongest on both metrics; the previous YOLOv8x-seg v3-finetune-run1 intermediate checkpoint sits in the second tier; the three smaller-gap Astana-fine-tuned branches (DeepForest+SAM 2, Mask R-CNN v2+v3, YOLO v2-finetune) cluster in the 0.13 – 0.19 range; the NEON pretrained and Roboflow-v4 checkpoints are near zero, confirming the necessity of Astana-domain fine-tuning.*](figures/model_comparison_barchart.png)
+![*Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars — Box mAP\@50 (blue) and Mask mAP\@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.268), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4_x_clean (Box mAP\@50 = 0.315) as the new production champion; the v4_x_clean numbers are reported in Table 3.3 but not shown on this chart.*](figures/model_comparison_barchart.png)
 
 A useful complementary view of the same numbers is the breakdown by **validation subset**. The aggregate M14 metric mixes the in-distribution v1 / v2 subset with the out-of-distribution v3 subset; because the entire motivation for the v3 dataset extension was the OOD failure of v2-finetune on v3 imagery, it is informative to look at the two subsets separately. Table 3.4 reports the v2-only and v3-only Box mAP@50 of every YOLO checkpoint in the project, together with the OOD recovery ratio (v3-only divided by v2-only).
 
@@ -112,9 +112,9 @@ The OOD ratio rises monotonically along the project's checkpoint chain — from 
 
 A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown in Figure 3.2, and a four-tile strip of v2-finetune predictions on the version-2 validation set is shown in Figure 3.3. Both figures are reproducible from `thesis/gen_qualitative_figures.py`.
 
-![*Like-for-like qualitative comparison on the held-out validation tile `img_val_007` (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 prediction in blue. Right: YOLOv8x-seg v2-finetune prediction in orange. The v2-finetune model recovers a substantially larger fraction of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge.*](figures/yolo_v1_vs_v2_finetune_comparison.png)
+![*Like-for-like qualitative comparison on the held-out validation tile `img_val_007` (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.*](figures/yolo_v1_vs_v2_finetune_comparison.png)
 
-![*YOLOv8x-seg v2-finetune predictions on a four-tile sample from the version-2 validation set (tiles `img_val_001`, `003`, `007`, `009`). The model recovers nearly all visible crowns on the sparse-residential and dense-canopy scenes alike, and assigns higher confidence (0.6 – 0.9) to clearly-resolved trees in the foreground.*](figures/yolo_v2_finetune_val_4tile_strip.png)
+![*YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set (`img_val_001`, `003`, `007`, `009`). The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.*](figures/yolo_v2_finetune_val_4tile_strip.png)
 
 ## 3.4 Per-branch details
 
@@ -177,7 +177,11 @@ Running the four-checkpoint vote-2 ensemble at `conf = 0.15` on the 1 236 × 1 1
 
 The 3 000-to-790 reduction is dominated by cross-checkpoint duplicates — most trees appear in three or four of the four checkpoint outputs and survive vote-2, while single-model hallucinations (the most common being false-positive crowns on stadium roof structures specifically present in the v4_x_clean output) are discarded. The 132-tree spread between the most conservative checkpoint (v4_x_clean at 687) and the most permissive (v4_s_clean at 819) on the same input is a direct visual illustration of an aggregate-metric limitation: models with statistically indistinguishable Box mAP@50 detect substantially different per-detection subsets of the ground-truth crowns. The cross-YOLO ensemble averages out the per-checkpoint training-time variance and per-checkpoint failure modes at inference time. The implementation is production-ready and exposed in the frontend's hierarchical model picker under the **Ensemble → 4× YOLO vote** option (Section 2.10).
 
-![*Top-4 member checkpoints and the resulting cross-YOLO vote-2 ensemble on the same input tile. The ensemble cell (bottom-right, cyan outline with 3-pixel thickness) shows the 790 unified detections that survive IoU ≥ 0.5 clustering with at least two member-model votes. Single-model hallucinations — most visibly the stadium-roof false positives present in the v4_x_clean output — are discarded by the voting requirement.*](figures/cross_yolo_ensemble_4way.png)
+A broader visual comparison across eight archived YOLO checkpoints on a different Astana scene is reproduced in Figure 3.4. The same input tile is processed by each checkpoint independently and the per-checkpoint detection count is reported in the top-left strip of each cell. Three observations follow directly from the figure. First, **per-checkpoint detection counts span a 4× range** on a single scene — from 67 trees for the partially-trained `exp15 v2v3 only` checkpoint to 264 trees for `exp1_m_cocostart` — even though the M14 Box mAP@50 of these checkpoints differ by only 0.06 – 0.10 (well within twice the variance band). Second, the **production champion v4_x_clean (168 trees) is NOT the most permissive on this particular scene**; the older v2-finetune (208 trees) and the m-seg exp1 (264 trees) recover more crowns on the small ornamental street-trees lining the parking lots in the lower half of the tile, and v4_x_clean visibly under-detects them — a qualitative regression that the aggregate mAP@50 hides because the M14 validation set under-represents this exact scene type. Third, **the spread across checkpoints is a stronger signal of per-tile crown-count uncertainty than any single-checkpoint confidence score**, and is the primary motivation for the cross-YOLO voting ensemble of Section 3.5.
+
+![*Cross-checkpoint qualitative comparison of eight archived YOLO variants on a single Astana scene (street-tree-lined parking-lot complex with an arena in the upper-left corner). Each cell shows the input tile overlaid with one checkpoint's predicted polygons; the per-checkpoint tree count is reported in the top strip. Top row, left-to-right: v4_x_clean (champion, 168 trees), exp1_m_cocostart tuned (264), v4_m_clean (150), exp17 random-chain (87). Bottom row: exp15 v2v3-only (67), exp12 low-LR finish (183), v4_s_clean (147), v2-finetune legacy (208). The 4× spread between the most conservative (exp15 at 67) and the most permissive (exp1_m at 264) on the same input is a direct visual illustration of the aggregate-mAP limitation discussed in Section 3.7 below.*](figures/cross_model_8way_v2.png)
+
+![*Top-4 member checkpoints (v4_x_clean, exp1_m_cocostart, v4_s_clean, v2-finetune) and the resulting cross-YOLO vote-2 ensemble on the same input tile as Figure 3.4. The ensemble cell (bottom-right, cyan outline with 3-pixel thickness) shows the 790 unified detections that survive IoU ≥ 0.5 clustering with at least two member-model votes. Single-model hallucinations — most visibly the stadium-roof false positives present in the v4_x_clean output — are discarded by the voting requirement.*](figures/cross_yolo_ensemble_4way.png)
 
 ## 3.6 Comparison with the literature
 

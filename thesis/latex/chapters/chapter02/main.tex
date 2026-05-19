@@ -9,7 +9,7 @@ The system follows a classical three-tier separation of concerns: a thin \textbf
 \textbf{Table 2.1 --- Layered architecture of the system and the responsibilities of each layer.}
 
 {\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}p{0.06\linewidth} p{0.287\linewidth} p{0.287\linewidth} p{0.287\linewidth}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.119\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth}@{}}
 \toprule\noalign{}
 \textbf{Layer} & \textbf{Technology} & \textbf{Responsibility} & \textbf{Key components} \\
 \midrule\noalign{}
@@ -37,7 +37,7 @@ Two tile providers are registered (Table 2.1): the default \textbf{ESRI World Im
 \textbf{Table 2.1 --- Tile providers registered in \texttt{backend/map\_capture.py::TILE\_PROVIDERS}.}
 
 {\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}p{0.101\linewidth} p{0.33\linewidth} p{0.06\linewidth} p{0.43\linewidth}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.158\linewidth} >{\raggedright\arraybackslash}p{0.338\linewidth} >{\raggedright\arraybackslash}p{0.117\linewidth} >{\raggedright\arraybackslash}p{0.338\linewidth}@{}}
 \toprule\noalign{}
 \textbf{Provider key} & \textbf{Endpoint} & \textbf{Max zoom} & \textbf{Notes} \\
 \midrule\noalign{}
@@ -64,7 +64,7 @@ YOLOv8 {[}32{]} is a single-stage anchor-free object detector. The segmentation 
 \textbf{Table 2.3 --- Hyper-parameters of the YOLOv8x-seg v4\_x\_clean production training run.}
 
 {\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}p{0.255\linewidth} p{0.665\linewidth}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.412\linewidth} >{\raggedright\arraybackslash}p{0.538\linewidth}@{}}
 \toprule\noalign{}
 \textbf{Parameter} & \textbf{Value} \\
 \midrule\noalign{}
@@ -172,17 +172,17 @@ All results are written to a local SQLite database at \texttt{storage/app.db} ra
 \textbf{Table 2.2 --- SQLite schema of the persistence layer (\texttt{storage/app.db}).}
 
 {\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}p{0.071\linewidth} p{0.303\linewidth} p{0.243\linewidth} p{0.303\linewidth}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.128\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth}@{}}
 \toprule\noalign{}
-\textbf{Table} & \textbf{Principal columns} & \textbf{Foreign keys} & \textbf{Cardinality (typical)} \\
+\textbf{Table} & \textbf{What it stores} & \textbf{Foreign key} & \textbf{Typical cardinality} \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
 \endlastfoot
-\texttt{snapshots} & \texttt{id}, \texttt{file\_path}, \texttt{bounds\_nw}, \texttt{bounds\_se}, \texttt{geo\_mode}, \texttt{scan\_id}, \texttt{created\_at} & \texttt{scan\_id} → \texttt{scan\_sessions(id)} ON DELETE SET NULL & 1 row per uploaded or captured satellite image \\
-\texttt{runs} & \texttt{job\_id}, \texttt{snapshot\_id}, \texttt{model}, \texttt{confidence\_threshold}, \texttt{duration\_ms}, \texttt{created\_at} & \texttt{snapshot\_id} → \texttt{snapshots(id)} ON DELETE CASCADE & 1 row per model invocation on a snapshot \\
-\texttt{detections} & \texttt{id}, \texttt{run\_id}, \texttt{bbox\_px}, \texttt{bbox\_geo}, \texttt{polygon\_mask}, \texttt{confidence}, \texttt{area\_px}, \texttt{area\_m2}, \texttt{lon}, \texttt{lat} & \texttt{run\_id} → \texttt{runs(job\_id)} ON DELETE CASCADE & 1 row per detected tree (300 -- 800 per typical 1 km² capture) \\
-\texttt{scan\_sessions} & \texttt{id}, \texttt{bbox\_nw}, \texttt{bbox\_se}, \texttt{zoom}, \texttt{provider}, \texttt{model}, \texttt{sub\_region\_cnt}, \texttt{status} & --- & 1 row per Auto-Zoom Region Scan session \\
+\texttt{snapshots} & One row per uploaded or captured image --- file path, geographic bounds, geo-conversion mode & \texttt{scan\_id} → \texttt{scan\_sessions(id)}, ON DELETE SET NULL & 1 per image \\
+\texttt{runs} & One row per model invocation on a snapshot --- model name, confidence threshold, duration & \texttt{snapshot\_id} → \texttt{snapshots(id)}, ON DELETE CASCADE & 1 per inference \\
+\texttt{detections} & One row per detected tree --- pixel + geographic bbox, polygon mask, confidence, crown area & \texttt{run\_id} → \texttt{runs(job\_id)}, ON DELETE CASCADE & 300 -- 800 per typical 1 km² capture \\
+\texttt{scan\_sessions} & One row per Auto-Zoom Region Scan --- bbox, zoom, provider, model, sub-region count, status & --- & 1 per scan \\
 \end{longtable}
 }
 
@@ -233,6 +233,14 @@ The \textbf{Map view} is the principal demonstration deliverable of the project.
 \end{itemize}
 
 The same screen exposes a \textbf{Display strip} anchored to the bottom-right corner of the map (visible in Figure 2.1) with two control groups: a four-button segmented control to switch the \textbf{rendering mode} of the aggregate layer (Point / BBox / Polygon / Heat) and a \emph{Filters} chip that opens an in-context popover with the same min-confidence slider as the left panel. Switching modes is instantaneous and does not require a re-fetch: every detection in the backend response carries three geometric representations --- a centre point, an axis-aligned bounding box, and a polygon mask --- and the frontend simply re-renders. The \textbf{Heat mode} uses the \texttt{leaflet.heat} plugin to produce a kernel-density visualisation weighted by per-detection confidence; the \textbf{Polygon mode} is the default whenever every detection in the active selection carries a mask, and the frontend falls back automatically to \textbf{Point} for any detection without geometry (most often a DeepForest detection rendered before SAM 2 mask refinement).
+
+A real-world example of the aggregate layer at scale is shown in Figure 2.3 --- a single Auto-Zoom Region Scan over the Astana Botanical Park (left-bank district, approximately 1 × 1 km), captured at zoom 19 with the v4\_x\_clean production checkpoint. The scan produces several thousand individual tree-crown detections rendered as yellow / green bounding boxes on the basemap; the colour encodes confidence tier (yellow / orange = low--medium, green = high). The aggregate counter in the left panel reports \textbf{51 348} total trees across all 14 stored scans, of which \textbf{13 749} are currently visible at the active zoom and filter settings.
+
+\begin{figure}
+\centering
+\pandocbounded{\includegraphics[keepaspectratio,alt={Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale.}]{figures/ui_canopy_botanical_park.jpg}}
+\caption{\emph{Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale.}}
+\end{figure}
 
 \subsection{Action-aware model picker (centred modal)}\label{action-aware-model-picker-centred-modal}
 
@@ -323,7 +331,7 @@ The backend exposes a complete REST API documented automatically by FastAPI's Op
 \textbf{Table 2.2 --- REST endpoints exposed by the backend.}
 
 {\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}p{0.088\linewidth} p{0.39\linewidth} p{0.442\linewidth}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.158\linewidth} >{\raggedright\arraybackslash}p{0.396\linewidth} >{\raggedright\arraybackslash}p{0.396\linewidth}@{}}
 \toprule\noalign{}
 \textbf{Method} & \textbf{Path} & \textbf{Purpose} \\
 \midrule\noalign{}
