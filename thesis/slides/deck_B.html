@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Variant B · Botanical Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,500;1,9..144,600&family=Familjen+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4EEE0; --paper2:#EFE8D7; --ink:#1C2A20; --muted:#736A58; --muted2:#9A9080;
+  --terra:#BD4A22; --forest:#2C6E49; --line:rgba(28,42,32,.16); --line2:rgba(28,42,32,.08);
+  --serif:"Fraunces",Georgia,serif; --sans:"Familjen Grotesk",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#cfc7b4;display:flex;flex-direction:column;align-items:center;gap:34px;padding:34px 0 70px;font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;background:
+  radial-gradient(120% 100% at 85% 0%,#F8F3E7,transparent 60%),var(--paper);color:var(--ink)}
+.slide::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(140% 120% at 50% 50%,transparent 70%,rgba(28,42,32,.06));}
+.pad{position:absolute;inset:0;padding:62px 78px;display:flex;flex-direction:column;z-index:2}
+.toprule{position:absolute;top:40px;left:78px;right:78px;display:flex;justify-content:space-between;
+  align-items:baseline;border-bottom:1px solid var(--ink);padding-bottom:10px;
+  font-family:var(--sans);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink)}
+.toprule .r{color:var(--muted);letter-spacing:.16em}
+.botrule{position:absolute;bottom:38px;left:78px;right:78px;display:flex;justify-content:space-between;
+  font-family:var(--sans);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted2);
+  border-top:1px solid var(--line);padding-top:10px}
+.ey{font-family:var(--sans);font-size:13px;letter-spacing:.26em;text-transform:uppercase;color:var(--terra);font-weight:600}
+.fig{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--muted)}
+
+/* title */
+.tt .pad{justify-content:center}
+.tt h1{font-family:var(--serif);font-weight:600;font-size:74px;line-height:1.0;letter-spacing:-.01em;max-width:17ch;margin:26px 0 22px}
+.tt h1 em{font-style:italic;font-weight:600;color:var(--forest)}
+.tt .sub{font-size:22px;line-height:1.45;color:var(--muted);max-width:44ch}
+.auth{display:flex;gap:34px;align-items:center;margin-top:60px;font-size:16px;color:var(--ink);flex-wrap:wrap}
+.auth .lbl{font-family:var(--sans);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted2)}
+.auth .me{font-family:var(--serif);font-style:italic;font-weight:600;color:var(--terra)}
+.auth .me::before{content:"— "}
+.sup{margin-top:14px;font-size:13px;letter-spacing:.04em;color:var(--muted2)}
+.leaf{position:absolute;right:78px;top:160px;font-family:var(--serif);font-size:200px;line-height:1;color:rgba(44,110,73,.12);z-index:1}
+
+/* table */
+.tb h2{font-family:var(--serif);font-weight:600;font-size:52px;margin:14px 0 26px}
+table{width:100%;border-collapse:collapse;font-size:16.5px}
+thead th{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding:0 16px 11px;border-bottom:1.5px solid var(--ink)}
+tbody td{padding:14px 16px;border-bottom:1px solid var(--line2);vertical-align:middle}
+tbody tr td:first-child{font-weight:600}
+.work{color:var(--muted);font-style:italic;font-family:var(--serif)}
+.met{font-variant-numeric:tabular-nums;font-weight:600}
+tr.ours td{background:rgba(189,74,34,.07)}
+tr.ours td:first-child{box-shadow:inset 3px 0 0 var(--terra);font-family:var(--serif);font-style:italic;font-weight:600;color:var(--terra)}
+tr.ours .met{color:var(--terra)}
+.tag{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.1em;border:1px solid var(--terra);color:var(--terra);padding:2px 7px;margin-left:10px;text-transform:uppercase}
+.note{margin-top:auto;font-family:var(--serif);font-style:italic;font-size:18px;color:var(--muted)}
+.note b{color:var(--terra);font-style:normal;font-family:var(--sans);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-right:10px}
+
+/* hero */
+.hr .pad{justify-content:center}
+.flow{display:flex;align-items:flex-end;gap:54px;margin-top:24px}
+.st .n{font-family:var(--serif);font-weight:600;line-height:.86;letter-spacing:-.02em}
+.st.lo .n{font-size:104px;color:var(--muted)}
+.st.hi .n{font-size:196px;color:var(--terra)}
+.st .l{font-size:15px;color:var(--muted);max-width:24ch;margin-top:14px;line-height:1.5}
+.st.hi .l{color:var(--ink)}
+.mid{padding-bottom:30px;text-align:center}
+.mid .ar{width:120px;height:1.5px;background:var(--forest);position:relative;margin:0 0 10px}
+.mid .ar::after{content:"▸";position:absolute;right:-12px;top:-13px;color:var(--forest)}
+.mid .c{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--muted)}
+.bg{margin-top:44px;font-family:var(--serif);font-style:italic;font-size:20px;color:var(--ink)}
+.bg b{font-style:normal;font-family:var(--sans);font-weight:700;background:var(--terra);color:var(--paper);padding:5px 12px;font-size:16px;letter-spacing:.02em;margin-right:12px}
+@media print{@page{size:1280px 720px;margin:0}body{display:block;padding:0;gap:0;background:#000}.slide{page-break-after:always}}
+</style></head><body>
+
+<section class="slide tt">
+  <div class="toprule"><span>Astana IT University · Bachelor Thesis</span><span class="r">MMXXVI · IT-2304</span></div>
+  <div class="leaf">❧</div>
+  <div class="pad">
+    <div class="ey">Computer Science · 6B06101</div>
+    <h1>Automated Tree Recognition &amp; <em>Green-Space</em> Mapping from Satellite Imagery</h1>
+    <div class="sub">A multi-model deep-learning system for the city of Astana.</div>
+    <div class="auth"><span class="lbl">Authors</span><span>Berik Sharipov</span><span>Anuar Totin</span><span class="me">Rasul Aidarkhanov</span></div>
+    <div class="sup">Scientific supervisor — Syndar Satbayev</div>
+  </div>
+  <div class="botrule"><span>Fig. 01 / 22</span><span>YOLOv8-seg · Mask R-CNN · DeepForest · SAM 2</span></div>
+</section>
+
+<section class="slide tb">
+  <div class="toprule"><span>I · State of the Art</span><span class="r">Literature Review</span></div>
+  <div class="pad" style="padding-top:96px">
+    <div class="ey">Peer-reviewed · 2019–2025</div>
+    <h2>Literature Review</h2>
+    <table>
+      <thead><tr><th style="width:24%">Method</th><th style="width:22%">Work</th><th style="width:8%">Year</th><th style="width:22%">Data</th><th style="width:24%">Best metric</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td class="work">Lv et al.</td><td class="work">2023</td><td class="work">UAV RGB</td><td class="met">Det AP 92.4%</td></tr>
+        <tr><td>Faster R-CNN / RetinaNet</td><td class="work">dos Santos et al.</td><td class="work">2019</td><td class="work">UAV RGB</td><td class="met">AP 82–93%</td></tr>
+        <tr><td>YOLOv12m</td><td class="work">Abbas &amp; Damaševičius</td><td class="work">2025</td><td class="work">RGB satellite</td><td class="met">mAP@50 90.8%</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td class="work">Martins / Wang</td><td class="work">2021</td><td class="work">Aerial 10–32 cm</td><td class="met">F1 91% · IoU 96%</td></tr>
+        <tr><td>DeepForest (off→fine)</td><td class="work">Ventura et al.</td><td class="work">2024</td><td class="work">NAIP 60 cm USA</td><td class="met">F 0.42 → 0.73</td></tr>
+        <tr><td>SAM / SAM 2</td><td class="work">Kirillov / Ravi</td><td class="work">2023/24</td><td class="work">1B+ masks</td><td class="met">zero-shot</td></tr>
+        <tr class="ours"><td>YOLOv8x-seg v4 <span class="tag">Our research</span></td><td class="work">this thesis</td><td class="work">2026</td><td class="work">Astana sat. · M14</td><td class="met">Box mAP@50 0.315</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>Gap</b>No prior work evaluates these models on Central-Asian imagery — the first such measurement is ours.</div>
+  </div>
+  <div class="botrule"><span>≥ 20 sources</span><span>Criterion 1 · Topic disclosure</span></div>
+</section>
+
+<section class="slide hr">
+  <div class="toprule"><span>II · The Generalisation Gap</span><span class="r">Headline Result</span></div>
+  <div class="pad">
+    <div class="ey">From blind baseline to published champion</div>
+    <div class="flow">
+      <div class="st lo"><div class="n">0.012</div><div class="l">Off-the-shelf NEON DeepForest on Astana — first measurement for Central Asia.</div></div>
+      <div class="mid"><div class="ar"></div><div class="c">fine-tune · 23 experiments</div></div>
+      <div class="st hi"><div class="n">0.315</div><div class="l">YOLOv8x-seg v4 champion — Box mAP@50 on the M14 cross-model set.</div></div>
+    </div>
+    <div class="bg"><b>+140%</b>over the YOLO v1 baseline (0.131) — the strongest published Astana number to date.</div>
+  </div>
+  <div class="botrule"><span>Box mAP@50</span><span>14-image merged validation · 702 polygons</span></div>
+</section>
+<script>const s=[...document.querySelectorAll('.slide')];let i=0;addEventListener('keydown',e=>{if(e.key==='ArrowRight')i=Math.min(s.length-1,i+1);else if(e.key==='ArrowLeft')i=Math.max(0,i-1);else return;s[i].scrollIntoView({behavior:'smooth',block:'center'})})</script>
+</body></html>

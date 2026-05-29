@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Variant C · Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B2536; --bg2:#0E2C40; --ink:#E7F2F7; --muted:#88AEC2; --muted2:#5C8198;
+  --cyan:#4FD0EE; --cyan-deep:#2A9CBE; --line:rgba(120,196,228,.20); --line2:rgba(120,196,228,.10);
+  --sans:"Archivo",sans-serif; --mono:"IBM Plex Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#04141e;display:flex;flex-direction:column;align-items:center;gap:34px;padding:34px 0 70px;font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;background:var(--bg);color:var(--ink)}
+.slide::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line2) 1px,transparent 1px),
+    linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:32px 32px,32px 32px,160px 160px,160px 160px}
+.slide::after{content:"";position:absolute;inset:18px;border:1px solid var(--line);pointer-events:none}
+.pad{position:absolute;inset:0;padding:64px 80px;display:flex;flex-direction:column;z-index:3}
+.hud{position:absolute;left:40px;right:40px;display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted2);z-index:4}
+.hud.t{top:30px}.hud.b{bottom:28px;align-items:flex-end}
+.hud .c{color:var(--cyan)}
+.ey{font-family:var(--mono);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan);display:flex;align-items:center;gap:12px}
+.ey::before{content:"";width:24px;height:2px;background:var(--cyan)}
+
+/* title — with drafting title block */
+.tt .pad{justify-content:center}
+.tt h1{font-family:var(--sans);font-weight:800;font-size:62px;line-height:1.03;letter-spacing:-.01em;max-width:17ch;margin:22px 0 18px}
+.tt h1 b{color:var(--cyan)}
+.tt .sub{font-size:20px;color:var(--muted);max-width:42ch;line-height:1.45}
+.block{position:absolute;right:40px;bottom:64px;width:360px;border:1px solid var(--line);font-family:var(--mono);font-size:11px;z-index:3}
+.block div{display:flex;border-bottom:1px solid var(--line2)}
+.block div:last-child{border-bottom:0}
+.block span{padding:7px 10px;color:var(--muted)}
+.block .k{width:96px;color:var(--muted2);letter-spacing:.12em;text-transform:uppercase;border-right:1px solid var(--line2)}
+.block .v{color:var(--ink)}
+.block .v.me{color:var(--cyan)}
+.scalebar{display:flex;align-items:center;gap:8px;margin-top:50px;font-family:var(--mono);font-size:11px;color:var(--muted2);letter-spacing:.1em}
+.scalebar i{display:inline-block;width:60px;height:8px;border:1px solid var(--muted2)}
+.scalebar i.f{background:repeating-linear-gradient(90deg,var(--muted2) 0 10px,transparent 10px 20px)}
+
+/* table */
+.tb h2{font-family:var(--sans);font-weight:800;font-size:46px;margin:10px 0 22px}
+table{width:100%;border-collapse:collapse;font-size:16px;border:1px solid var(--line)}
+thead th{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);
+  text-align:left;padding:11px 16px;border-bottom:1px solid var(--line);border-right:1px solid var(--line2);background:rgba(79,208,238,.05)}
+tbody td{padding:12px 16px;border-bottom:1px solid var(--line2);border-right:1px solid var(--line2);vertical-align:middle}
+tbody td:last-child,thead th:last-child{border-right:0}
+tbody tr td:first-child{font-weight:700}
+.work{color:var(--muted)}
+.met{font-family:var(--mono);font-size:14px}
+tr.ours td{background:rgba(79,208,238,.12)}
+tr.ours td:first-child{box-shadow:inset 3px 0 0 var(--cyan);color:var(--cyan)}
+tr.ours .met{color:var(--cyan);font-weight:600}
+.tag{font-family:var(--mono);font-size:10px;background:var(--cyan);color:#06222e;padding:2px 7px;margin-left:8px;letter-spacing:.08em}
+.note{margin-top:auto;font-family:var(--mono);font-size:14px;color:var(--muted);display:flex;gap:14px;align-items:center}
+.note b{color:#06222e;background:var(--cyan);padding:4px 9px;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+
+/* hero — dimension lines */
+.hr .pad{justify-content:center}
+.dim{display:flex;align-items:center;gap:0;margin-top:30px}
+.col{display:flex;flex-direction:column;align-items:center}
+.col .n{font-family:var(--sans);font-weight:800;line-height:.9;letter-spacing:-.02em}
+.col.lo .n{font-size:96px;color:var(--muted)}
+.col.hi .n{font-size:184px;color:var(--cyan);text-shadow:0 0 50px rgba(79,208,238,.3)}
+.col .l{font-family:var(--mono);font-size:12px;color:var(--muted);max-width:22ch;text-align:center;margin-top:12px;line-height:1.55;text-transform:uppercase;letter-spacing:.04em}
+.col.hi .l{color:var(--ink)}
+.ext{flex:1;display:flex;flex-direction:column;align-items:center;padding:0 26px}
+.ext .dl{width:100%;height:1px;background:var(--cyan-deep);position:relative}
+.ext .dl::before,.ext .dl::after{content:"";position:absolute;top:-4px;width:1px;height:9px;background:var(--cyan-deep)}
+.ext .dl::before{left:0}.ext .dl::after{right:0}
+.ext .t{font-family:var(--mono);font-size:11px;color:var(--cyan-deep);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+.badge{margin-top:46px;font-family:var(--mono);font-size:14px;color:var(--ink);letter-spacing:.06em}
+.badge b{background:var(--cyan);color:#06222e;padding:5px 11px;font-weight:600;margin-right:12px}
+@media print{@page{size:1280px 720px;margin:0}body{display:block;padding:0;gap:0;background:#000}.slide{page-break-after:always}.slide::after{display:none}}
+</style></head><body>
+
+<section class="slide tt">
+  <div class="hud t"><span>ASTANA IT UNIVERSITY</span><span class="c">DWG. 01 / 22</span></div>
+  <div class="pad">
+    <div class="ey">PROJECT · 6B06101 COMPUTER SCIENCE · IT-2304</div>
+    <h1>Automated Tree Recognition &amp; <b>Green-Space</b> Mapping from Satellite Imagery</h1>
+    <div class="sub">A multi-model deep-learning system for the city of Astana.</div>
+    <div class="scalebar"><span>ZOOM 19</span><i></i><i class="f"></i><i></i><span>GSD ≈ 0.3 m · 51.16°N 71.47°E</span></div>
+  </div>
+  <div class="block">
+    <div><span class="k">Title</span><span class="v">Urban Tree Detection</span></div>
+    <div><span class="k">Authors</span><span class="v">Sharipov · Totin · <b class="me">Aidarkhanov</b></span></div>
+    <div><span class="k">Advisor</span><span class="v">S. Satbayev</span></div>
+    <div><span class="k">Date · Rev</span><span class="v">2026 · Defense</span></div>
+  </div>
+  <div class="hud b"><span>YOLOv8-SEG · MASK R-CNN · DEEPFOREST · SAM 2</span><span>SHEET 01</span></div>
+</section>
+
+<section class="slide tb">
+  <div class="hud t"><span>01 · STATE OF THE ART</span><span class="c">DWG. 05 / 22</span></div>
+  <div class="pad" style="padding-top:92px">
+    <div class="ey">PEER-REVIEWED · 2019–2025</div>
+    <h2>Literature Review</h2>
+    <table>
+      <thead><tr><th style="width:24%">Method</th><th style="width:22%">Work</th><th style="width:8%">Year</th><th style="width:22%">Data</th><th style="width:24%">Best metric</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td class="work">Lv et al.</td><td class="work">2023</td><td class="work">UAV RGB</td><td class="met">Det AP 92.4%</td></tr>
+        <tr><td>Faster R-CNN / RetinaNet</td><td class="work">dos Santos et al.</td><td class="work">2019</td><td class="work">UAV RGB</td><td class="met">AP 82–93%</td></tr>
+        <tr><td>YOLOv12m</td><td class="work">Abbas &amp; Damaševičius</td><td class="work">2025</td><td class="work">RGB satellite</td><td class="met">mAP@50 90.8%</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td class="work">Martins / Wang</td><td class="work">2021</td><td class="work">Aerial 10–32 cm</td><td class="met">F1 91% · IoU 96%</td></tr>
+        <tr><td>DeepForest (off→fine)</td><td class="work">Ventura et al.</td><td class="work">2024</td><td class="work">NAIP 60 cm USA</td><td class="met">F 0.42 → 0.73</td></tr>
+        <tr><td>SAM / SAM 2</td><td class="work">Kirillov / Ravi</td><td class="work">2023/24</td><td class="work">1B+ masks</td><td class="met">zero-shot</td></tr>
+        <tr class="ours"><td>YOLOv8x-seg v4 <span class="tag">OURS</span></td><td class="work">this thesis</td><td class="work">2026</td><td class="work">Astana sat. · M14</td><td class="met">Box mAP@50 0.315</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>Gap</b><span>No prior work evaluates these models on Central-Asian imagery — the first such measurement is ours.</span></div>
+  </div>
+  <div class="hud b"><span>≥ 20 SOURCES</span><span>CRITERION 1 · TOPIC DISCLOSURE</span></div>
+</section>
+
+<section class="slide hr">
+  <div class="hud t"><span>02 · GEOGRAPHIC GENERALISATION GAP</span><span class="c">DWG. 03 / 22</span></div>
+  <div class="pad">
+    <div class="ey">FROM BLIND BASELINE TO PUBLISHED CHAMPION</div>
+    <div class="dim">
+      <div class="col lo"><div class="n">0.012</div><div class="l">Off-the-shelf NEON DeepForest on Astana</div></div>
+      <div class="ext"><div class="t">Δ fine-tune · 23 experiments</div><div class="dl"></div></div>
+      <div class="col hi"><div class="n">0.315</div><div class="l">YOLOv8x-seg v4 — Box mAP@50 · M14</div></div>
+    </div>
+    <div class="badge"><b>+140%</b>over the YOLO v1 baseline (0.131) · strongest published Astana number to date</div>
+  </div>
+  <div class="hud b"><span>METRIC · BOX mAP@50</span><span>14-IMG MERGED VAL · 702 POLYGONS</span></div>
+</section>
+<script>const s=[...document.querySelectorAll('.slide')];let i=0;addEventListener('keydown',e=>{if(e.key==='ArrowRight')i=Math.min(s.length-1,i+1);else if(e.key==='ArrowLeft')i=Math.max(0,i-1);else return;s[i].scrollIntoView({behavior:'smooth',block:'center'})})</script>
+</body></html>

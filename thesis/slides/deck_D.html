@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Variant D · Swiss Brutalist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Archivo+Narrow:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bone:#F1EFE9; --ink:#101010; --muted:#6B6B66; --verm:#FF3D00; --line:#101010;
+  --sans:"Archivo",sans-serif; --narrow:"Archivo Narrow",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#c9c6bd;display:flex;flex-direction:column;align-items:center;gap:34px;padding:34px 0 70px;font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;background:var(--bone);color:var(--ink)}
+.pad{position:absolute;inset:0;padding:0;display:flex;flex-direction:column;z-index:2}
+.bar{display:flex;justify-content:space-between;align-items:center;background:var(--ink);color:var(--bone);
+  font-family:var(--narrow);font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;padding:13px 40px}
+.bar .v{color:var(--verm)}
+.body{flex:1;padding:48px 56px;display:flex;flex-direction:column}
+.idx{font-family:var(--sans);font-weight:900;font-size:15px;letter-spacing:.04em}
+.idx em{color:var(--verm);font-style:normal}
+.ey{font-family:var(--narrow);font-weight:700;font-size:14px;letter-spacing:.22em;text-transform:uppercase;color:var(--verm);margin-top:6px}
+
+/* title */
+.tt h1{font-family:var(--sans);font-weight:900;font-size:88px;line-height:.92;letter-spacing:-.03em;text-transform:uppercase;margin:18px 0 0;max-width:14ch}
+.tt h1 mark{background:var(--verm);color:var(--bone);padding:0 .08em}
+.tt .sub{font-size:21px;font-weight:600;color:var(--ink);max-width:40ch;margin-top:26px;border-top:3px solid var(--ink);padding-top:16px;width:max-content}
+.auth{margin-top:auto;display:flex;gap:0;border-top:3px solid var(--ink);padding-top:14px}
+.auth div{flex:1;font-family:var(--narrow);font-size:15px;font-weight:600;letter-spacing:.02em}
+.auth .k{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px}
+.auth .me{color:var(--verm);font-weight:700}
+
+/* table */
+.tb h2{font-family:var(--sans);font-weight:900;font-size:58px;letter-spacing:-.02em;text-transform:uppercase;margin:14px 0 22px;line-height:.95}
+table{width:100%;border-collapse:collapse;font-size:16px}
+thead th{font-family:var(--narrow);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  text-align:left;padding:10px 14px;background:var(--ink);color:var(--bone)}
+tbody td{padding:13px 14px;border-bottom:2px solid var(--ink);vertical-align:middle}
+tbody tr td:first-child{font-weight:800}
+.work{color:var(--muted);font-weight:600}
+.met{font-weight:800;font-variant-numeric:tabular-nums}
+tr.ours td{background:var(--verm);color:var(--bone);border-bottom:2px solid var(--ink)}
+tr.ours .work{color:rgba(255,255,255,.8)}
+tr.ours .met{color:var(--bone)}
+.tag{font-family:var(--narrow);font-size:11px;font-weight:700;background:var(--bone);color:var(--verm);padding:2px 8px;margin-left:10px;letter-spacing:.08em}
+.note{margin-top:auto;font-family:var(--narrow);font-size:17px;font-weight:600;color:var(--ink);border-top:3px solid var(--ink);padding-top:14px}
+.note b{color:var(--verm)}
+
+/* hero */
+.hr .body{justify-content:center}
+.big{font-family:var(--sans);font-weight:900;font-size:340px;line-height:.8;letter-spacing:-.04em;color:var(--ink);position:relative}
+.big mark{background:none;color:var(--verm)}
+.row{display:flex;align-items:flex-end;justify-content:space-between;gap:30px}
+.side{max-width:300px;padding-bottom:30px}
+.side .from{font-family:var(--narrow);font-size:14px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.side .fn{font-family:var(--sans);font-weight:900;font-size:64px;color:var(--muted);line-height:.9;margin:6px 0 8px}
+.side p{font-size:15px;font-weight:600;color:var(--ink);line-height:1.4}
+.cap{margin-top:18px;font-family:var(--narrow);font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.cap b{background:var(--verm);color:var(--bone);padding:3px 10px}
+@media print{@page{size:1280px 720px;margin:0}body{display:block;padding:0;gap:0;background:#000}.slide{page-break-after:always}}
+</style></head><body>
+
+<section class="slide tt"><div class="pad">
+  <div class="bar"><span>Astana IT University — Bachelor Thesis Defense</span><span class="v">2026</span></div>
+  <div class="body">
+    <div class="idx">01 — <em>IT-2304 · 6B06101 Computer Science</em></div>
+    <div class="ey">Multi-model deep learning · Astana</div>
+    <h1>Tree Recognition &amp; <mark>Green-Space</mark> Mapping</h1>
+    <div class="sub">From satellite imagery — a deployable system for the city of Astana.</div>
+    <div class="auth">
+      <div><span class="k">Author</span>Berik Sharipov</div>
+      <div><span class="k">Author</span>Anuar Totin</div>
+      <div><span class="k">Author · presenting</span><span class="me">Rasul Aidarkhanov</span></div>
+      <div><span class="k">Supervisor</span>Syndar Satbayev</div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide tb"><div class="pad">
+  <div class="bar"><span>I — State of the Art</span><span class="v">Literature Review · 05/22</span></div>
+  <div class="body">
+    <div class="ey">Peer-reviewed · 2019–2025</div>
+    <h2>Literature<br>Review</h2>
+    <table>
+      <thead><tr><th style="width:24%">Method</th><th style="width:22%">Work</th><th style="width:8%">Year</th><th style="width:22%">Data</th><th style="width:24%">Best metric</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td class="work">Lv et al.</td><td class="work">2023</td><td class="work">UAV RGB</td><td class="met">Det AP 92.4%</td></tr>
+        <tr><td>Faster R-CNN / RetinaNet</td><td class="work">dos Santos et al.</td><td class="work">2019</td><td class="work">UAV RGB</td><td class="met">AP 82–93%</td></tr>
+        <tr><td>YOLOv12m</td><td class="work">Abbas &amp; Damaševičius</td><td class="work">2025</td><td class="work">RGB satellite</td><td class="met">mAP@50 90.8%</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td class="work">Martins / Wang</td><td class="work">2021</td><td class="work">Aerial 10–32 cm</td><td class="met">F1 91% · IoU 96%</td></tr>
+        <tr><td>DeepForest (off→fine)</td><td class="work">Ventura et al.</td><td class="work">2024</td><td class="work">NAIP 60 cm USA</td><td class="met">F 0.42→0.73</td></tr>
+        <tr><td>SAM / SAM 2</td><td class="work">Kirillov / Ravi</td><td class="work">2023/24</td><td class="work">1B+ masks</td><td class="met">zero-shot</td></tr>
+        <tr class="ours"><td>YOLOv8x-seg v4 <span class="tag">OURS</span></td><td class="work">this thesis</td><td class="work">2026</td><td class="work">Astana · M14</td><td class="met">Box mAP@50 0.315</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>No</b> prior work evaluates these models on Central-Asian imagery — the first such measurement is ours.</div>
+  </div>
+</div></section>
+
+<section class="slide hr"><div class="pad">
+  <div class="bar"><span>II — The Generalisation Gap</span><span class="v">Headline · 03/22</span></div>
+  <div class="body">
+    <div class="row">
+      <div class="side">
+        <div class="from">Off-the-shelf baseline</div>
+        <div class="fn">0.012</div>
+        <p>NEON DeepForest on Astana — first measurement for Central Asia.</p>
+        <div class="cap"><b>+140%</b> vs YOLO v1</div>
+      </div>
+      <div class="big"><mark>0.315</mark></div>
+    </div>
+    <div class="note" style="margin-top:18px">CHAMPION — YOLOv8x-seg v4 · <b>Box mAP@50</b> on the M14 cross-model set · strongest published Astana number to date.</div>
+  </div>
+</div></section>
+<script>const s=[...document.querySelectorAll('.slide')];let i=0;addEventListener('keydown',e=>{if(e.key==='ArrowRight')i=Math.min(s.length-1,i+1);else if(e.key==='ArrowLeft')i=Math.max(0,i-1);else return;s[i].scrollIntoView({behavior:'smooth',block:'center'})})</script>
+</body></html>
