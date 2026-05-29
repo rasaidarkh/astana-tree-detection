@@ -42,7 +42,7 @@ A 23-experiment hyperparameter ablation of the YOLO branch was conducted along s
 | **exp1 (4-replicate mean ± std)** | yolov8m-seg (27 M), v2-proven aug | **0.271 ± 0.028** | — |
 | v4_n_clean | yolov8n-seg (3 M), COCO start, defaults | 0.261 | 0.251 |
 | v4_l_clean | yolov8l-seg (46 M), COCO start, defaults | 0.260 | 0.253 |
-| v3-finetune-run1 | yolov8x-seg (71 M), v2-finetune warm-start, v2-proven aug | 0.220 | 0.187 |
+| v3-finetune-run1 | yolov8x-seg (71 M), v2-finetune warm-start, v2-proven aug | 0.287 | 0.263 |
 | exp11 | 3-stage chain v1 → v1+v2 → v1+v2+v3 (m-seg) | 0.210 | — |
 | v2-finetune (was prod.) | yolov8x-seg (71 M), v1 warm-start, v2-proven aug | 0.187 | 0.185 |
 | v2-fromscratch | yolov8x-seg (71 M), COCO start, v2-proven aug | 0.156 | 0.147 |
@@ -95,7 +95,7 @@ Five empirical observations follow from this table.
 
 The cross-model ranking visualised as a bar chart is shown in Figure 3.1.
 
-![*Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars — Box mAP\@50 (blue) and Mask mAP\@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.268), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4_x_clean (Box mAP\@50 = 0.315) as the new production champion; the v4_x_clean numbers are reported in Table 3.3 but not shown on this chart.*](figures/model_comparison_barchart.png)
+![*Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars — Box mAP\@50 (blue) and Mask mAP\@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.287 / 0.263), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4_x_clean (Box mAP\@50 = 0.315) as the new production champion; the v4_x_clean numbers are reported in Table 3.3 but not shown on this chart.*](figures/model_comparison_barchart.png)
 
 A useful complementary view of the same numbers is the breakdown by **validation subset**. The aggregate M14 metric mixes the in-distribution v1 / v2 subset with the out-of-distribution v3 subset; because the entire motivation for the v3 dataset extension was the OOD failure of v2-finetune on v3 imagery, it is informative to look at the two subsets separately. Table 3.4 reports the v2-only and v3-only Box mAP@50 of every YOLO checkpoint in the project, together with the OOD recovery ratio (v3-only divided by v2-only).
 
@@ -134,7 +134,7 @@ A critical preliminary measurement before launching the v3 fine-tune was an eval
 
 The progression of the headline Box mAP@50 metric across all YOLO runs in the project, including the systematic ablation experiments of Section 3.2, is visualised in Figure 3.6.
 
-![*Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.268 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4_x_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 % improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.*](figures/yolo_all_runs_map50.png)
+![*Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.287 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4_x_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 % improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.*](figures/yolo_all_runs_map50.png)
 
 The per-detection precision-recall trade-off of the v2-finetune checkpoint is shown in Figure 3.7. The Box and Mask PR curves are produced by sweeping the inference confidence threshold from 1.0 to 0.0 and integrating the resulting Precision-Recall trajectory; the area under each curve is the corresponding mAP@50.
 

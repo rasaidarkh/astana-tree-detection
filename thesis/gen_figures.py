@@ -119,8 +119,8 @@ try:
     models   = ["YOLO\nv1", "DF v3\n+ SAM 2", "YOLO\nv2-scratch",
                 "Mask\nR-CNN\nv2+v3", "YOLO\nv2-ft", "YOLO\nv3-run1\n(x-seg)",
                 "YOLO\nv3 prod\n(m-seg, exp1)"]
-    box_map  = [0.131, 0.146, 0.156, 0.166, 0.187, 0.268, 0.308]
-    mask_map = [0.134, 0.134, 0.147, 0.158, 0.185, 0.244, 0.305]
+    box_map  = [0.131, 0.146, 0.156, 0.166, 0.187, 0.287, 0.308]
+    mask_map = [0.134, 0.134, 0.147, 0.158, 0.185, 0.263, 0.305]
 
     x = np.arange(len(models))
     w = 0.35
