@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canopy · Thesis Defense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* palette — satellite night + canopy */
+  --ink:#06110C; --ink2:#0A1812; --ink3:#102619;
+  --paper:#EAF3EA; --sage:#8AA597; --sage-dim:#5E7468;
+  --canopy:#1FAE5F; --canopy-deep:#127A43;
+  --lime:#C8F24E; --lime-ink:#0A1206;
+  --line:rgba(234,243,234,.10); --line-2:rgba(234,243,234,.06);
+  --grid:rgba(200,242,78,.055);
+  --bracket:var(--lime);
+  /* type */
+  --display:"Bricolage Grotesque",sans-serif;
+  --text:"Hanken Grotesk",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#020805;color:var(--paper);font-family:var(--text);-webkit-font-smoothing:antialiased}
+body{display:flex;flex-direction:column;align-items:center;gap:34px;padding:34px 0 80px}
+
+/* ---------- slide frame ---------- */
+.slide{
+  position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;
+  background:
+    radial-gradient(120% 90% at 78% -10%, rgba(31,174,95,.16), transparent 55%),
+    radial-gradient(90% 80% at 0% 110%, rgba(18,122,67,.18), transparent 50%),
+    var(--ink);
+  color:var(--paper);
+}
+/* sliding-window tile grid */
+.slide::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:64px 64px;background-position:center;
+  -webkit-mask-image:radial-gradient(130% 110% at 50% 40%,#000 55%,transparent 100%);
+          mask-image:radial-gradient(130% 110% at 50% 40%,#000 55%,transparent 100%);
+}
+.slide::after{content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 160px rgba(0,0,0,.55);}
+
+.pad{position:absolute;inset:0;padding:64px 76px;display:flex;flex-direction:column;z-index:3}
+
+/* ---------- HUD ---------- */
+.hud{position:absolute;left:0;right:0;display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--sage-dim);
+  text-transform:uppercase;z-index:4}
+.hud.top{top:26px;padding:0 30px}
+.hud.bot{bottom:24px;padding:0 30px;align-items:center}
+.hud .dot{color:var(--lime)}
+.prog{height:2px;width:120px;background:var(--line);position:relative}
+.prog i{position:absolute;left:0;top:0;height:100%;background:var(--lime)}
+
+/* corner brackets framing the live slide */
+.reticle{position:absolute;inset:22px;pointer-events:none;z-index:4}
+.reticle span{position:absolute;width:22px;height:22px;border:2px solid var(--bracket);opacity:.85}
+.reticle .tl{top:0;left:0;border-right:0;border-bottom:0}
+.reticle .tr{top:0;right:0;border-left:0;border-bottom:0}
+.reticle .bl{bottom:0;left:0;border-right:0;border-top:0}
+.reticle .br{bottom:0;right:0;border-left:0;border-top:0}
+
+/* ---------- type primitives ---------- */
+.eyebrow{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--lime);display:flex;align-items:center;gap:12px}
+.eyebrow::before{content:"";width:26px;height:2px;background:var(--lime)}
+h1.title{font-family:var(--display);font-weight:800;font-size:64px;line-height:1.02;
+  letter-spacing:-.018em;max-width:18ch}
+h2.head{font-family:var(--display);font-weight:800;font-size:46px;line-height:1.04;
+  letter-spacing:-.015em}
+.lede{font-size:21px;line-height:1.5;color:var(--sage);max-width:62ch}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--sage-dim);text-transform:uppercase}
+.mono{font-family:var(--mono)}
+.lime{color:var(--lime)}
+
+/* ---------- TITLE slide ---------- */
+.s-title .pad{justify-content:center}
+.s-title .title{margin:22px 0 20px}
+.s-title .sub{font-size:23px;color:var(--paper);opacity:.92;max-width:46ch;font-weight:500}
+.authors{display:flex;gap:30px;margin-top:54px;font-family:var(--mono);font-size:15px;
+  letter-spacing:.04em;color:var(--sage);align-items:center;flex-wrap:wrap}
+.authors b{color:var(--paper);font-weight:500}
+.authors .me{color:var(--lime-ink);background:var(--lime);padding:5px 12px;border-radius:2px;font-weight:700;letter-spacing:.06em}
+.authors .me::before{content:"▸ ";}
+.sup{margin-top:18px;font-family:var(--mono);font-size:13px;color:var(--sage-dim);letter-spacing:.06em}
+.geotag{position:absolute;right:76px;bottom:64px;font-family:var(--mono);font-size:12px;
+  color:var(--sage-dim);letter-spacing:.14em;text-align:right;line-height:1.7;z-index:3}
+.geotag b{color:var(--canopy);display:block;font-weight:500}
+.bigbracket{position:absolute;left:60px;top:150px;width:150px;height:150px;z-index:2;opacity:.5}
+.bigbracket span{position:absolute;width:46px;height:46px;border:3px solid var(--canopy)}
+.bigbracket .a{top:0;left:0;border-right:0;border-bottom:0}
+.bigbracket .b{bottom:0;right:0;border-left:0;border-top:0}
+
+/* ---------- TABLE slide ---------- */
+.s-table .head{margin:8px 0 26px}
+table.data{width:100%;border-collapse:collapse;font-size:16.5px}
+table.data thead th{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--sage);text-align:left;padding:0 18px 12px;border-bottom:1px solid var(--line)}
+table.data tbody td{padding:14px 18px;border-bottom:1px solid var(--line-2);color:var(--paper);vertical-align:middle}
+table.data tbody tr td:first-child{font-weight:600}
+table.data .work{color:var(--sage)}
+table.data .metric{font-family:var(--mono);font-size:15px;color:var(--paper)}
+table.data tr.ours td{background:linear-gradient(90deg,rgba(200,242,78,.13),rgba(200,242,78,.03));
+  border-bottom:1px solid rgba(200,242,78,.35);color:var(--paper)}
+table.data tr.ours td:first-child{box-shadow:inset 3px 0 0 var(--lime);font-weight:800}
+table.data tr.ours .metric{color:var(--lime);font-weight:700}
+.tag-ours{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;
+  background:var(--lime);color:var(--lime-ink);padding:3px 7px;border-radius:2px;margin-left:10px}
+.foot{margin-top:auto;display:flex;align-items:center;gap:14px;font-size:15px;color:var(--sage)}
+.foot .pin{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--lime);
+  border:1px solid rgba(200,242,78,.4);padding:5px 10px;border-radius:2px;text-transform:uppercase}
+
+/* ---------- HERO stat slide ---------- */
+.s-hero .pad{justify-content:center}
+.heroflow{display:flex;align-items:center;gap:48px;margin-top:30px}
+.statbox{position:relative;padding:30px 34px}
+.statbox .brk{position:absolute;width:26px;height:26px;border:2px solid var(--line)}
+.statbox.lo .brk{border-color:var(--sage-dim)}
+.statbox.hi .brk{border-color:var(--lime)}
+.brk.tl{top:0;left:0;border-right:0;border-bottom:0}
+.brk.br{bottom:0;right:0;border-left:0;border-top:0}
+.statnum{font-family:var(--display);font-weight:800;letter-spacing:-.03em;line-height:.9}
+.statbox.lo .statnum{font-size:108px;color:var(--sage)}
+.statbox.hi .statnum{font-size:188px;color:var(--lime);text-shadow:0 0 60px rgba(200,242,78,.25)}
+.statlab{font-family:var(--mono);font-size:13px;letter-spacing:.08em;color:var(--sage);
+  margin-top:14px;max-width:24ch;line-height:1.6;text-transform:uppercase}
+.statbox.hi .statlab{color:var(--paper)}
+.arrow{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--canopy)}
+.arrow .ln{width:120px;height:2px;background:repeating-linear-gradient(90deg,var(--canopy) 0 10px,transparent 10px 18px);position:relative}
+.arrow .ln::after{content:"";position:absolute;right:-2px;top:-5px;border:6px solid transparent;border-left-color:var(--canopy)}
+.arrow .x{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--sage-dim);text-transform:uppercase}
+.badge{display:inline-flex;align-items:center;gap:10px;margin-top:48px;font-family:var(--mono);
+  font-size:14px;letter-spacing:.1em;color:var(--paper)}
+.badge b{color:var(--lime-ink);background:var(--lime);padding:6px 12px;border-radius:2px;font-weight:800;letter-spacing:.04em}
+
+/* ---------- notes overlay ---------- */
+#notes{position:fixed;inset:auto 0 0 0;background:#03100a;border-top:2px solid var(--lime);
+  color:var(--paper);font-family:var(--text);font-size:16px;line-height:1.55;padding:20px 30px;
+  display:none;z-index:50;max-height:38vh;overflow:auto}
+#notes b{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--lime);display:block;margin-bottom:8px;text-transform:uppercase}
+.hint{position:fixed;right:16px;bottom:12px;font-family:var(--mono);font-size:11px;color:#3c4a42;z-index:40;letter-spacing:.1em}
+
+@media print{
+  @page{size:1280px 720px;margin:0}
+  body{display:block;padding:0;gap:0;background:#000}
+  .slide{page-break-after:always;box-shadow:none}
+  .hint,#notes{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ SLIDE 1 · TITLE ============ -->
+<section class="slide s-title" data-notes="Good morning. Our project builds an end-to-end system that detects every individual tree in satellite imagery of Astana. I personally own the YOLO detection branch and the Canopy web application — the parts I will focus on today. It is a complex/team work: Berik did Mask R-CNN, Anuar did DeepForest and SAM 2.">
+  <div class="hud top"><span>ASTANA IT UNIVERSITY</span><span>BACHELOR&nbsp;THESIS&nbsp;DEFENSE</span><span class="dot">FRAME&nbsp;01 / 22</span></div>
+  <div class="reticle"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+  <div class="bigbracket"><span class="a"></span><span class="b"></span></div>
+  <div class="pad">
+    <div class="eyebrow">6B06101 · COMPUTER SCIENCE · IT-2304 · 2026</div>
+    <h1 class="title">Automated Tree Recognition &amp; Green-Space Mapping from Satellite Imagery</h1>
+    <div class="sub">A multi-model deep-learning system for the city of <span class="lime">Astana</span>.</div>
+    <div class="authors">
+      <span><b>Berik Sharipov</b></span>
+      <span><b>Anuar Totin</b></span>
+      <span class="me">Rasul Aidarkhanov</span>
+    </div>
+    <div class="sup">SCIENTIFIC SUPERVISOR — SYNDAR SATBAYEV</div>
+  </div>
+  <div class="geotag">CAPTURE&nbsp;TARGET<b>51.1605° N&nbsp;&nbsp;71.4704° E</b>ZOOM&nbsp;19 · GSD&nbsp;≈0.3&nbsp;m</div>
+  <div class="hud bot"><span>SATELLITE&nbsp;·&nbsp;YOLOv8-SEG&nbsp;·&nbsp;MASK&nbsp;R-CNN&nbsp;·&nbsp;DEEPFOREST&nbsp;·&nbsp;SAM&nbsp;2</span><span class="prog"><i style="width:4.5%"></i></span></div>
+</section>
+
+<!-- ============ SLIDE 2 · LITERATURE TABLE ============ -->
+<section class="slide s-table" data-notes="The literature from 2019 to 2025 reports very high accuracy — 90%+ mAP — but every single result is on data from the USA, Europe, China, Brazil or New Zealand. None on Central Asia. The off-the-shelf to fine-tuned jump for DeepForest, 0.42 to 0.73, is what justifies building our own Astana dataset. The last row is our contribution.">
+  <div class="hud top"><span>01 · STATE OF THE ART</span><span>LITERATURE REVIEW</span><span class="dot">FRAME&nbsp;05 / 22</span></div>
+  <div class="reticle"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+  <div class="pad">
+    <div class="eyebrow">PEER-REVIEWED · 2019 – 2025</div>
+    <h2 class="head" style="margin:10px 0 24px">Literature Review</h2>
+    <table class="data">
+      <thead><tr><th style="width:24%">Method</th><th style="width:22%">Work</th><th style="width:9%">Year</th><th style="width:21%">Data</th><th style="width:24%">Best metric</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td class="work">Lv et al.</td><td class="work">2023</td><td class="work">UAV RGB</td><td class="metric">Det AP 92.4%</td></tr>
+        <tr><td>Faster R-CNN / RetinaNet</td><td class="work">dos Santos et al.</td><td class="work">2019</td><td class="work">UAV RGB</td><td class="metric">AP 82–93%</td></tr>
+        <tr><td>YOLOv12m</td><td class="work">Abbas &amp; Damaševičius</td><td class="work">2025</td><td class="work">RGB satellite</td><td class="metric">mAP@50 90.8%</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td class="work">Martins / Wang</td><td class="work">2021</td><td class="work">Aerial 10–32 cm</td><td class="metric">F1 91% · IoU 96%</td></tr>
+        <tr><td>DeepForest (off → fine)</td><td class="work">Ventura et al.</td><td class="work">2024</td><td class="work">NAIP 60 cm USA</td><td class="metric">F 0.42 → 0.73</td></tr>
+        <tr><td>SAM / SAM 2</td><td class="work">Kirillov / Ravi</td><td class="work">2023/24</td><td class="work">1B+ masks</td><td class="metric">zero-shot</td></tr>
+        <tr class="ours"><td>YOLOv8x-seg v4 <span class="tag-ours">OUR RESEARCH</span></td><td class="work">this thesis</td><td class="work">2026</td><td class="work">Astana sat. · M14</td><td class="metric">Box mAP@50 0.315</td></tr>
+      </tbody>
+    </table>
+    <div class="foot"><span class="pin">Gap</span><span>No prior work evaluates these models on Central-Asian imagery — the first such measurement is ours.</span></div>
+  </div>
+  <div class="hud bot"><span>SOURCES&nbsp;≥&nbsp;20&nbsp;·&nbsp;CRITERION&nbsp;1&nbsp;·&nbsp;TOPIC&nbsp;DISCLOSURE</span><span class="prog"><i style="width:22%"></i></span></div>
+</section>
+
+<!-- ============ SLIDE 3 · HERO STAT ============ -->
+<section class="slide s-hero" data-notes="Here is the single most important number of the project. The public NEON DeepForest model, applied off-the-shelf to Astana, scores 0.012 — essentially blind. After our dataset and our YOLO ablation, the champion reaches 0.315 Box mAP@50 — a 140% improvement over our own v1 baseline, and the strongest published number on Astana satellite imagery to date.">
+  <div class="hud top"><span>02 · THE GEOGRAPHIC GENERALISATION GAP</span><span>HEADLINE RESULT</span><span class="dot">FRAME&nbsp;03 / 22</span></div>
+  <div class="reticle"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+  <div class="pad">
+    <div class="eyebrow">FROM BLIND BASELINE TO PUBLISHED CHAMPION</div>
+    <div class="heroflow">
+      <div class="statbox lo"><span class="brk tl"></span><span class="brk br"></span>
+        <div class="statnum">0.012</div>
+        <div class="statlab">Off-the-shelf NEON DeepForest on Astana — first measurement for Central Asia</div>
+      </div>
+      <div class="arrow"><div class="x">fine-tune + ablation</div><div class="ln"></div><div class="x">23 experiments</div></div>
+      <div class="statbox hi"><span class="brk tl"></span><span class="brk br"></span>
+        <div class="statnum">0.315</div>
+        <div class="statlab">YOLOv8x-seg v4 champion — Box mAP@50 on the M14 cross-model set</div>
+      </div>
+    </div>
+    <div class="badge"><b>+140%</b> over the YOLO v1 baseline (0.131) · strongest published Astana number to date</div>
+  </div>
+  <div class="hud bot"><span>METRIC&nbsp;·&nbsp;BOX&nbsp;mAP@50&nbsp;·&nbsp;14-IMAGE&nbsp;MERGED&nbsp;VAL&nbsp;(702&nbsp;POLYGONS)</span><span class="prog"><i style="width:13.5%"></i></span></div>
+</section>
+
+<div class="hint">← → navigate · N notes · F fit-screen</div>
+<div id="notes"><b>Speaker notes — frame <span id="nfi">01</span></b><span id="ntx"></span></div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];let i=0,fit=false;
+function show(n){i=Math.max(0,Math.min(slides.length-1,n));slides[i].scrollIntoView({behavior:'smooth',block:'center'});sync();}
+function sync(){const s=slides[i];document.getElementById('ntx').textContent=s.dataset.notes||'';
+  document.getElementById('nfi').textContent=String(i+1).padStart(2,'0');}
+function toggleFit(){fit=!fit;slides.forEach((s,k)=>{if(!fit){s.style.transform='';s.style.position='';return;}
+  const sc=Math.min(innerWidth/1280,innerHeight/720);s.style.display=k===i?'block':'none';
+  s.style.transform=`scale(${sc})`;s.style.transformOrigin='top center';});
+  document.body.style.gap=fit?'0':'34px';}
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='PageDown'){show(i+1);if(fit){toggleFit();toggleFit();}}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){show(i-1);if(fit){toggleFit();toggleFit();}}
+  else if(e.key==='Home')show(0);else if(e.key==='End')show(slides.length-1);
+  else if(e.key.toLowerCase()==='n'){const n=document.getElementById('notes');n.style.display=n.style.display==='block'?'none':'block';}
+  else if(e.key.toLowerCase()==='f')toggleFit();
+});
+sync();
+</script>
+</body>
+</html>
