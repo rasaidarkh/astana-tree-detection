@@ -109,7 +109,7 @@ def to_standalone_html(detections: list[Detection], title: str = "Astana Trees")
 </head><body>
 <div id="map"></div>
 <div class="panel">
-  <h2>Astana Tree Detection</h2>
+  <h2>Canopy — Astana Tree Detection</h2>
   <div>Total: <b>{len(geo_features)}</b></div>
   <div style="font-size:11px;color:#666;margin-top:4px">{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}</div>
 </div>

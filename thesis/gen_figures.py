@@ -116,27 +116,43 @@ except Exception as e:
 #   - Mask R-CNN v2+v3:           results/maskrcnn_14img_eval/metrics.json
 #   - DeepForest v3 + SAM 2:      results/df_sam2_14img_eval/metrics.json
 try:
-    models   = ["YOLO\nv1", "DF v3\n+ SAM 2", "YOLO\nv2-scratch",
+    # Canonical Table 3.3 ranking, ending on the FINAL production champion
+    # v4_x_clean (0.315 / 0.289) so the chart matches the results table/speech.
+    models   = ["NEON DF\n(off-the-shelf)", "YOLO\nv1", "DF v3\n+ SAM 2",
                 "Mask\nR-CNN\nv2+v3", "YOLO\nv2-ft", "YOLO\nv3-run1\n(x-seg)",
-                "YOLO\nv3 prod\n(m-seg, exp1)"]
-    box_map  = [0.131, 0.146, 0.156, 0.166, 0.187, 0.287, 0.308]
-    mask_map = [0.134, 0.134, 0.147, 0.158, 0.185, 0.263, 0.305]
+                "YOLO exp1\n(m-seg)", "YOLO v4\n(x-seg)\nFINAL"]
+    box_map  = [0.012, 0.131, 0.146, 0.166, 0.187, 0.287, 0.308, 0.315]
+    mask_map = [0.000, 0.134, 0.134, 0.158, 0.185, 0.263, 0.305, 0.289]
+    champ    = len(models) - 1  # index of the champion bar to highlight
 
     x = np.arange(len(models))
-    w = 0.35
-    fig, ax = plt.subplots(figsize=(11, 5))
-    bars1 = ax.bar(x - w/2, box_map,  w, label="Box mAP@50",  color="#4472C4")
-    bars2 = ax.bar(x + w/2, mask_map, w, label="Mask mAP@50", color="#ED7D31")
+    w = 0.38
+    fig, ax = plt.subplots(figsize=(12, 5.2))
+    box_colors  = ["#9DB4D8"] * len(models); box_colors[champ]  = "#2E5AAC"
+    mask_colors = ["#F1B488"] * len(models); mask_colors[champ] = "#D9661F"
+    bars1 = ax.bar(x - w/2, box_map,  w, label="Box mAP@50",  color=box_colors)
+    bars2 = ax.bar(x + w/2, mask_map, w, label="Mask mAP@50", color=mask_colors)
 
-    for bar, val in zip(bars1, box_map):
+    for i, (bar, val) in enumerate(zip(bars1, box_map)):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
-                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
-    for bar, val in zip(bars2, mask_map):
+                f"{val:.3f}", ha="center", va="bottom",
+                fontsize=10 if i == champ else 9,
+                fontweight="bold" if i == champ else "normal")
+    for i, (bar, val) in enumerate(zip(bars2, mask_map)):
+        if val <= 0:
+            continue
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
-                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
+                f"{val:.3f}", ha="center", va="bottom",
+                fontsize=10 if i == champ else 9,
+                fontweight="bold" if i == champ else "normal")
 
-    ax.set_xticks(x); ax.set_xticklabels(models, fontsize=9)
-    ax.set_ylabel("mAP@50"); ax.set_ylim(0, 0.38)
+    # mark the champion column
+    ax.annotate("FINAL production", xy=(champ, 0.315), xytext=(champ - 0.4, 0.355),
+                fontsize=9, fontweight="bold", color="#2E5AAC",
+                ha="center", arrowprops=dict(arrowstyle="->", color="#2E5AAC", lw=1.3))
+
+    ax.set_xticks(x); ax.set_xticklabels(models, fontsize=8.5)
+    ax.set_ylabel("mAP@50"); ax.set_ylim(0, 0.40)
     ax.set_title("Cross-model comparison on the 14-image M14 validation set (702 polygons)")
     ax.legend(loc="upper left"); ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
