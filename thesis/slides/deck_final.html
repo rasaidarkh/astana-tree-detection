@@ -55,6 +55,11 @@ ul.clean li .n{position:absolute;left:0;top:1px;font-family:var(--mono);font-siz
 ul.clean li b{color:var(--ink)}
 ul.check li::before{content:"✓";position:absolute;left:0;top:0;color:var(--lime-deep);font-weight:800;font-size:18px}
 ul.check li{list-style:none;position:relative;padding-left:28px;font-size:16px;line-height:1.4;color:var(--ink2);margin-bottom:10px}
+/* enlarged list variant for sparse slides */
+ul.check.big li{font-size:20px;line-height:1.45;margin-bottom:20px;padding-left:34px}
+ul.check.big li::before{font-size:21px}
+ul.clean.big li{font-size:20px;line-height:1.5;padding-left:34px}
+ul.clean.big li .n{font-size:15px}
 
 table{width:100%;border-collapse:collapse;font-size:15px}
 thead th{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
@@ -88,6 +93,11 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 .img .scrim{position:absolute;inset:0;z-index:2;pointer-events:none}
 .img .scrim.bl{background:linear-gradient(60deg,rgba(245,244,238,.97) 0%,rgba(245,244,238,.8) 26%,rgba(245,244,238,.18) 52%,transparent 72%)}
 .img .scrim.bot{background:linear-gradient(0deg,rgba(245,244,238,.96) 0%,rgba(245,244,238,.6) 14%,transparent 34%)}
+/* readable top header band on photo slides */
+.img .topfade{position:absolute;top:0;left:0;right:0;height:128px;z-index:3;pointer-events:none;
+  background:linear-gradient(180deg,rgba(245,244,238,.97) 0%,rgba(245,244,238,.7) 48%,transparent 100%)}
+.img .rail.top{color:var(--ink);z-index:6}
+.img .rail.top .pin::before{background:var(--lime-deep)}
 .img .ov{position:absolute;z-index:4}
 .det{position:absolute;z-index:4;border:1.6px solid var(--lime-deep)}
 .det i{position:absolute;width:8px;height:8px;background:var(--lime-deep)}
@@ -102,7 +112,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 
 .authors{display:flex;align-items:center;flex-wrap:wrap;gap:11px;font-size:17px;font-weight:500;color:var(--ink2)}
 .authors .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
-.authors .me{color:var(--lime-deep);font-weight:800}
+.authors .me{color:var(--ink2);font-weight:600}
 .authors .dot{color:var(--muted)}
 
 .divider{background:var(--ink);color:var(--paper)}
@@ -124,8 +134,9 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
   <div class="pad"></div>
   <img class="bg" src="../figures/ui_canopy_botanical_park.jpg" alt="">
   <div class="scrim bl"></div>
+  <div class="topfade"></div>
   <div class="rail top"><span class="pin">Astana IT University — Bachelor Thesis Defense</span><span>2026 · IT-2304</span></div>
-  <div class="det" style="right:120px;top:150px;width:230px;height:200px"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="lab">YOLOv8x-seg · one capture</span></div>
+  <div class="det" style="right:120px;top:174px;width:230px;height:188px"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="lab">YOLOv8x-seg · one capture</span></div>
   <div class="ov" style="left:64px;bottom:96px;max-width:780px">
     <div class="kicker">Computer Science · 6B06101</div>
     <h1 style="margin-top:18px">Automated Tree Recognition<br>&amp; Green-Space Mapping</h1>
@@ -488,6 +499,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
   <div class="pad"></div>
   <img class="bg" src="../figures/yolo_v2_finetune_val_batch0.jpg" alt="">
   <div class="scrim bl"></div>
+  <div class="topfade"></div>
   <div class="rail top"><span class="pin">08 · Qualitative</span><span class="pageno">17</span></div>
   <div class="ov" style="left:64px;top:150px;max-width:520px">
     <div class="kicker">What it actually looks like</div>
@@ -520,6 +532,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
   <div class="pad"></div>
   <img class="bg" src="../figures/ui_canopy_scan_model_modal.png" alt="">
   <div class="scrim bot"></div>
+  <div class="topfade"></div>
   <div class="rail top"><span class="pin">09 · Canopy — model picker</span><span class="pageno">19</span></div>
   <div class="ov" style="left:64px;right:64px;bottom:64px;display:flex;justify-content:space-between;align-items:flex-end;gap:30px">
     <p style="background:rgba(245,244,238,.9);padding:14px 18px;border-radius:6px;max-width:62ch;backdrop-filter:blur(2px)">
@@ -584,17 +597,17 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 21 CONCLUSIONS -->
 <section class="slide">
   <div class="rail top"><span>10 · Conclusions</span><span class="c pageno">21</span></div>
-  <div class="pad">
+  <div class="pad vc">
     <div class="kicker">Objectives → outcomes</div>
-    <h2>Every task, addressed</h2>
-    <ul class="check" style="margin-top:18px">
+    <h2 style="font-size:44px">Every task, addressed</h2>
+    <ul class="check big" style="margin-top:26px">
       <li><b>An automated pipeline</b> — capture → tile → detect → map → export, with no manual counting.</li>
       <li><b>Working application</b> — Canopy, deployed, with a free choice of detection engine.</li>
       <li><b>Dataset</b> — annotated, tiled Astana imagery with a held-out 14-image / 702-tree common set.</li>
       <li><b>Four engines compared</b> + two ensembles, all scored identically on one set.</li>
       <li><b>Fair evaluation</b> — first such measurement for Astana.</li>
     </ul>
-    <div class="card" style="margin-top:16px;border-left:3px solid var(--lime-deep)"><p style="color:var(--ink);font-size:18px">The headline isn't a score — it's that a <b>manual task is now an automated process</b>. Accuracy is modest (and honestly so: ready-made tools score ~0 here, ours do meaningfully better), but the <b>process</b> is the contribution.</p></div>
+    <div class="card" style="margin-top:24px;border-left:3px solid var(--lime-deep)"><p style="color:var(--ink);font-size:21px;line-height:1.5">The headline isn't a score — it's that a <b>manual task is now an automated process</b>. Accuracy is modest (and honestly so: ready-made tools score ~0 here, ours do meaningfully better), but the <b>process</b> is the contribution.</p></div>
   </div>
   <div class="rail bot"><span class="pin">Criterion 1 · Conclusions map 1:1 to tasks</span><span>manual → automated</span></div>
 </section>
@@ -602,11 +615,12 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 22 CONTRIBUTIONS & FUTURE WORK -->
 <section class="slide">
   <div class="rail top"><span>10 · Contributions &amp; Future Work</span><span class="c pageno">22</span></div>
-  <div class="pad">
-    <div class="grid2" style="margin-top:4px;gap:34px;flex:1;align-content:center">
+  <div class="pad vc">
+    <h2 style="font-size:40px;margin-bottom:6px">Contributions &amp; future work</h2>
+    <div class="grid2" style="margin-top:22px;gap:48px;align-items:start">
       <div class="col">
         <div class="kicker">My contribution (Rasul)</div>
-        <ul class="clean" style="gap:12px;margin-top:6px">
+        <ul class="clean big" style="gap:20px;margin-top:14px">
           <li><span class="n">1</span>The whole <b>automated pipeline &amp; Canopy app</b> (FastAPI + React + SQLite) — the actual deliverable</li>
           <li><span class="n">2</span>The <b>YOLOv8 engine</b> — ~20 experiments, +140% over my baseline</li>
           <li><span class="n">3</span>The <b>cross-YOLO vote</b> ensemble &amp; the common-set evaluation</li>
@@ -614,7 +628,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
       </div>
       <div class="col">
         <div class="kicker">Future work</div>
-        <ul class="clean" style="gap:12px;margin-top:6px">
+        <ul class="clean big" style="gap:20px;margin-top:14px">
           <li><span class="n">1</span>More annotated data</li>
           <li><span class="n">2</span>Train on the <b>same imagery we run on</b> (close the domain gap)</li>
           <li><span class="n">3</span>Better handling of small trees · city-wide canopy analytics</li>
@@ -630,13 +644,15 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
   <div class="pad"></div>
   <img class="bg" src="../figures/ui_canopy_botanical_park.jpg" alt="">
   <div class="scrim bl"></div>
+  <div class="topfade"></div>
   <div class="rail top"><span class="pin">Astana IT University</span><span class="pageno">23</span></div>
-  <div class="ov" style="left:64px;bottom:110px;max-width:760px">
+  <div class="ov" style="left:64px;bottom:84px;max-width:900px">
     <div class="kicker">Thank you</div>
-    <h1 style="margin-top:16px">Thank you — we'll gladly<br>answer your questions.</h1>
-    <div class="authors" style="margin-top:26px">
-      <span class="lbl">Team</span><span>Sharipov</span><span class="dot">·</span><span>Totin</span><span class="dot">·</span><span class="me">Aidarkhanov</span>
-      <span class="lbl" style="margin-left:10px">Supervisor</span><span>S. Satbayev</span>
+    <h1 style="margin-top:18px;font-size:72px">Thank you — we'll gladly<br>answer your questions.</h1>
+    <div class="sub" style="margin-top:24px;max-width:50ch">From a manual, one-by-one task to an <b style="color:var(--lime-deep)">automated</b> tree-recognition pipeline for Astana — and a working app anyone can run.</div>
+    <div class="authors" style="margin-top:30px;font-size:18px">
+      <span class="lbl">Team</span><span>Berik Sharipov</span><span class="dot">·</span><span>Anuar Totin</span><span class="dot">·</span><span class="me">Rasul Aidarkhanov</span>
+      <span class="lbl" style="margin-left:10px">Supervisor</span><span>Syndar Satbayev</span>
     </div>
   </div>
   <div class="rail bot"><span class="pin">Automated Tree Recognition &amp; Green-Space Mapping</span><span>Astana · 2026</span></div>
