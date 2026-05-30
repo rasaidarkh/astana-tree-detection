@@ -340,7 +340,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
     <h2>What goes in, and where it runs</h2>
     <div class="grid2 wide" style="margin-top:20px">
       <div class="col">
-        <div class="card"><h3>Dataset</h3><p>High-zoom satellite captures of Astana (~0.3 m/px), tiled 640 + 128 overlap. Trees overlap, so we annotate <b>instance polygons</b>, not just boxes. A held-out common set of <b>14 images · 702 labelled trees</b> scores every model.</p></div>
+        <div class="card"><h3>Dataset</h3><p>High-zoom Astana captures (~0.3 m/px). We hand-labelled <b>~5 500 tree crowns</b> across <b>~100 images</b> as instance polygons (≈8 700 training tiles after 640+128 tiling). A held-out common set of <b>14 images · 702 trees</b> scores every model.</p></div>
         <div class="card"><h3>Database (SQLite)</h3>
           <div class="flow" style="margin-top:2px">
             <div class="node" style="padding:8px 7px"><div class="t">scan_sessions</div></div><div class="arrow" style="font-size:14px;padding:0 5px">→</div>
