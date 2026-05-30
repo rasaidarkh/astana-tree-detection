@@ -31,9 +31,9 @@ body{background:#cdcabf;display:flex;flex-direction:column;align-items:center;ga
 .kicker{font-family:var(--mono);font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--lime-deep);font-weight:700;display:flex;align-items:center;gap:11px}
 .kicker::before{content:"";width:26px;height:2px;background:var(--lime-deep)}
 h1{font-weight:800;font-size:54px;line-height:1.02;letter-spacing:-.02em}
-h2{font-weight:800;font-size:38px;line-height:1.05;letter-spacing:-.018em;margin:13px 0 0}
-.sub{font-size:19px;font-weight:400;color:var(--ink2);line-height:1.45;max-width:60ch}
-p{font-size:17px;line-height:1.48;color:var(--ink2)}
+h2{font-weight:800;font-size:42px;line-height:1.05;letter-spacing:-.018em;margin:13px 0 0}
+.sub{font-size:21px;font-weight:400;color:var(--ink2);line-height:1.46;max-width:62ch}
+p{font-size:18.5px;line-height:1.5;color:var(--ink2)}
 b,strong{color:var(--ink);font-weight:700}
 .em{color:var(--lime-deep);font-weight:700}
 .chip{display:inline-block;background:var(--lime);color:var(--lime-ink);font-family:var(--mono);font-weight:700;
@@ -46,25 +46,25 @@ b,strong{color:var(--ink);font-weight:700}
 .grid2.narrow{grid-template-columns:.82fr 1.18fr}
 .col{display:flex;flex-direction:column;gap:13px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:17px 19px}
-.card h3{font-size:14px;font-family:var(--mono);font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lime-deep);margin-bottom:8px}
-.card p{font-size:15.5px;line-height:1.44}
+.card h3{font-size:14.5px;font-family:var(--mono);font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lime-deep);margin-bottom:8px}
+.card p{font-size:16.5px;line-height:1.46}
 
 ul.clean{list-style:none;display:flex;flex-direction:column;gap:12px}
-ul.clean li{position:relative;padding-left:30px;font-size:17px;line-height:1.4;color:var(--ink2)}
+ul.clean li{position:relative;padding-left:30px;font-size:18px;line-height:1.42;color:var(--ink2)}
 ul.clean li .n{position:absolute;left:0;top:1px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--lime-deep)}
 ul.clean li b{color:var(--ink)}
 ul.check li::before{content:"✓";position:absolute;left:0;top:0;color:var(--lime-deep);font-weight:800;font-size:18px}
-ul.check li{list-style:none;position:relative;padding-left:28px;font-size:16px;line-height:1.4;color:var(--ink2);margin-bottom:10px}
+ul.check li{list-style:none;position:relative;padding-left:28px;font-size:17.5px;line-height:1.42;color:var(--ink2);margin-bottom:10px}
 /* enlarged list variant for sparse slides */
 ul.check.big li{font-size:20px;line-height:1.45;margin-bottom:20px;padding-left:34px}
 ul.check.big li::before{font-size:21px}
 ul.clean.big li{font-size:20px;line-height:1.5;padding-left:34px}
 ul.clean.big li .n{font-size:15px}
 
-table{width:100%;border-collapse:collapse;font-size:15px}
-thead th{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  text-align:left;padding:9px 13px;background:var(--ink);color:var(--paper)}
-tbody td{padding:9px 13px;border-bottom:1px solid var(--line2);vertical-align:middle;color:var(--ink2)}
+table{width:100%;border-collapse:collapse;font-size:16.5px}
+thead th{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  text-align:left;padding:11px 14px;background:var(--ink);color:var(--paper)}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line2);vertical-align:middle;color:var(--ink2)}
 tbody tr td:first-child{font-weight:700;color:var(--ink)}
 .work{color:var(--muted)}
 .met{font-family:var(--mono);font-weight:500;font-size:14px;color:var(--ink)}
@@ -76,8 +76,8 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 .bignum{font-weight:900;font-size:120px;line-height:.82;letter-spacing:-.04em;color:var(--ink);font-variant-numeric:tabular-nums}
 .statside{display:flex;flex-direction:column;gap:7px;padding-bottom:12px}
 
-.fml{font-family:var(--mono);font-size:16px;color:var(--ink);background:var(--panel);border:1px solid var(--line);
-  border-left:3px solid var(--lime-deep);border-radius:4px;padding:11px 14px;line-height:1.5}
+.fml{font-family:var(--mono);font-size:17.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--lime-deep);border-radius:4px;padding:13px 16px;line-height:1.5}
 .frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 4px}
 .frac .n{border-bottom:1.5px solid var(--ink);padding:0 6px}
 .frac .d{padding:0 6px}
@@ -646,11 +646,11 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
   <div class="scrim bl"></div>
   <div class="topfade"></div>
   <div class="rail top"><span class="pin">Astana IT University</span><span class="pageno">23</span></div>
-  <div class="ov" style="left:64px;bottom:84px;max-width:900px">
+  <div class="ov" style="left:64px;top:150px;max-width:920px">
     <div class="kicker">Thank you</div>
-    <h1 style="margin-top:18px;font-size:72px">Thank you — we'll gladly<br>answer your questions.</h1>
-    <div class="sub" style="margin-top:24px;max-width:50ch">From a manual, one-by-one task to an <b style="color:var(--lime-deep)">automated</b> tree-recognition pipeline for Astana — and a working app anyone can run.</div>
-    <div class="authors" style="margin-top:30px;font-size:18px">
+    <h1 style="margin-top:18px;font-size:78px">Thank you — we'll gladly<br>answer your questions.</h1>
+    <div class="sub" style="margin-top:26px;max-width:52ch;font-size:23px">From a manual, one-by-one task to an <b style="color:var(--lime-deep)">automated</b> tree-recognition pipeline for Astana — and a working app anyone can run.</div>
+    <div class="authors" style="margin-top:34px;font-size:18px">
       <span class="lbl">Team</span><span>Berik Sharipov</span><span class="dot">·</span><span>Anuar Totin</span><span class="dot">·</span><span class="me">Rasul Aidarkhanov</span>
       <span class="lbl" style="margin-left:10px">Supervisor</span><span>Syndar Satbayev</span>
     </div>
