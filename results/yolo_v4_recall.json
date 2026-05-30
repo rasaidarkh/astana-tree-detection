@@ -1,0 +1,345 @@
+{
+  "model": "weights\\v4_clean\\v4_x_clean_v3val0.313_mergedval0.315.pt",
+  "iou_hit": 0.5,
+  "by_conf": {
+    "0.1": {
+      "overall_recall": 0.4371,
+      "precision": 0.3093,
+      "found": 330,
+      "false_pos": 737,
+      "total_gt": 755,
+      "per_tile_min": 0.176,
+      "per_tile_max": 1.0,
+      "per_tile": [
+        {
+          "tile": "img_val_001__y0000_x0000",
+          "gt": 15,
+          "found": 11,
+          "recall": 0.7333333333333333
+        },
+        {
+          "tile": "img_val_002__y0000_x0000",
+          "gt": 1,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_003__y0000_x0000",
+          "gt": 11,
+          "found": 11,
+          "recall": 1.0
+        },
+        {
+          "tile": "img_val_004__y0000_x0000",
+          "gt": 67,
+          "found": 42,
+          "recall": 0.6268656716417911
+        },
+        {
+          "tile": "img_val_005__y0000_x0000",
+          "gt": 8,
+          "found": 2,
+          "recall": 0.25
+        },
+        {
+          "tile": "img_val_005__y0000_x0126",
+          "gt": 9,
+          "found": 2,
+          "recall": 0.2222222222222222
+        },
+        {
+          "tile": "img_val_006__y0000_x0000",
+          "gt": 37,
+          "found": 18,
+          "recall": 0.4864864864864865
+        },
+        {
+          "tile": "img_val_007__y0000_x0000",
+          "gt": 37,
+          "found": 16,
+          "recall": 0.43243243243243246
+        },
+        {
+          "tile": "img_val_008__y0000_x0000",
+          "gt": 51,
+          "found": 9,
+          "recall": 0.17647058823529413
+        },
+        {
+          "tile": "img_val_009__y0000_x0000",
+          "gt": 22,
+          "found": 14,
+          "recall": 0.6363636363636364
+        },
+        {
+          "tile": "img_val_010__y0000_x0000",
+          "gt": 79,
+          "found": 37,
+          "recall": 0.46835443037974683
+        },
+        {
+          "tile": "img_val_010__y0000_x0467",
+          "gt": 89,
+          "found": 52,
+          "recall": 0.5842696629213483
+        },
+        {
+          "tile": "img_val_011__y0000_x0000",
+          "gt": 45,
+          "found": 23,
+          "recall": 0.5111111111111111
+        },
+        {
+          "tile": "img_val_011__y0000_x0060",
+          "gt": 42,
+          "found": 21,
+          "recall": 0.5
+        },
+        {
+          "tile": "img_val_012__y0000_x0000",
+          "gt": 70,
+          "found": 21,
+          "recall": 0.3
+        },
+        {
+          "tile": "img_val_013__y0000_x0000",
+          "gt": 104,
+          "found": 31,
+          "recall": 0.2980769230769231
+        },
+        {
+          "tile": "img_val_014__y0000_x0000",
+          "gt": 68,
+          "found": 20,
+          "recall": 0.29411764705882354
+        }
+      ]
+    },
+    "0.25": {
+      "overall_recall": 0.294,
+      "precision": 0.5224,
+      "found": 222,
+      "false_pos": 203,
+      "total_gt": 755,
+      "per_tile_min": 0.039,
+      "per_tile_max": 1.0,
+      "per_tile": [
+        {
+          "tile": "img_val_001__y0000_x0000",
+          "gt": 15,
+          "found": 7,
+          "recall": 0.4666666666666667
+        },
+        {
+          "tile": "img_val_002__y0000_x0000",
+          "gt": 1,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_003__y0000_x0000",
+          "gt": 11,
+          "found": 11,
+          "recall": 1.0
+        },
+        {
+          "tile": "img_val_004__y0000_x0000",
+          "gt": 67,
+          "found": 29,
+          "recall": 0.43283582089552236
+        },
+        {
+          "tile": "img_val_005__y0000_x0000",
+          "gt": 8,
+          "found": 2,
+          "recall": 0.25
+        },
+        {
+          "tile": "img_val_005__y0000_x0126",
+          "gt": 9,
+          "found": 2,
+          "recall": 0.2222222222222222
+        },
+        {
+          "tile": "img_val_006__y0000_x0000",
+          "gt": 37,
+          "found": 13,
+          "recall": 0.35135135135135137
+        },
+        {
+          "tile": "img_val_007__y0000_x0000",
+          "gt": 37,
+          "found": 7,
+          "recall": 0.1891891891891892
+        },
+        {
+          "tile": "img_val_008__y0000_x0000",
+          "gt": 51,
+          "found": 2,
+          "recall": 0.0392156862745098
+        },
+        {
+          "tile": "img_val_009__y0000_x0000",
+          "gt": 22,
+          "found": 11,
+          "recall": 0.5
+        },
+        {
+          "tile": "img_val_010__y0000_x0000",
+          "gt": 79,
+          "found": 22,
+          "recall": 0.27848101265822783
+        },
+        {
+          "tile": "img_val_010__y0000_x0467",
+          "gt": 89,
+          "found": 34,
+          "recall": 0.38202247191011235
+        },
+        {
+          "tile": "img_val_011__y0000_x0000",
+          "gt": 45,
+          "found": 15,
+          "recall": 0.3333333333333333
+        },
+        {
+          "tile": "img_val_011__y0000_x0060",
+          "gt": 42,
+          "found": 15,
+          "recall": 0.35714285714285715
+        },
+        {
+          "tile": "img_val_012__y0000_x0000",
+          "gt": 70,
+          "found": 14,
+          "recall": 0.2
+        },
+        {
+          "tile": "img_val_013__y0000_x0000",
+          "gt": 104,
+          "found": 21,
+          "recall": 0.20192307692307693
+        },
+        {
+          "tile": "img_val_014__y0000_x0000",
+          "gt": 68,
+          "found": 17,
+          "recall": 0.25
+        }
+      ]
+    },
+    "0.5": {
+      "overall_recall": 0.106,
+      "precision": 0.7477,
+      "found": 80,
+      "false_pos": 27,
+      "total_gt": 755,
+      "per_tile_min": 0.0,
+      "per_tile_max": 0.909,
+      "per_tile": [
+        {
+          "tile": "img_val_001__y0000_x0000",
+          "gt": 15,
+          "found": 2,
+          "recall": 0.13333333333333333
+        },
+        {
+          "tile": "img_val_002__y0000_x0000",
+          "gt": 1,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_003__y0000_x0000",
+          "gt": 11,
+          "found": 10,
+          "recall": 0.9090909090909091
+        },
+        {
+          "tile": "img_val_004__y0000_x0000",
+          "gt": 67,
+          "found": 7,
+          "recall": 0.1044776119402985
+        },
+        {
+          "tile": "img_val_005__y0000_x0000",
+          "gt": 8,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_005__y0000_x0126",
+          "gt": 9,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_006__y0000_x0000",
+          "gt": 37,
+          "found": 6,
+          "recall": 0.16216216216216217
+        },
+        {
+          "tile": "img_val_007__y0000_x0000",
+          "gt": 37,
+          "found": 2,
+          "recall": 0.05405405405405406
+        },
+        {
+          "tile": "img_val_008__y0000_x0000",
+          "gt": 51,
+          "found": 0,
+          "recall": 0.0
+        },
+        {
+          "tile": "img_val_009__y0000_x0000",
+          "gt": 22,
+          "found": 1,
+          "recall": 0.045454545454545456
+        },
+        {
+          "tile": "img_val_010__y0000_x0000",
+          "gt": 79,
+          "found": 5,
+          "recall": 0.06329113924050633
+        },
+        {
+          "tile": "img_val_010__y0000_x0467",
+          "gt": 89,
+          "found": 14,
+          "recall": 0.15730337078651685
+        },
+        {
+          "tile": "img_val_011__y0000_x0000",
+          "gt": 45,
+          "found": 8,
+          "recall": 0.17777777777777778
+        },
+        {
+          "tile": "img_val_011__y0000_x0060",
+          "gt": 42,
+          "found": 6,
+          "recall": 0.14285714285714285
+        },
+        {
+          "tile": "img_val_012__y0000_x0000",
+          "gt": 70,
+          "found": 6,
+          "recall": 0.08571428571428572
+        },
+        {
+          "tile": "img_val_013__y0000_x0000",
+          "gt": 104,
+          "found": 10,
+          "recall": 0.09615384615384616
+        },
+        {
+          "tile": "img_val_014__y0000_x0000",
+          "gt": 68,
+          "found": 3,
+          "recall": 0.04411764705882353
+        }
+      ]
+    }
+  }
+}

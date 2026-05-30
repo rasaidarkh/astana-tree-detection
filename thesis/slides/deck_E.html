@@ -99,12 +99,12 @@ body{background:#05080699;background:#050806;display:flex;flex-direction:column;
   </div>
   <div class="det" style="right:118px;top:150px;width:236px;height:206px">
     <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
-    <span class="lab">≈ 700 trees · 1 capture</span>
+    <span class="lab">YOLOv8x-seg · one capture</span>
   </div>
   <div class="content">
     <div class="kicker">Computer Science · 6B06101 · IT-2304</div>
     <h1>Automated Tree Recognition<br>&amp; Green-Space Mapping</h1>
-    <div class="sub">A multi-model deep-learning system that finds every tree in Astana — straight from satellite imagery.</div>
+    <div class="sub">Detecting urban trees from satellite imagery — several deep-learning models, compared on the city of Astana.</div>
     <div class="authors">
       <span class="lbl">AUTHORS</span>
       <span>Berik Sharipov</span><span class="dot">·</span>
@@ -123,13 +123,13 @@ body{background:#05080699;background:#050806;display:flex;flex-direction:column;
   <div class="vig"></div><div class="grain"></div>
   <div class="tagline">
     <span class="live">LIVE SYSTEM</span>
-    <h2>Canopy — the deployed detection-to-map pipeline</h2>
+    <h2>Canopy — our detection-to-map web app</h2>
   </div>
   <!-- map callouts -->
   <div class="lead" style="top:150px;left:560px"><span class="dot"></span><span class="ln"></span><span class="lab">Sliding-window tiling at zoom 19</span></div>
-  <div class="lead" style="top:402px;left:610px"><span class="dot"></span><span class="ln"></span><span class="lab">Per-tree confidence filter</span></div>
+  <div class="lead" style="top:402px;left:610px"><span class="dot"></span><span class="ln"></span><span class="lab">Switch model · filter by confidence</span></div>
   <div class="caption">
-    <p><b>One click:</b> upload a capture → tile it → run YOLOv8x-seg → every detected tree is written to the city map. 51 348 trees indexed across 14 scans of Astana.</p>
+    <p><b>Pick an area and a model</b> → the app tiles the image, runs detection, and maps the trees it finds. Different models catch different trees, so you can switch between them and filter by confidence. <span style="opacity:.7">(Counts shown are from repeated demo scans — not a city census.)</span></p>
     <div class="stack">FastAPI · <span>SQLite</span><br>React 18 · Leaflet<br>YOLOv8x-seg <span>v4</span></div>
   </div>
   <div class="hud bot"><span class="pin">Information system · architecture + software</span><span>17 / 22</span></div>
@@ -140,17 +140,17 @@ body{background:#05080699;background:#050806;display:flex;flex-direction:column;
   <img class="bg" src="../figures/yolo_v2_finetune_val_batch0.jpg" alt="" draggable="false" style="object-position:center 38%">
   <div class="scrim"></div>
   <div class="vig"></div><div class="grain"></div>
-  <div class="hud top"><span class="pin">Result — champion model</span><span>Box mAP@50 · M14</span></div>
+  <div class="hud top"><span class="pin">Result — our best-scoring model</span><span>Box mAP@50 · M14</span></div>
   <div class="result">
-    <div class="kicker" style="margin-bottom:10px">From blind baseline to published champion</div>
+    <div class="kicker" style="margin-bottom:10px">Off-the-shelf models score near zero on Astana</div>
     <div class="bignum">0.315</div>
     <div class="metricrow">
       <span class="tag">BOX mAP@50</span>
       <span class="arrow">0.012 &rarr; 0.315</span>
-      <span class="plus">+140%<small>over the YOLO v1 baseline</small></span>
+      <span class="plus">+140%<small>over our own first model</small></span>
     </div>
   </div>
-  <div class="cap">YOLOv8x-seg <b>v4</b> · M14 cross-model set<br>702 polygons · 14 captures<br>strongest published Astana number to date</div>
+  <div class="cap">YOLOv8x-seg <b>v4</b> · 14-img test set · 702 trees<br>finds <b>≈30%</b> of them at default confidence (up to ~44%)<br>modest — and it varies a lot by image</div>
   <div class="hud bot"><span class="pin">14-image merged validation</span><span>03 / 22</span></div>
 </section>
 
