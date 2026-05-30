@@ -1,80 +1,81 @@
 # Defense speech — Automated Tree Recognition & Green-Space Mapping (Astana)
 
-**Language:** English · **Target:** ~10–11 min (pre-defense 8–10 min — trim slides 6, 14, 18 if needed)
+**Language:** English · **Target:** ~9–10 min · **Tone:** honest student team — modest, clear, no overselling
 **Speakers:** `[R]` Rasul (system + YOLO + web app) · `[B]` Berik (Mask R-CNN) · `[A]` Anuar (DeepForest + SAM 2)
-**Note:** follows the current working 22-slide arc — provisional, easy to re-map. Competitor numbers on slides 12/13/15 are owned by Berik & Anuar — confirm their final figures before the talk.
+**Note:** follows the current working 22-slide arc — provisional. Competitor numbers (slides 12/13/15) are Berik's & Anuar's — confirm their final figures before the talk. Keep the honest framing: a small test set, modest accuracy, models in the same ballpark.
 
 ---
 
 ### Slide 1 · Title — `[R]` ~20s
-Good morning. Our project is an automated system that detects trees and maps urban green space in Astana, directly from satellite imagery. I'm Rasul Aidarkhanov; with me are Berik Sharipov and Anuar Totin; our supervisor is Syndar Satbayev. I'll cover the overall system and the YOLO branch; Berik and Anuar will present their models.
+Good morning. Our diploma project is a system that detects trees in Astana from satellite images and shows them on a map. I'm Rasul Aidarkhanov, together with Berik Sharipov and Anuar Totin; our supervisor is Syndar Satbayev. I'll present the overall system and the YOLO part; Berik and Anuar will talk about their models.
 
 ### Slide 2 · Problem & relevance — `[R]` ~30s
-Astana is growing fast, and the city needs an up-to-date inventory of its trees — for green-cover policy, irrigation, and heat mitigation. Counting trees by hand from imagery doesn't scale. Strong detection models exist in the literature, but almost all are trained and tested on North-American or European data. Whether they work on a Central-Asian city was simply unknown. That gap is our motivation.
+A growing city like Astana needs to know where its trees are — for green planning and irrigation. Counting them by hand from images is slow. There are tree-detection models in the literature, but they're trained and tested mostly on American or European data. We wanted to see whether they work on our city — and if not, build something practical that does.
 
 ### Slide 3 · The gap & our aim — `[R]` ~30s
-Here is that gap in one number. A state-of-the-art off-the-shelf tree detector — NEON DeepForest — scores just **0.012** on Astana imagery. Essentially blind. So our aim is precise: build and validate a deep-learning system that reliably detects trees on Astana satellite imagery, and deploy it as a usable tool. Our best model reaches **0.315** — a 140% jump — and the rest of the talk explains how.
+This number is why the project exists. A popular ready-made tree detector, used as-is on Astana imagery, scores only **0.012** — basically it doesn't work here. So our goal was practical: collect Astana data, train and compare several models, and build a simple tool around them. To be clear from the start — our accuracy is modest, and we'll be honest about what the system can and can't do.
 
-### Slide 4 · Objectives & methods — `[R]` ~30s
-We set five objectives: build an annotated Astana dataset; train and compare four model families — YOLOv8 segmentation, Mask R-CNN, DeepForest, and SAM 2; combine them through ensembles; evaluate everything on one common set; and deliver a working web application. The methods are supervised deep learning with transfer learning and sliding-window tiling.
+### Slide 4 · Objectives & methods — `[R]` ~25s
+Our objectives: build an annotated Astana dataset; train and compare four model families — YOLOv8, Mask R-CNN, DeepForest, and SAM 2; try combining them; test them all on one common set; and wrap the result in a web app. The methods are standard — supervised training, transfer learning, and cutting large images into tiles.
 
-### Slide 5 · Literature review — `[R]` ~30s
-We reviewed 31 peer-reviewed papers from 2019 to 2025. This table summarises the strongest — Mask R-CNN, YOLO variants, DeepLab and U-Net, DeepForest, and SAM. They report high accuracy, but always on their own regions and sensors. The last row is ours: the first measurement of these models on Central-Asian satellite imagery.
+### Slide 5 · Literature review — `[R]` ~25s
+We read 31 papers from 2019 to 2025. They report high accuracy — but each on its own region and camera. The last row is ours. As far as we know, this is the first time these models have been tested on Astana satellite imagery. We're not claiming to beat the literature — we're measuring how it does on new ground.
 
-### Slide 6 · Mathematical foundation — `[R]` ~30s *(cut if short on time)*
-The models rest on convolutional feature extraction and two core ideas: anchor-free detection with a combined objectness, classification, and IoU-based box loss for YOLO; and region proposals with a mask head for Mask R-CNN. We score everything with mean Average Precision at IoU 0.5 — mAP@50 — for boxes and masks. One metric makes every model comparable.
+### Slide 6 · Math foundation — `[R]` ~25s *(cut if short)*
+Briefly: the models use convolutional networks. YOLO predicts boxes and masks directly with a combined loss; Mask R-CNN proposes regions and then segments them. We score everything with mean Average Precision at IoU 0.5 — mAP@50 — so every model is measured the same way.
 
 ### Slide 7 · System architecture — `[R]` ~30s
-The system has three layers: a React and Leaflet front end where the user picks an area; a FastAPI back end that tiles the image, runs inference, and merges detections; and a SQLite store for captures and tree polygons. The same trained weights serve every request. We call the application **Canopy**.
+The system has three parts: a React and Leaflet front end where you pick an area; a FastAPI back end that tiles the image and runs the model; and a small SQLite database. We call the app **Canopy**. One thing to note now — the app lets you choose which model to run, and I'll come back to why that matters.
 
 ### Slide 8 · Data & hardware — `[R]` ~25s
-All training imagery is high-zoom satellite capture of Astana, around 0.3-metre resolution. Models were trained on a single RTX 4060 with 8 gigabytes — deliberately modest hardware, to show the system is reproducible without a cluster. The database schema is simple: scans, snapshots, and detections.
+The training images are high-zoom satellite captures of Astana, about 0.3 m per pixel. We trained on a single laptop GPU — an RTX 4060 with 8 GB — to keep everything reproducible on normal hardware. The database simply stores scans, snapshots, and detections.
 
 ### Slide 9 · Dataset — `[R]` ~25s
-We annotated trees across tiled Astana imagery and held out a validation split. Because trees touch and overlap, we annotate instance polygons, not just boxes. The common validation set — **14 images, 702 labelled trees** — is what every model in this project is scored on.
+We annotated trees on tiled Astana images and kept some aside for testing. Trees overlap, so we label them as polygons, not just boxes. Our shared test set is small — and we're upfront about that: **14 images, 702 labelled trees**. Every model in the project is scored on exactly this set, so the comparison is fair.
 
 ### Slide 10 · Four branches — `[R]` ~15s
-From here the project splits into four model branches that we compare head-to-head. I'll take the YOLO branch; Berik and Anuar will present theirs.
+From here the project splits into four model branches that we compare on that same test set. I'll take YOLO; Berik and Anuar will present theirs.
 
-### Slide 11 · YOLO + ablation — `[R]` ~45s  ← *core of my part*
-YOLOv8x-segmentation is our strongest single model. We ran more than twenty experiments — fine-tuning from COCO, image size, augmentation, learning-rate schedules. Three lessons mattered: start from pretrained weights; tile at the resolution you deploy at; and keep augmentation moderate. The score climbed from **0.131** at version one to **0.315** at version four — Box mAP@50 — a **140% improvement**, and the strongest result in the project.
-> *Handoff:* "I'll hand over to Berik for Mask R-CNN."
+### Slide 11 · YOLO + ablation — `[R]` ~40s  ← *my part*
+YOLOv8 is the part I worked on. I ran about twenty experiments — different starting weights, image sizes, and augmentation. A few practical lessons: start from pretrained weights; tile at the size you'll actually run at; and don't over-do augmentation. On our test set the score went from **0.131** in my first attempt to **0.315** — a 140% improvement over my own baseline. I want to be honest, though: 0.315 is a modest number, and the gap over the next-best settings is small.
+> *Handoff:* "I'll pass to Berik for Mask R-CNN."
 
-### Slide 12 · Mask R-CNN — `[B]` ~35s
-*(Berik)* Trained on the same dataset and scored on the same 14-image set; reaches roughly **0.166** Box mAP@50 — clean masks, but below YOLO on this data.
+### Slide 12 · Mask R-CNN — `[B]` ~30s
+*(Berik)* Same dataset, same test set; scores around **0.166**. Cleaner masks in some cases — lower than YOLO on our data, but it handles certain trees nicely.
 
-### Slide 13 · DeepForest + SAM 2 — `[A]` ~35s
-*(Anuar)* Off-the-shelf DeepForest scored 0.012; after fine-tuning and adding SAM 2 masks it reaches about **0.146**. Strong general-purpose masks, weaker on small urban trees.
+### Slide 13 · DeepForest + SAM 2 — `[A]` ~30s
+*(Anuar)* Ready-made DeepForest scored 0.012; after fine-tuning and adding SAM 2 masks, about **0.146**. Strong general-purpose masks, weaker on small city trees.
 > *Handoff back to Rasul.*
 
-### Slide 14 · Ensembles — `[R]` ~30s *(cut if short on time)*
-We then asked whether combining models beats the best single one. We tested two ensembles — weighted box fusion across families, and a cross-YOLO vote. They improve robustness on hard tiles, but on our validation set the single YOLO champion stays on top. An honest, useful finding.
+### Slide 14 · Why several models — `[R]` ~35s  ← *key point*
+Here's the most useful thing we learned. **No single model is best at everything** — each one catches some trees the others miss. So instead of forcing one "winner", we kept all of them in the app and let the user choose. We also tried combining them — a confidence-weighted box fusion and a YOLO voting scheme — which is more robust on hard tiles. On our small test set the single YOLO scores highest by the numbers, but that doesn't make it the right choice for every image.
 
-### Slide 15 · Results — `[R]` ~35s
-This is the head-to-head on the common 14-image set. YOLOv8x-seg leads at **0.315**, ahead of Mask R-CNN and the DeepForest–SAM 2 branch, ensembles close behind. Every model is scored identically, so the comparison is fair. To our knowledge, these are the first such numbers for Astana.
+### Slide 15 · Results — `[R]` ~30s
+This is the side-by-side on the same 14 images. By the numbers YOLO is on top at **0.315**, then Mask R-CNN, then DeepForest with SAM 2. But the margins are small and partly within run-to-run noise — so we read this as "these models are in the same ballpark on Astana," not "one clearly wins."
 
 ### Slide 16 · Qualitative — `[R]` ~25s
-Beyond the numbers — here's what it looks like. The detections track real tree crowns closely, even in dense rows and mixed urban texture. The typical misses are tiny or heavily shaded trees.
+And here's what it actually looks like. The detections line up with real tree crowns in many places. But honestly — it doesn't find every tree. On our test set it finds about **30%** of the labelled trees at the default confidence — more if we lower the threshold (around 44%), fewer if we raise it — and per image it swings from almost none on hard scenes to nearly all on clear ones. We'd rather show that openly than hide it.
 
-### Slide 17 · Web application — `[R]` ~40s  ← *core of my part*
-Finally, the deployed system. In Canopy the user selects an area of Astana; the back end tiles it, runs YOLO, and paints every detected tree on the map within seconds. It already indexes **over 51,000 trees** across the city, with confidence filtering, polygon and heat-map layers, and per-scan history. This turns a research model into a tool a city planner can actually use.
+### Slide 17 · Web application — `[R]` ~35s  ← *my part*
+Finally, the app. You pick an area of Astana, choose a model, and Canopy tiles the image, runs detection, and draws the trees it found on the map — with a confidence filter and a few layers. The counts you see come from the areas we scanned for demos — it is **not** a full census of the city. The point isn't a big number; it's that anyone can run a model on an area and inspect the result for themselves.
 
-### Slide 18 · Discussion — `[R]` ~25s *(cut if short on time)*
-Two honest limitations: accuracy is bounded by training-set size, and there is a domain shift between our training captures and live map tiles. Both are addressable — more annotation, and training on matched imagery.
+### Slide 18 · Discussion & limits — `[R]` ~25s *(cut if short)*
+Our main limits: a small training set, modest accuracy, and a gap between the images we trained on and live map tiles. We're not hiding any of it — it's the honest state of a student project, and each part improves with more data.
 
 ### Slide 19 · Conclusions — `[R]` ~25s
-To conclude, we met every objective: a built dataset, four compared models, ensembles, one common evaluation, and a working application. The headline: from **0.012** off-the-shelf to **0.315** — a deployable tree-detection system for Astana.
+To sum up: we built a dataset, compared four models fairly on one set, tried combining them, and delivered a working app. The clearest result is the gap — ready-made tools score near zero on Astana (**0.012**), and our own models do meaningfully better, even if the absolute numbers stay modest.
 
 ### Slide 20 · Contributions — `[R]` ~20s
-Our contributions: the first multi-model benchmark on Central-Asian urban imagery; a YOLO detector improved by 140%; and the open Canopy application.
+What we add: a first, honest comparison of these models on Astana imagery; a YOLO model improved over our own baseline; and the Canopy app, with a free choice of models.
 
 ### Slide 21 · Future work — `[R]` ~15s
-Next: more annotated data, training directly on live map tiles to close the domain gap, and city-wide canopy analytics.
+Next: more annotated data, training on the same kind of images we actually run on, and better handling of small trees.
 
 ### Slide 22 · Thank you — `[R]` ~10s
-Thank you. We'd be glad to answer your questions.
+Thank you for listening. We'll gladly answer your questions.
 
 ---
 
-**Timing check:** full read ≈ 10–11 min. For an 8-min pre-defense, cut slides 6, 14, and 18 (marked) → ≈ 8 min.
-**Rasul owns:** slides 1–11, 14–22 (all but 12–13). Make slides **11 (YOLO)** and **17 (Canopy)** land hardest — that's where your individual contribution is scored.
+**Timing:** full read ≈ 9–10 min. For an 8-min pre-defense, cut slides 6 and 18.
+**Rasul owns:** slides 1–11, 14–22. Make **11 (YOLO)**, **14 (why several models)** and **17 (Canopy)** land best — that's your individual contribution.
+**Honesty anchors (say them out loud, examiners respect it):** 0.315 mAP is modest · finds ≈30% of trees at default confidence (varies a lot by image) · margins are within noise · demo counts, not a census · off-the-shelf fails on Astana (0.012).
