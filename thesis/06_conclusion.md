@@ -10,7 +10,7 @@ The six objectives of the introduction were addressed as follows.
 
 **Objective 2 — quantify the gap on Astana imagery.** Sections 1.4 and 3.4.3 report the first measurement of the public NEON-pretrained DeepForest checkpoint on Astana satellite imagery: Box mAP@50 = **0.012** on M14, one to two orders of magnitude below any fine-tuned configuration. This is the empirical anchor of the geographic-generalisation gap on Central Asia.
 
-**Objective 3 — build a custom annotated Astana dataset.** Section 3.1 documents three iterative dataset batches (v1 / v2 / v3) constructed in CVAT through a model-in-the-loop pre-labelling workflow that reduced the per-image annotation cost from approximately 25 minutes (v1, from scratch) to approximately 4 minutes (v3, pre-labelled by the v2-finetune YOLO model). The final corpus is approximately 100 source images and ≈ 8 700 polygon annotations.
+**Objective 3 — build a custom annotated Astana dataset.** Section 3.1 documents three iterative dataset batches (v1 / v2 / v3) constructed in CVAT through a model-in-the-loop pre-labelling workflow that reduced the per-image annotation cost from approximately 25 minutes (v1, from scratch) to approximately 4 minutes (v3, pre-labelled by the v2-finetune YOLO model). The final corpus is approximately 100 source images with ≈ 5 500 hand-labelled tree-crown polygons (≈ 8 700 polygon instances after sliding-window tiling).
 
 **Objective 4 — train and combine four complementary models.** A structured **23-experiment hyperparameter ablation** of the YOLO branch spanning six orthogonal axes was conducted (Section 3.2), together with two Mask R-CNN checkpoints, the DeepForest v3 fine-tune and the SAM 2 zero-shot mask-refinement stage. All branches were evaluated on the M14 cross-model validation set. The best single configuration is the **YOLOv8x-seg v4_x_clean production model** at **Box mAP@50 = 0.315** and **Mask mAP@50 = 0.289** on M14, a +140 % relative improvement over the YOLO v1 baseline. The DeepForest+SAM 2 pipeline (Box 0.146 / Mask 0.134) and the Mask R-CNN v2+v3 fine-tune (Box 0.166 / Mask 0.158) follow as the second and third best configurations.
 
@@ -32,7 +32,7 @@ The six objectives of the introduction were addressed as follows.
 
 6. **An unexpected secondary finding**: the deprecated Roboflow-trained DeepForest v4 checkpoint scores Box mAP@50 = 0.004 on M14 — *below* the NEON pretrained baseline — because of an annotation-policy mismatch between the Roboflow bounding-box convention and the CVAT polygon convention. The result demonstrates that intra-Astana annotation-policy mismatch can dominate the floristic gap between continents.
 
-7. **A reusable Astana satellite-tree dataset** of approximately 100 source images and ≈ 8 700 polygon annotations across three iterative batches.
+7. **A reusable Astana satellite-tree dataset** of approximately 100 source images with ≈ 5 500 hand-labelled tree-crown polygons (≈ 8 700 polygon instances after tiling) across three iterative batches.
 
 8. **A deployable software prototype** that turns the trained models into a usable internal tool: pluggable adapter interface, four geographic-conversion modes, SQLite persistence with cascading deletes, rectangle and polygon Auto-Zoom Region Scan workflows with streaming NDJSON progress, three exporters, dark-mode-default UI with a centred per-action model picker, and a city-map aggregate view that grows organically as the user processes new districts.
 
