@@ -128,7 +128,51 @@ def md_to_latex(md_text: str) -> str:
     # they add awkward vertical padding without contributing to the layout.
     tex = _fix_longtable_styles(tex)
 
+    tex = _caption_longtables(tex)
+
     return tex
+
+
+def _caption_longtables(latex: str) -> str:
+    r"""Turn a bold caption paragraph that precedes a longtable
+    (`\textbf{Table N --- ...}`) into a real \caption{} attached to the
+    longtable, so the table appears in \listoftables with an auto number.
+
+    Pandoc renders our markdown table captions as an ordinary bold paragraph
+    above the table and gives the longtable no \caption, so \listoftables is
+    empty and the manual "Table 2.1" numbers (which repeat) are never checked
+    by LaTeX. We strip the manual "Table N --- " prefix, keep the descriptive
+    text as the float caption, and let LaTeX number it (\caption -> LoT entry).
+    longtable's own \caption produces a LoT line and an in-text "Table X:".
+    """
+    # Pandoc structure for a captionless markdown table is:
+    #   \textbf{Table N --- <caption text>}
+    #
+    #   {\def\LTcaptype{none} % do not increment counter
+    #   \begin{longtable}[]{@{}<spec>@{}}
+    #   ...
+    #   \end{longtable}
+    #   }
+    # The `\LTcaptype{none}` wrapper deliberately suppresses numbering/caption.
+    # We remove that wrapper and inject a real \caption{} as the longtable's
+    # first row, so LaTeX numbers the table and lists it in \listoftables.
+    cap_re = re.compile(
+        r"\\textbf\{Table[~ ]+[\d.]+[ ]*(?:---|--|—|-|:)[ ]*(.+?)\}\s*"
+        r"\{\\def\\LTcaptype\{none\}[^\n]*\n"
+        r"(\\begin\{longtable\}\[\]\{@\{\}.*?@\{\}\})"
+        r"(.*?\\end\{longtable\})\s*"
+        r"\}",
+        re.DOTALL,
+    )
+
+    def repl(m: re.Match) -> str:
+        caption = m.group(1).strip().rstrip(".")
+        open_tbl = m.group(2)
+        body_and_end = m.group(3)
+        return (open_tbl + "\n\\caption{" + caption + "}\\\\\n"
+                + body_and_end)
+
+    return cap_re.sub(repl, latex)
 
 
 def _fix_longtable_styles(latex: str) -> str:
@@ -346,8 +390,30 @@ def make_declaration_tex(md: str) -> str:
     return md_to_latex(md)
 
 
+def make_acknowledgements_tex(md: str) -> str:
+    """Dedication & acknowledgements — unnumbered, listed in the ToC."""
+    body = md_to_latex(md)
+    body = re.sub(r"\\chapter\{Acknowledgements\}\\label\{acknowledgements\}",
+                  r"\\chapter*{Acknowledgements}\\addcontentsline{toc}{chapter}{Acknowledgements}",
+                  body, count=1)
+    return body
+
+
+def make_abbreviations_tex(md: str) -> str:
+    """Designations & abbreviations — unnumbered, listed in the ToC."""
+    body = md_to_latex(md)
+    body = re.sub(r"\\chapter\{Designations and Abbreviations\}\\label\{designations-and-abbreviations\}",
+                  r"\\chapter*{Designations and Abbreviations}\\addcontentsline{toc}{chapter}{Designations and Abbreviations}",
+                  body, count=1)
+    return body
+
+
 def make_definitions_tex(md: str) -> str:
-    return md_to_latex(md)
+    body = md_to_latex(md)
+    body = re.sub(r"\\chapter\{Definitions\}\\label\{definitions\}",
+                  r"\\chapter*{Definitions}\\addcontentsline{toc}{chapter}{Definitions}",
+                  body, count=1)
+    return body
 
 
 def make_references_tex(md: str) -> str:
@@ -515,15 +581,25 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 
 \input{frontmatter/title}
 
+\input{frontmatter/declaration}
+
+\input{frontmatter/acknowledgements}
+
 \input{frontmatter/abstract}
 
-\input{frontmatter/declaration}
+\input{frontmatter/abbreviations}
 
 \input{frontmatter/definitions}
 
 \renewcommand{\contentsname}{Table of Contents}
 \maxtocdepth{subsection}
 \tableofcontents*
+\clearpage
+
+\listoffigures
+\clearpage
+
+\listoftables
 \clearpage
 
 \input{frontmatter/intro.tex}
@@ -554,7 +630,8 @@ def main() -> None:
 
     print("=== Reading Markdown sources ===")
     md = {p.stem: p.read_text(encoding="utf-8")
-          for p in sorted(HERE.glob("0?_*.md")) + sorted(HERE.glob("0?b_*.md")) + sorted(HERE.glob("0?c_*.md"))}
+          for p in (sorted(HERE.glob("0?_*.md")) + sorted(HERE.glob("0?b_*.md"))
+                    + sorted(HERE.glob("0?c_*.md")) + sorted(HERE.glob("0?a_*.md")))}
     for k in sorted(md):
         print(f"  {k}: {len(md[k]):,} chars")
 
@@ -564,6 +641,10 @@ def main() -> None:
           make_abstract_tex(md["01_abstract"]))
     write(LATEX / "frontmatter" / "declaration.tex",
           make_declaration_tex(md["01b_declaration"]))
+    write(LATEX / "frontmatter" / "acknowledgements.tex",
+          make_acknowledgements_tex(md["00b_acknowledgements"]))
+    write(LATEX / "frontmatter" / "abbreviations.tex",
+          make_abbreviations_tex(md["01a_abbreviations"]))
     write(LATEX / "frontmatter" / "definitions.tex",
           make_definitions_tex(md["01c_definitions"]))
     write(LATEX / "frontmatter" / "intro.tex",
