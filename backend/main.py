@@ -115,8 +115,8 @@ MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 # ============ App ============
 
 app = FastAPI(
-    title="Astana Tree Detection",
-    description="End-to-end система автоматической инвентаризации городских деревьев Астаны",
+    title="Canopy — Astana Tree Detection",
+    description="Canopy: end-to-end система автоматической инвентаризации городских деревьев Астаны",
     version="0.1.0",
 )
 
