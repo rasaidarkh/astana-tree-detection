@@ -18,6 +18,7 @@ body{background:#cdcabf;display:flex;flex-direction:column;align-items:center;ga
   background-image:linear-gradient(var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line2) 1px,transparent 1px);
   background-size:64px 64px;opacity:.6}
 .pad{position:absolute;inset:0;padding:78px 64px 66px;display:flex;flex-direction:column;z-index:2}
+.pad.vc{justify-content:center}
 
 .rail{position:absolute;left:64px;right:64px;display:flex;justify-content:space-between;align-items:center;z-index:5;
   font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
@@ -168,7 +169,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 03 PROBLEM & RELEVANCE -->
 <section class="slide">
   <div class="rail top"><span>01 · Problem &amp; Relevance</span><span class="c pageno">03</span></div>
-  <div class="pad">
+  <div class="pad vc">
     <div class="kicker">Relevance</div>
     <h2>Mapping a city's trees — today it's done by hand</h2>
     <div class="grid2 wide" style="margin-top:22px">
@@ -189,7 +190,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 04 GAP & AIM -->
 <section class="slide">
   <div class="rail top"><span>01 · The Generalisation Gap</span><span class="c pageno">04</span></div>
-  <div class="pad">
+  <div class="pad vc">
     <div class="kicker">Why we couldn't just use an existing tool</div>
     <div class="stat" style="margin-top:28px">
       <div class="bignum" style="font-size:150px">0.012</div>
@@ -231,7 +232,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 06 PROBLEM STATEMENT: INPUT / OUTPUT -->
 <section class="slide">
   <div class="rail top"><span>01 · Problem Statement</span><span class="c pageno">06</span></div>
-  <div class="pad">
+  <div class="pad vc">
     <div class="kicker">Formally — what goes in, what comes out</div>
     <h2>Input → Output</h2>
     <div class="grid2" style="margin-top:24px;gap:34px">
@@ -438,21 +439,15 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <section class="slide">
   <div class="rail top"><span>07 · Why Several Models</span><span class="c pageno">15</span></div>
   <div class="pad">
-    <div class="kicker">The most useful lesson</div>
-    <h2>No single model wins everywhere</h2>
-    <div class="grid2 wide" style="margin-top:20px">
-      <div class="col">
-        <p>Each model catches <b>some trees the others miss</b>. So instead of forcing one "winner", we kept all of them in the app and let the user <span class="em">choose the model</span> — and we tried combining them.</p>
-        <div class="card"><h3>Two ensembles</h3>
-          <ul class="clean" style="gap:8px;margin-top:2px;font-size:15px">
-            <li><span class="n">A</span><b>Weighted Box Fusion</b> across model families</li>
-            <li><span class="n">B</span><b>Cross-YOLO 4-vote</b> — kills single-model hallucinations (e.g. stadium-roof false positives)</li>
-          </ul></div>
-        <p style="font-size:14px;color:var(--muted)">More robust on hard tiles. By the numbers the single YOLO still scores highest on our set — but that doesn't make it right for every image.</p>
-      </div>
-      <div class="col">
-        <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/cross_model_8way_v2.png" alt="cross-model comparison"></div>
-      </div>
+    <div class="kicker">The most useful lesson — automation, not one model</div>
+    <h2>Same garden, eight engines, eight answers</h2>
+    <div class="frame" style="margin:14px auto 0;width:880px">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="../figures/cross_model_8way_botanical.jpg" alt="the same Botanical Garden detected by eight different models" style="display:block;width:100%">
+    </div>
+    <div class="grid2 wide" style="margin-top:14px;gap:30px;align-items:start">
+      <p style="font-size:15px">The very same Botanical Garden, scanned by <b>eight detection engines</b> — each outlines a <b>different set of trees</b> and reports a different count (<span class="em">672–819</span>). None is simply "right".</p>
+      <p style="font-size:15px;color:var(--ink2)">That's the whole design rationale: the pipeline lets the user <b>switch engines</b> and combine them — <b>Weighted Box Fusion</b> + a <b>cross-YOLO 4-vote</b> that drops single-model false positives (e.g. stadium roofs).</p>
     </div>
   </div>
   <div class="rail bot"><span class="pin">Criterion 1 · Own contribution — design rationale</span><span>WBF · cross-YOLO vote</span></div>
@@ -547,10 +542,14 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
                muted loop playsinline preload="metadata" controls
                style="display:block;width:700px;height:394px;object-fit:cover;background:#0b0f0c"></video>
       </div>
-      <div class="col" style="flex:1">
-        <div class="card"><h3>What you're seeing</h3><p>The v4 champion (YOLOv8x-seg) scanning Astana's Botanical Garden end-to-end in Canopy: <b>tile → detect → map</b>, with every detected tree drawn live.</p></div>
-        <div class="card"><h3>Why this scene</h3><p>A dense, well-defined planting — the clearest case to show the pipeline working. Honest reminder: on sparser, harder scenes recall drops (see the qualitative slide).</p></div>
-        <p style="font-size:13px;color:var(--muted)">▶ Plays automatically on this slide · ~1 min · click for controls.</p>
+      <div class="col" style="flex:1;gap:12px">
+        <div class="card"><h3>What you're seeing</h3><p style="font-size:15px">The v4 engine scanning the Botanical Garden end-to-end in Canopy: <b>tile → detect → map</b>, every tree drawn live.</p></div>
+        <div class="card"><h3>Why this scene</h3><p style="font-size:15px">A dense, well-defined planting — the clearest case. Honest reminder: on sparser scenes recall drops.</p></div>
+        <div class="card" style="border-left:3px solid var(--lime-deep)">
+          <h3>Full demo video</h3>
+          <p style="font-size:14px">Plays here automatically (~1 min) — or open the full recording:</p>
+          <p style="font-family:var(--mono);font-size:13px;color:var(--lime-deep);word-break:break-all;margin-top:6px">https://drive.google.com/file/d/1OceaLC4yMEgLtIThVR8t7_B4VRRPNaNf/view</p>
+        </div>
       </div>
     </div>
   </div>
@@ -560,7 +559,7 @@ tr.ours .work,tr.ours .met{color:var(--lime-ink)}
 <!-- 21 DISCUSSION & LIMITS -->
 <section class="slide">
   <div class="rail top"><span>10 · Discussion &amp; Limitations</span><span class="c pageno"></span></div>
-  <div class="pad">
+  <div class="pad vc">
     <div class="kicker">Honest assessment</div>
     <h2>What we'd say up front</h2>
     <div class="grid2" style="margin-top:22px;gap:30px">
