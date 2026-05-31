@@ -121,8 +121,8 @@ try:
     models   = ["NEON DF\n(off-the-shelf)", "YOLO\nv1", "DF v3\n+ SAM 2",
                 "Mask\nR-CNN\nv2+v3", "YOLO\nv2-ft", "YOLO\nv3-run1\n(x-seg)",
                 "YOLO exp1\n(m-seg)", "YOLO v4\n(x-seg)\nFINAL"]
-    box_map  = [0.012, 0.131, 0.146, 0.166, 0.187, 0.287, 0.308, 0.315]
-    mask_map = [0.000, 0.134, 0.134, 0.158, 0.185, 0.263, 0.305, 0.289]
+    box_map  = [0.012, 0.131, 0.146, 0.166, 0.187, 0.268, 0.308, 0.315]
+    mask_map = [0.000, 0.134, 0.134, 0.158, 0.185, 0.244, 0.305, 0.289]
     champ    = len(models) - 1  # index of the champion bar to highlight
 
     x = np.arange(len(models))

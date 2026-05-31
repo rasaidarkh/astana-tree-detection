@@ -22,7 +22,11 @@ CKPTS = {
     "v1": PROJECT_ROOT / "runs/segment/astana_tiled_x_max/weights/best.pt",
     "v2-fromscratch": PROJECT_ROOT / "runs/segment/astana_tiled_x_v2_fromscratch/weights/best.pt",
     "v2-finetune": PROJECT_ROOT / "weights/archive/yolo/yolo_satellite_v2_finetune.pt",
-    "v3-finetune-run1": PROJECT_ROOT / "weights/yolo_satellite.pt",
+    # The GENUINE run1 checkpoint. NOTE: weights/yolo_satellite.pt is byte-identical
+    # to the v4_x_clean champion (MD5 58fb1c00...), so pointing this key there
+    # previously re-scored the champion and mislabelled it as "run1" (0.287) in
+    # Table 3.2 and Figs 3.1/3.6. The real run1 (MD5 bd8d923b...) scores 0.268.
+    "v3-finetune-run1": PROJECT_ROOT / "weights/v3_runs/v3_finetune_run1_ep58_v3val0220_mergedval0268.pt",
 }
 DATA_YAML = PROJECT_ROOT / "yolov train dataset/v3_yolo_mergedval_tiled/dataset.yaml"
 OUT_JSON = PROJECT_ROOT / "results/yolo_mergedval_eval.json"
