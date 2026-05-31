@@ -581,25 +581,29 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 
 \input{frontmatter/title}
 
-\input{frontmatter/declaration}
+% Frontmatter order follows the AITU reference thesis:
+% Abstract -> Dedication/Acknowledgements -> Declaration ->
+% (Abbreviations, Definitions) -> List of Tables -> List of Figures ->
+% Table of Contents.
+\input{frontmatter/abstract}
 
 \input{frontmatter/acknowledgements}
 
-\input{frontmatter/abstract}
+\input{frontmatter/declaration}
 
 \input{frontmatter/abbreviations}
 
 \input{frontmatter/definitions}
 
-\renewcommand{\contentsname}{Table of Contents}
-\maxtocdepth{subsection}
-\tableofcontents*
+\listoftables
 \clearpage
 
 \listoffigures
 \clearpage
 
-\listoftables
+\renewcommand{\contentsname}{Table of Contents}
+\maxtocdepth{subsection}
+\tableofcontents*
 \clearpage
 
 \input{frontmatter/intro.tex}
