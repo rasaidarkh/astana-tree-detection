@@ -10,10 +10,10 @@ This chapter reports the experimental evaluation of the system described in Chap
 
 \textbf{Dataset.} The training data is a collection of Astana satellite screenshots captured manually from Google Earth Pro and ESRI World Imagery at zoom levels 17 -- 19 (approximately 0.3 -- 1.2 m GSD). Districts of varied urban morphology were sampled: dense residential micro-districts on the left bank, sparse private-house yards on the right bank, central avenues with row-planted street trees, and the green corridors along the Yesil River. All annotation was performed in CVAT, with a single class --- ``Дерево'' (Russian for \emph{Tree}) --- and per-crown polygon labels. The dataset was built iteratively as three batches summarised in Table 3.1.
 
-\textbf{Table 3.1 --- Astana dataset iterations.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.095\linewidth} >{\raggedright\arraybackslash}p{0.103\linewidth} >{\raggedright\arraybackslash}p{0.134\linewidth} >{\raggedright\arraybackslash}p{0.309\linewidth} >{\raggedright\arraybackslash}p{0.309\linewidth}@{}}
+\caption{Astana dataset iterations}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Batch} & \textbf{Date} & \textbf{Source images} & \textbf{Tiles after 640+128 sliding-window} & \textbf{Annotation effort} \\
 \midrule\noalign{}
@@ -24,7 +24,6 @@ v1 & April 2026 & 20 imgs & 62 tiles, ≈ 4 444 polygons (≈ 72 polys/tile) & f
 v2 & May 2026 & + 57 imgs & 121 tiles, ≈ 8 030 polygons (≈ 66 polys/tile) & model-in-the-loop (v1), ≈ 7 min/img \\
 v3 & May 2026 & + 24 imgs & ≈ 142 tiles, ≈ 8 700 polygons (≈ 70 polys/tile) & model-in-the-loop (v2-finetune), ≈ 4 min/img \\
 \end{longtable}
-}
 
 Source-image-level splits prevent any tile from a single source image leaking between train and validation. The data-preparation pipeline lives in four reusable scripts in the \texttt{ml/} directory of the repository (\texttt{coco\_to\_yolo\_seg.py}, \texttt{tile\_dataset.py}, \texttt{merge\_coco.py}, \texttt{split\_coco.py}).
 
@@ -36,10 +35,10 @@ Throughout this chapter, detection quality is reported using the standard COCO m
 
 A 23-experiment hyperparameter ablation of the YOLO branch was conducted along six orthogonal axes --- model size, starting weights, optimiser, augmentation level, inference resolution, training schedule --- across six rounds. The experiment runner is implemented in \texttt{ml/v3\_experiment\_runner.py} and \texttt{ml/v4\_clean\_modelsweep.py}; every completed experiment is automatically evaluated on the M14 validation set. The most informative results are consolidated in Table 3.2.
 
-\textbf{Table 3.2 --- Master ablation of the YOLO branch, sorted by M14 Box mAP@50. The full 23-experiment grid is available in \texttt{results/v3\_experiments.json} and \texttt{results/v4\_clean\_modelsweep.json}.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.332\linewidth} >{\raggedright\arraybackslash}p{0.343\linewidth} >{\raggedright\arraybackslash}p{0.149\linewidth} >{\raggedright\arraybackslash}p{0.126\linewidth}@{}}
+\caption{Master ablation of the YOLO branch, sorted by M14 Box mAP@50. The full 23-experiment grid is available in \texttt{results/v3\_experiments.json} and \texttt{results/v4\_clean\_modelsweep.json}}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Run} & \textbf{Configuration} & \textbf{Box mAP@50} & \textbf{Mask mAP@50} \\
 \midrule\noalign{}
@@ -56,19 +55,18 @@ exp5 & yolov8l-seg (46 M), v2-finetune warm-start, SGD & 0.273 & 0.247 \\
 \textbf{exp1 (4-replicate mean ± std)} & yolov8m-seg (27 M), v2-proven aug & \textbf{0.271 ± 0.028} & --- \\
 v4\_n\_clean & yolov8n-seg (3 M), COCO start, defaults & 0.261 & 0.251 \\
 v4\_l\_clean & yolov8l-seg (46 M), COCO start, defaults & 0.260 & 0.253 \\
-v3-finetune-run1 & yolov8x-seg (71 M), v2-finetune warm-start, v2-proven aug & 0.220 & 0.187 \\
+v3-finetune-run1 & yolov8x-seg (71 M), v2-finetune warm-start, v2-proven aug & 0.287 & 0.263 \\
 exp11 & 3-stage chain v1 → v1+v2 → v1+v2+v3 (m-seg) & 0.210 & --- \\
 v2-finetune (was prod.) & yolov8x-seg (71 M), v1 warm-start, v2-proven aug & 0.187 & 0.185 \\
 v2-fromscratch & yolov8x-seg (71 M), COCO start, v2-proven aug & 0.156 & 0.147 \\
 v1 (16 train imgs) & yolov8x-seg (71 M), COCO start, v1 hand-tuned aug & 0.131 & 0.134 \\
 \end{longtable}
-}
 
 Six empirical findings emerge from this ablation.
 
 \textbf{(1) v4\_x\_clean is the strongest single configuration.} The largest YOLOv8 variant (yolov8x-seg, 71 M parameters) with \textbf{Ultralytics' default augmentation pipeline} --- aggressive HSV colour jitter, random erasing, and \textbf{no geometric augmentation} --- reaches Box mAP@50 = 0.315 on M14, a +140 \% relative improvement on the v1 baseline (0.131) and +69 \% over the previous v2-finetune production (0.187). The current \texttt{weights/yolo\_satellite.pt} is a copy of \texttt{weights/v4\_clean/v4\_x\_clean\_v3val0.313\_mergedval0.315.pt} (MD5 \texttt{58fb1c0018db3fd3dd49fae436bedcca}).
 
-\textbf{(2) The model-size landscape is U-shaped, not monotonic.} The medium m-seg variant (Round 1 winner with v2-proven aug at 0.308) and the extra-large x-seg variant (Round 4 winner with defaults at 0.315) both occupy local optima, while the l-seg variant (0.260 with defaults) sits in a valley between them. This is to the best of the authors' knowledge the first empirical observation of the U-shape on Central-Asian satellite-tree data.
+\textbf{(2) The model-size landscape appears non-monotonic.} The medium m-seg variant (Round 1 winner with v2-proven aug at 0.308) and the extra-large x-seg variant (Round 4 winner with defaults at 0.315) both sit near the top, while the l-seg variant (0.260 with defaults) is lower. The 0.315 / 0.308 / 0.291 spread among the leading configurations is, however, inside the ±0.028 single-run variance band measured in finding (4) below, so this U-shape is best read as \textbf{two local optima within the noise floor} rather than a statistically separated ranking --- a caution that itself motivates the variance study and the cross-YOLO ensemble.
 
 \textbf{(3) The default augmentation pipeline outperforms the manually-tuned v2-proven pipeline.} The plausible explanation is that satellite trees viewed from above are rotationally consistent (any rotation introduces unnatural data variance not present in the test distribution), so the geometric component of the v2-proven pipeline (\texttt{degrees\ ±\ 20°}, full mixup, full copy-paste) actively hurts generalisation, while the strong colour-jitter and random-erasing components of the Ultralytics defaults correctly target the natural sources of variation in satellite imagery (illumination, season, sensor settings, partial occlusion).
 
@@ -76,16 +74,16 @@ Six empirical findings emerge from this ablation.
 
 \textbf{(5) Continual chain learning hurts on small uniformly-noisy datasets.} A 3-stage continual chain (exp11, v1 → v1+v2 → v1+v2+v3) gave 0.210 vs single-shot 0.308 --- a 32 \% relative regression. A control experiment with \textbf{random splits} of the same training corpus (33 \% → 66 \% → 100 \%, exp17) lost only 0.021 against single-shot, confirming that \textbf{77 \% of the chain penalty is distribution drift between the v1, v2 and v3 annotation batches}, not the chain mechanism per se. Chain learning is appropriate when there is a clear gradient of label quality along the chain (weak large pre-training, clean small fine-tune); for three uniformly-noisy small batches the optimal strategy is single-shot training on the union of all available data.
 
-\textbf{(6) Most paper-informed recipes did not help.} Four recipes mined from the literature corpus were tested --- aggressive low-LR finish (exp12, 0.286), freeze-then-unfreeze (exp13, 0.264), Abbas et al.~augmentation ranges {[}2{]} (exp14, 0.256), and the 3-stage continual chain (exp11, 0.210) --- and none overtakes the single-shot baseline. The exp1 / v4\_x\_clean configurations are simpler than any of the proposed alternatives and outperform all of them on this dataset scale.
+\textbf{(6) Most paper-informed recipes did not help.} Four recipes mined from the literature corpus were tested --- aggressive low-LR finish (exp12, 0.286), freeze-then-unfreeze (exp13, 0.264), Abbas et al.~augmentation ranges {[}3{]} (exp14, 0.256), and the 3-stage continual chain (exp11, 0.210) --- and none overtakes the single-shot baseline. The exp1 / v4\_x\_clean configurations are simpler than any of the proposed alternatives and outperform all of them on this dataset scale.
 
 \section{Cross-model comparison on M14}\label{cross-model-comparison-on-m14}
 
 The seven principal model configurations are summarised in Table 3.3. Numbers are computed via the pycocotools COCOeval evaluator at all IoU thresholds from 0.50 to 0.95; the headline mAP@50 column is the area-under-PR-curve at IoU 0.50.
 
-\textbf{Table 3.3 --- Cross-model ablation on the 14-image merged validation set (M14, 702 polygons).}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.343\linewidth} >{\raggedright\arraybackslash}p{0.149\linewidth} >{\raggedright\arraybackslash}p{0.149\linewidth} >{\raggedright\arraybackslash}p{0.149\linewidth} >{\raggedright\arraybackslash}p{0.16\linewidth}@{}}
+\caption{Cross-model ablation on the 14-image merged validation set (M14, 702 polygons)}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Model} & \textbf{Box mAP@50} & \textbf{Box mAP@50:95} & \textbf{Mask mAP@50} & \textbf{Mask mAP@50:95} \\
 \midrule\noalign{}
@@ -103,11 +101,10 @@ YOLOv8m-seg exp1 (lucky single run) & 0.308 & 0.110 & 0.305 & 0.097 \\
 YOLOv8m-seg exp1 (4-replicate mean ± std) & 0.271 ± 0.028 & --- & 0.282 ± 0.025 & --- \\
 \textbf{YOLOv8x-seg v4\_x\_clean (FINAL production)} & \textbf{0.315} & \textbf{0.115} & \textbf{0.289} & \textbf{0.099} \\
 \end{longtable}
-}
 
 Five empirical observations follow from this table.
 
-\textbf{(1) The YOLOv8x-seg v4\_x\_clean production checkpoint is the strongest single configuration on every metric.} It reaches Box mAP@50 = 0.315 and Mask mAP@50 = 0.289 on M14 --- \textbf{+140 \%} relative to the YOLO v1 baseline and \textbf{+69 \%} relative to the previous v2-finetune production.
+\textbf{(1) The YOLOv8x-seg v4\_x\_clean production checkpoint has the strongest aggregate Box mAP@50 of any single configuration.} It reaches Box mAP@50 = 0.315 and Mask mAP@50 = 0.289 on M14 --- \textbf{+140 \%} relative to the YOLO v1 baseline and \textbf{+69 \%} relative to the previous v2-finetune production. On Mask mAP@50 the lucky-run exp1 m-seg checkpoint is marginally higher (0.305 vs 0.289), but the difference is inside the ±0.028 single-run variance band of Section 3.2, so v4\_x\_clean is selected as production on its aggregate Box score and its near-perfect 0.98 OOD recovery ratio (Table 3.4). For an operational reading of this number: at the application's default confidence of 0.25 the champion recovers approximately \textbf{30 \%} of the labelled tree crowns (about 44 \% at a looser threshold of 0.10), with precision ≈ 0.52 --- mAP@50 integrates precision over the full recall range, so the headline 0.315 should not be confused with the fraction of trees actually found at the deployed operating point.
 
 \textbf{(2) YOLO v2-finetune (0.187) and Mask R-CNN v2+v3 (0.166) are within statistical noise on Box mAP@50,} but YOLO is consistently ahead on Mask mAP@50 (0.185 vs 0.158). The one-stage YOLOv8 design --- anchor-free detection head, CIoU box-regression, distribution focal loss, prototype-mask head --- closes the historical gap to the two-stage Mask R-CNN family for instance segmentation on a small low-resolution-satellite dataset, and the medium-size m-seg variant extends the lead to a roughly 2× margin over Mask R-CNN by Box mAP@50.
 
@@ -121,16 +118,16 @@ The cross-model ranking visualised as a bar chart is shown in Figure 3.1.
 
 \begin{figure}
 \centering
-\pandocbounded{\includegraphics[keepaspectratio,alt={Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars --- Box mAP@50 (blue) and Mask mAP@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.268), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4\_x\_clean (Box mAP@50 = 0.315) as the new production champion; the v4\_x\_clean numbers are reported in Table 3.3 but not shown on this chart.}]{figures/model_comparison_barchart.png}}
-\caption{\emph{Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars --- Box mAP@50 (blue) and Mask mAP@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.268), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4\_x\_clean (Box mAP@50 = 0.315) as the new production champion; the v4\_x\_clean numbers are reported in Table 3.3 but not shown on this chart.}}
+\pandocbounded{\includegraphics[keepaspectratio,alt={Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars --- Box mAP@50 (blue) and Mask mAP@50 (orange). From left to right the models ascend from the off-the-shelf NEON DeepForest baseline (0.012) through YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (0.287 / 0.263) and YOLOv8m-seg exp1 (0.308 / 0.305) to the highlighted final production champion YOLOv8x-seg v4\_x\_clean (0.315 / 0.289) on the right. The chart visualises the full 0.012 → 0.315 trajectory reported in Table 3.3.}]{figures/model_comparison_barchart.png}}
+\caption{\emph{Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars --- Box mAP@50 (blue) and Mask mAP@50 (orange). From left to right the models ascend from the off-the-shelf NEON DeepForest baseline (0.012) through YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (0.287 / 0.263) and YOLOv8m-seg exp1 (0.308 / 0.305) to the highlighted final production champion \textbf{YOLOv8x-seg v4\_x\_clean (0.315 / 0.289)} on the right. The chart visualises the full 0.012 → 0.315 trajectory reported in Table 3.3.}}
 \end{figure}
 
 A useful complementary view of the same numbers is the breakdown by \textbf{validation subset}. The aggregate M14 metric mixes the in-distribution v1 / v2 subset with the out-of-distribution v3 subset; because the entire motivation for the v3 dataset extension was the OOD failure of v2-finetune on v3 imagery, it is informative to look at the two subsets separately. Table 3.4 reports the v2-only and v3-only Box mAP@50 of every YOLO checkpoint in the project, together with the OOD recovery ratio (v3-only divided by v2-only).
 
-\textbf{Table 3.4 --- Per-distribution evaluation of the YOLO checkpoint chain. The v2-finetune → v4\_x\_clean transition closes essentially all of the OOD gap.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.339\linewidth} >{\raggedright\arraybackslash}p{0.204\linewidth} >{\raggedright\arraybackslash}p{0.204\linewidth} >{\raggedright\arraybackslash}p{0.204\linewidth}@{}}
+\caption{Per-distribution evaluation of the YOLO checkpoint chain. The v2-finetune → v4\_x\_clean transition closes essentially all of the OOD gap}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Checkpoint} & \textbf{v2-only Box mAP@50} & \textbf{v3-only Box mAP@50} & \textbf{OOD ratio (v3 / v2)} \\
 \midrule\noalign{}
@@ -142,7 +139,6 @@ v3-finetune-run1 (yolov8x v2-proven aug) & 0.334 & 0.220 & 0.66 \\
 exp1 v3 m-seg (lucky single run) & 0.367 & 0.287 & 0.78 \\
 \textbf{v4\_x\_clean (FINAL production)} & \textbf{0.319} & \textbf{0.313} & \textbf{0.98} \\
 \end{longtable}
-}
 
 The OOD ratio rises monotonically along the project's checkpoint chain --- from 22 \% at the v2-finetune baseline through 78 \% at the exp1 intermediate to \textbf{98 \% at the v4\_x\_clean production}. By Round 4 the model performs almost identically on previously-seen and previously-unseen Astana districts. The residual asymmetry of 2 \% is within the noise floor measured in Section 3.2 and is no longer a quantitative target for further dataset expansion; instead the future-work direction shifts to broadening the test-time distribution itself (built-environment scenes, river-front imagery, multi-season acquisitions).
 
@@ -150,14 +146,14 @@ A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown
 
 \begin{figure}
 \centering
-\pandocbounded{\includegraphics[keepaspectratio,alt={Like-for-like qualitative comparison on the held-out validation tile img\_val\_007 (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.}]{figures/yolo_v1_vs_v2_finetune_comparison.png}}
-\caption{\emph{Like-for-like qualitative comparison on the held-out validation tile \protect\texttt{img\_val\_007} (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.}}
+\pandocbounded{\includegraphics[keepaspectratio,alt={Like-for-like qualitative comparison on a held-out validation tile (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.}]{figures/yolo_v1_vs_v2_finetune_comparison.png}}
+\caption{\emph{Like-for-like qualitative comparison on a held-out validation tile (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.}}
 \end{figure}
 
 \begin{figure}
 \centering
-\pandocbounded{\includegraphics[keepaspectratio,alt={YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set (img\_val\_001, 003, 007, 009). The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.}]{figures/yolo_v2_finetune_val_4tile_strip.png}}
-\caption{\emph{YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set (\protect\texttt{img\_val\_001}, \protect\texttt{003}, \protect\texttt{007}, \protect\texttt{009}). The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.}}
+\pandocbounded{\includegraphics[keepaspectratio,alt={YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set. The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.}]{figures/yolo_v2_finetune_val_4tile_strip.png}}
+\caption{\emph{YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set. The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.}}
 \end{figure}
 
 \section{Per-branch details}\label{per-branch-details}
@@ -188,8 +184,8 @@ The progression of the headline Box mAP@50 metric across all YOLO runs in the pr
 
 \begin{figure}
 \centering
-\pandocbounded{\includegraphics[keepaspectratio,alt={Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.268 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4\_x\_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 \% improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.}]{figures/yolo_all_runs_map50.png}}
-\caption{\emph{Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.268 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4\_x\_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 \% improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.}}
+\pandocbounded{\includegraphics[keepaspectratio,alt={Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.287 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4\_x\_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 \% improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.}]{figures/yolo_all_runs_map50.png}}
+\caption{\emph{Box mAP@50 trajectory across every YOLO training run in the project. The horizontal axis is the run identifier in chronological order; the vertical axis is the merged-M14 Box mAP@50 of each run. The v1 baseline at 0.131 starts the chain; the v2-finetune at 0.187 (previous production) and the v3-finetune-run1 at 0.287 mark the iterative gains from dataset expansion; the four-replicate exp1 cluster shows the per-checkpoint variance band (mean 0.271 ± 0.028) around the lucky-single-run 0.308 result; and the final v4\_x\_clean at 0.315 (current production) closes the chain. The figure visually summarises both the +140 \% improvement from v1 to v4 and the variance noise floor that limits single-seed model comparisons.}}
 \end{figure}
 
 The per-detection precision-recall trade-off of the v2-finetune checkpoint is shown in Figure 3.7. The Box and Mask PR curves are produced by sweeping the inference confidence threshold from 1.0 to 0.0 and integrating the resulting Precision-Recall trajectory; the area under each curve is the corresponding mAP@50.
@@ -216,9 +212,9 @@ Qualitatively, the trained Mask R-CNN detects most of the larger, well-isolated 
 
 \subsection{DeepForest + SAM 2}\label{deepforest-sam-2}
 
-The off-the-shelf NEON \texttt{weecology/deepforest-tree} checkpoint was evaluated on the 15-image superset of M14 using the library's \texttt{predict\_tile()} interface at the default patch size of 400 px and overlap 5 \%, with a confidence threshold of 0.30. The obtained Box mAP@50 is \textbf{0.012} --- one to two orders of magnitude below any of the fine-tuned configurations and three orders of magnitude below the public Ventura et al.~off-the-shelf result of F = 0.42 on NAIP USA imagery {[}3{]}. Qualitative inspection confirms the aggregate metric: the NEON-pretrained model produces only a handful of detections per Astana tile, concentrated on the few canopy patches that visually resemble the dense North-American broadleaf shapes of the NEON training set. This single number is the first measurement of the geographic-generalisation gap on a Central-Asian capital.
+The off-the-shelf NEON \texttt{weecology/deepforest-tree} checkpoint was evaluated on the 15-image superset of M14 using the library's \texttt{predict\_tile()} interface at the default patch size of 400 px and overlap 5 \%, with a confidence threshold of 0.30. The obtained Box mAP@50 is \textbf{0.012} --- one to two orders of magnitude below any of the fine-tuned configurations and three orders of magnitude below the public Ventura et al.~off-the-shelf result of F = 0.42 on NAIP USA imagery {[}13{]}. Qualitative inspection confirms the aggregate metric: the NEON-pretrained model produces only a handful of detections per Astana tile, concentrated on the few canopy patches that visually resemble the dense North-American broadleaf shapes of the NEON training set. This single number is the first measurement of the geographic-generalisation gap on a Central-Asian capital.
 
-The \textbf{DeepForest v3 fine-tune} (production checkpoint, GitHub release \texttt{v2.0}) warm-starts from the previous v4 Roboflow checkpoint and continues training on the same merged Astana CVAT polygon dataset (63 train / 15 val source images, 4 733 / 726 boxes) for 30 epochs of SGD with momentum at LR \(10^{-4}\), batch size 4 and horizontal-flip augmentation. The fine-tuned model raises Box mAP@50 from 0.012 to \textbf{0.146 on M14} (factor of twelve) with precision 0.39 and recall 0.10 at confidence 0.30 --- the recall-limited regime consistently reported for DeepForest in dense-canopy urban scenes {[}6{]}. Two qualitative patterns dominate: the model \textbf{under-detects on dense scenes} (on the densest tile of 138 ground-truth crowns, the model produces only 104 predictions) and \textbf{over-detects on sparse scenes} (on the sparsest tile of 1 ground-truth crown, the model produces 31 candidate detections at low confidence).
+The \textbf{DeepForest v3 fine-tune} (production checkpoint, GitHub release \texttt{v2.0}) warm-starts from the previous v4 Roboflow checkpoint and continues training on the same merged Astana CVAT polygon dataset (63 train / 15 val source images, 4 733 / 726 boxes) for 30 epochs of SGD with momentum at LR \(10^{-4}\), batch size 4 and horizontal-flip augmentation. The fine-tuned model raises Box mAP@50 from 0.012 to \textbf{0.146 on M14} (factor of twelve) with precision 0.39 and recall 0.10 at confidence 0.30 --- the recall-limited regime consistently reported for DeepForest in dense-canopy urban scenes {[}1{]}. Two qualitative patterns dominate: the model \textbf{under-detects on dense scenes} (on the densest tile of 138 ground-truth crowns, the model produces only 104 predictions) and \textbf{over-detects on sparse scenes} (on the sparsest tile of 1 ground-truth crown, the model produces 31 candidate detections at low confidence).
 
 The \textbf{SAM 2 mask-refinement stage} (model \texttt{sam2.1-hiera-base-plus}, loaded from HuggingFace, batched inference) takes the DeepForest bounding boxes as box prompts and emits one binary mask per box. It raises the Mask mAP@50 of the DeepForest branch from zero (no native mask output) to \textbf{0.134} on M14 --- comparable to YOLO v1 (0.134) and not far behind Mask R-CNN v2+v3 (0.158). The Box quality is unchanged because SAM 2 does not modify the detection scores or bounding boxes. Qualitatively, the SAM 2 output is visibly tighter than either the raw DeepForest box or the YOLO polygon on isolated trees in low-density residential scenes; in dense canopy it occasionally bleeds into neighbouring crowns when the prompt box spans two adjacent trees, a failure mode caused by the imprecise input prompt rather than a limitation of SAM 2 itself.
 
@@ -226,12 +222,12 @@ The \textbf{SAM 2 mask-refinement stage} (model \texttt{sam2.1-hiera-base-plus},
 
 The per-checkpoint training-time variance of Section 3.2 (≈ ± 0.028 Box mAP@50) and the qualitative cross-checkpoint complementarity discussed below motivate a within-architecture ensemble. The ensemble pools predictions from \(N\) YOLO members into a single detection list, clusters them by box IoU using a union-find data structure (any two detections with IoU ≥ 0.5 join the same cluster), discards any cluster whose detections come from fewer than \(K = 2\) distinct members, and emits the highest-confidence detection from each surviving cluster.
 
-Running the four-checkpoint vote-2 ensemble at \texttt{conf\ =\ 0.15} on the 1 236 × 1 159 px Astana tennis-court complex tile produces the per-checkpoint and unified detection counts in Table 3.4.
+Running the four-checkpoint vote-2 ensemble at \texttt{conf\ =\ 0.15} on the 1 236 × 1 159 px Astana tennis-court complex tile produces the per-checkpoint and unified detection counts in Table 3.5.
 
-\textbf{Table 3.4 --- Per-checkpoint detection counts on a single 1 236 × 1 159 px Astana tile at \texttt{conf\ =\ 0.15}. The vote-2 ensemble keeps only the IoU-clusters where at least two members agreed.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}ll@{}}
+\caption{Per-checkpoint detection counts on a single 1 236 × 1 159 px Astana tile at \texttt{conf\ =\ 0.15}. The vote-2 ensemble keeps only the IoU-clusters where at least two members agreed}\\
+\endfirsthead
+
 \toprule\noalign{}
 Checkpoint & Raw detection count \\
 \midrule\noalign{}
@@ -245,7 +241,6 @@ v2-finetune (legacy) & 756 \\
 \textbf{Total raw pool (with cross-checkpoint duplicates)} & \textbf{3 000} \\
 \textbf{4× vote-2 unified ensemble} & \textbf{790} \\
 \end{longtable}
-}
 
 The 3 000-to-790 reduction is dominated by cross-checkpoint duplicates --- most trees appear in three or four of the four checkpoint outputs and survive vote-2, while single-model hallucinations (the most common being false-positive crowns on stadium roof structures specifically present in the v4\_x\_clean output) are discarded. The 132-tree spread between the most conservative checkpoint (v4\_x\_clean at 687) and the most permissive (v4\_s\_clean at 819) on the same input is a direct visual illustration of an aggregate-metric limitation: models with statistically indistinguishable Box mAP@50 detect substantially different per-detection subsets of the ground-truth crowns. The cross-YOLO ensemble averages out the per-checkpoint training-time variance and per-checkpoint failure modes at inference time. The implementation is production-ready and exposed in the frontend's hierarchical model picker under the \textbf{Ensemble → 4× YOLO vote} option (Section 2.10).
 
@@ -265,12 +260,12 @@ A broader visual comparison across eight archived YOLO checkpoints on a differen
 
 \section{Comparison with the literature}\label{comparison-with-the-literature}
 
-Table 3.5 contextualises the obtained numbers against the published baselines compiled in Chapter 1.
+Table 3.6 contextualises the obtained numbers against the published baselines compiled in Chapter 1.
 
-\textbf{Table 3.5 --- Best obtained results compared with the literature.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.317\linewidth} >{\raggedright\arraybackslash}p{0.317\linewidth} >{\raggedright\arraybackslash}p{0.317\linewidth}@{}}
+\caption{Best obtained results compared with the literature}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{System} & \textbf{Data} & \textbf{Best metric} \\
 \midrule\noalign{}
@@ -282,16 +277,15 @@ YOLOv8m-seg exp1 (this work, lucky run) & Astana sat., M14 & Box mAP@50 = 0.308,
 Mask R-CNN v2+v3 (this work) & Astana sat., M14 & Box mAP@50 = 0.166, Mask mAP@50 = 0.158 \\
 DeepForest v3 + SAM 2 (this work) & Astana sat., M14 & Box mAP@50 = 0.146, Mask mAP@50 = 0.134 \\
 NEON off-the-shelf (this work) & Astana sat., M14 & Box mAP@50 = \textbf{0.012} \\
-YOLOv12m {[}2{]} & Public RGB satellite, 3 157 imgs & mAP@50 = 0.908 \\
-DeepForest off-the-shelf urban {[}3{]} & NAIP 60 cm USA & F = 0.42 \\
-DeepForest fine-tuned urban {[}3{]} & NAIP 60 cm USA & F = 0.729 \\
-DeepForest urban Sofia {[}6{]} & Aerial 10 cm Sofia & F1 ≈ 0.68 \\
-YOLOv5x Lleida {[}4{]} & Aerial + sat. Lleida & F1 = 0.849 \\
-MCAN (Mask R-CNN variant) {[}8{]} & UAV RGB Zhejiang & Det AP = 0.924 \\
+YOLOv12m {[}3{]} & Public RGB satellite, 3 157 imgs & mAP@50 = 0.908 \\
+DeepForest off-the-shelf urban {[}13{]} & NAIP 60 cm USA & F = 0.42 \\
+DeepForest fine-tuned urban {[}13{]} & NAIP 60 cm USA & F = 0.729 \\
+DeepForest urban Sofia {[}1{]} & Aerial 10 cm Sofia & F1 ≈ 0.68 \\
+YOLOv5x Lleida {[}9{]} & Aerial + sat. Lleida & F1 = 0.849 \\
+MCAN (Mask R-CNN variant) {[}4{]} & UAV RGB Zhejiang & Det AP = 0.924 \\
 \end{longtable}
-}
 
-Three observations follow. \textbf{First}, the absolute Box mAP@50 of 0.315 is below the best published numbers --- 0.91 for YOLOv12m on a much larger public dataset, 0.85 for YOLOv5x on Lleida --- but it has been obtained on a single-city dataset of approximately 100 satellite images, two orders of magnitude smaller than those benchmarks. The headline number is therefore best read as a \emph{first-of-its-kind} result on Astana rather than as a competitive entry on a public benchmark. \textbf{Second}, the off-the-shelf-vs-fine-tuned DeepForest gap of Ventura et al.~is now empirically tight: the present project measures 0.012 → 0.146 on Astana M14 (factor 12) where Ventura measures 0.42 → 0.729 on NAIP USA (factor 1.7). The much larger relative jump in Astana reflects the floristic mismatch between the NEON training set and the \emph{Populus}-dominated Astana canopy and the smaller absolute starting point on Astana imagery. \textbf{Third}, the closest geographic analogue --- the Sofia DeepForest work of Dakov and Petrova-Antonova {[}6{]} at F1 ≈ 0.68 on 826 annotated trees in a Soviet-era European capital --- establishes a realistic medium-term target for the Astana project, attainable through the dataset-expansion strategy outlined in the conclusion.
+Three observations follow. \textbf{First}, the absolute Box mAP@50 of 0.315 is below the best published numbers --- 0.91 for YOLOv12m on a much larger public dataset, 0.85 for YOLOv5x on Lleida --- but it has been obtained on a single-city dataset of approximately 100 satellite images, two orders of magnitude smaller than those benchmarks. The headline number is therefore best read as a \emph{first-of-its-kind} result on Astana rather than as a competitive entry on a public benchmark. \textbf{Second}, the off-the-shelf-vs-fine-tuned DeepForest gap of Ventura et al.~is now empirically tight: the present project measures 0.012 → 0.146 on Astana M14 (factor 12) where Ventura measures 0.42 → 0.729 on NAIP USA (factor 1.7). The much larger relative jump in Astana reflects the floristic mismatch between the NEON training set and the \emph{Populus}-dominated Astana canopy and the smaller absolute starting point on Astana imagery. \textbf{Third}, the closest geographic analogue --- the Sofia DeepForest work of Dakov and Petrova-Antonova {[}1{]} at F1 ≈ 0.68 on 826 annotated trees in a Soviet-era European capital --- establishes a realistic medium-term target for the Astana project, attainable through the dataset-expansion strategy outlined in the conclusion.
 
 \section{Limitations}\label{limitations}
 
@@ -301,13 +295,13 @@ The current implementation has the following known limitations.
 
 \textbf{(1) Validation-set size.} M14 comprises only 14 source images and 702 polygon annotations. With this sample size the 95 \% confidence interval on the reported mAP@50 numbers is of the order of ± 0.05, and the four-replicate variance experiment places the single-shot training-time variance at approximately ± 0.03 mAP@50 (independently of the validation-set sample size). A larger validation set drawn from city districts not present in the training corpus at all --- and a multi-seed protocol that averages over training-time variance --- would be required to claim full statistical significance.
 
-\textbf{(2) Single class label.} The dataset annotation does not distinguish between species. Tree-species classification is a valuable downstream task for \emph{Zelenstroy}, which must plan species-specific pruning and replacement, and is reserved for future work, possibly using a multi-task setup {[}10{]}.
+\textbf{(2) Single class label.} The dataset annotation does not distinguish between species. Tree-species classification is a valuable downstream task for \emph{Zelenstroy}, which must plan species-specific pruning and replacement, and is reserved for future work, possibly using a multi-task setup {[}7{]}.
 
 \textbf{(3) No explicit shadow modelling.} Shadows are the dominant source of false positives across all branches. An explicit pre-processing step that detects and removes shadow regions, or an auxiliary head that classifies a region as ``tree'', ``shadow'' or ``background'', would substantially improve precision in early-morning and late-evening imagery.
 
 \textbf{(4) No quantitative M14 evaluation of the Weighted-Box-Fusion ensemble.} The WBF ensemble of Section 2.7.1 is implemented and works end-to-end at inference time, but it has not been evaluated on M14 under the same protocol as the individual branches. A pre-v3 prototype evaluation on the v1 validation tiles gave Box mAP@50 ≈ 0.51, but this number is not directly comparable to M14. Both the rigorous M14 ensemble evaluation and the per-class weight calibration favouring the dominant YOLO branch are reserved for future work.
 
-\textbf{(5) Stadium-roof false positives.} During interactive testing of the v4 production model on Astana scenes that include sports infrastructure (notably the Botanical Garden area, adjacent to a covered arena), the model produced false-positive detections on stadium and arena roof structures that the previous v2-finetune model had correctly ignored. The regression is \textbf{not captured by the M14 aggregate metric} because none of the validation tiles in v1, v2 or v3 contain stadium-style architecture. Two complementary mitigations are recommended: (i) augmenting the training set with negative examples of built-environment structures, and (ii) inference-time post-filtering using OpenStreetMap building footprints --- drop predicted boxes whose centroid falls inside an OSM building polygon, following {[}3{]}. The OSM filter is the lower-cost option and is the immediate next implementation step.
+\textbf{(5) Stadium-roof false positives.} During interactive testing of the v4 production model on Astana scenes that include sports infrastructure (notably the Botanical Garden area, adjacent to a covered arena), the model produced false-positive detections on stadium and arena roof structures that the previous v2-finetune model had correctly ignored. The regression is \textbf{not captured by the M14 aggregate metric} because none of the validation tiles in v1, v2 or v3 contain stadium-style architecture. Two complementary mitigations are recommended: (i) augmenting the training set with negative examples of built-environment structures, and (ii) inference-time post-filtering using OpenStreetMap building footprints --- drop predicted boxes whose centroid falls inside an OSM building polygon, following {[}13{]}. The OSM filter is the lower-cost option and is the immediate next implementation step.
 
 \textbf{(6) Train/serve domain shift.} All three iterative dataset batches (v1, v2, v3) are screenshots captured manually from Google Earth Pro. The production runtime fetches tiles from either ESRI World Imagery or the unofficial Google Satellite endpoint --- different rendering pipelines, possibly different capture dates and tone-mapping. The magnitude of the resulting train/serve distribution shift has not been quantified in this thesis and is a candidate for a v4 data batch captured directly from the runtime \texttt{/api/scan\_region} output.
 

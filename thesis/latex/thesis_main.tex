@@ -37,6 +37,14 @@
 \setsecnumdepth{subsection}
 \maxsecnumdepth{subsubsection}
 
+% Compact chapter openings. memoir's default leaves a very large vertical gap
+% above each \chapter title (≈ the top third of the page); the AITU reference
+% diploma starts its chapter titles much closer to the top. Shrink the
+% before-title skip so Abstract / Introduction / chapter headings sit near the
+% top of the page instead of being pushed into the middle.
+\setlength{\beforechapskip}{12pt}
+\setlength{\afterchapskip}{18pt}
+
 \makepagestyle{myvf}
 \makeoddfoot{myvf}{}{\thepage}{}
 \makeevenfoot{myvf}{}{\thepage}{}
@@ -148,11 +156,25 @@
 
 \input{frontmatter/title}
 
+% Frontmatter order follows the AITU reference thesis:
+% Abstract -> Dedication/Acknowledgements -> Declaration ->
+% (Abbreviations, Definitions) -> List of Tables -> List of Figures ->
+% Table of Contents.
 \input{frontmatter/abstract}
+
+\input{frontmatter/acknowledgements}
 
 \input{frontmatter/declaration}
 
+\input{frontmatter/abbreviations}
+
 \input{frontmatter/definitions}
+
+\listoftables
+\clearpage
+
+\listoffigures
+\clearpage
 
 \renewcommand{\contentsname}{Table of Contents}
 \maxtocdepth{subsection}

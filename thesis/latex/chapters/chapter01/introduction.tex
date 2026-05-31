@@ -6,7 +6,7 @@ This chapter establishes the technical and scientific context of the work. Secti
 
 Municipalities increasingly rely on quantitative inventories of urban green space for planning, environmental monitoring and climate adaptation. The basic unit of such inventories is the individual tree, characterised by a geographic position, a crown size and --- when available --- a species label and a health status. Aggregated indicators (number of trees per district, canopy-cover percentage, average crown area) follow directly from the per-tree records.
 
-Historically, urban-tree inventories were obtained through manual field surveys with hand-held GPS receivers and paper forms. Reports from comparable cities --- for example, the multi-year inventory of Sofia, Bulgaria {[}6{]} or the multi-month effort of Pasadena, California {[}18{]} --- confirm that for any large city the manual approach is slow, expensive and rapidly becomes obsolete. Three classes of automated alternative have emerged: airborne LiDAR {[}23{]}, which is the gold standard wherever it is available but is exceptionally expensive and unsuitable for cities --- including Astana --- that do not appear in national LiDAR programmes; high-resolution aerial or UAV imagery at 5 -- 30 cm GSD, the dominant data source for urban-tree research {[}10, 11, 4{]}; and \textbf{freely or inexpensively available very-high-resolution satellite imagery} from commercial vendors and aggregators such as ESRI World Imagery and Google Earth --- the only practical option for Astana at the required scale {[}14, 5, 2{]}.
+Historically, urban-tree inventories were obtained through manual field surveys with hand-held GPS receivers and paper forms. Reports from comparable cities --- for example, the multi-year inventory of Sofia, Bulgaria {[}1{]} or the multi-month effort of Pasadena, California {[}5{]} --- confirm that for any large city the manual approach is slow, expensive and rapidly becomes obsolete. Three classes of automated alternative have emerged: airborne LiDAR {[}6{]}, which is the gold standard wherever it is available but is exceptionally expensive and unsuitable for cities --- including Astana --- that do not appear in national LiDAR programmes; high-resolution aerial or UAV imagery at 5 -- 30 cm GSD, the dominant data source for urban-tree research {[}7, 8, 9{]}; and \textbf{freely or inexpensively available very-high-resolution satellite imagery} from commercial vendors and aggregators such as ESRI World Imagery and Google Earth --- the only practical option for Astana at the required scale {[}10, 11, 3{]}.
 
 The practical requirements imposed by \emph{Zelenstroy} on any automated inventory are: (i) accept imagery from heterogeneous sources without re-training; (ii) output a per-tree polygon mask rather than a single pixel, so that crown area can be computed; (iii) convert pixel coordinates into geographic coordinates in WGS-84; (iv) export the inventory in formats consumable by QGIS, ArcGIS and Excel; (v) provide a confidence score for each detection so that human reviewers can prioritise their inspection time. The methodological choices documented in Chapter 2 are direct consequences of these five requirements.
 
@@ -14,23 +14,22 @@ The practical requirements imposed by \emph{Zelenstroy} on any automated invento
 
 The deep-learning literature on tree detection is highly \textbf{data-source-dependent}: a model that excels on 5-cm UAV imagery typically fails when applied directly to 1-m satellite imagery. The body of work surveyed below is organised along this dimension in Table 1.1.
 
-\textbf{Table 1.1 --- Data sources reported in the surveyed literature.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.237\linewidth} >{\raggedright\arraybackslash}p{0.139\linewidth} >{\raggedright\arraybackslash}p{0.287\linewidth} >{\raggedright\arraybackslash}p{0.109\linewidth} >{\raggedright\arraybackslash}p{0.178\linewidth}@{}}
+\caption{Data sources reported in the surveyed literature}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Source} & \textbf{Typical GSD} & \textbf{Coverage} & \textbf{Cost} & \textbf{Representative works} \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
 \endlastfoot
-Airborne LiDAR & 5 -- 50 cm 3-D & National / regional campaigns & Very high & {[}23, 1{]} \\
-UAV / drone RGB & 1 -- 5 cm & A single survey area & Medium & {[}11, 8, 13{]} \\
-Aerial orthophotos & 5 -- 30 cm & Country-wide & Medium-high & {[}10, 4, 3{]} \\
-Very-high-res satellite & 30 cm -- 1 m & Global & Low--medium & {[}2, 5, 14{]} \\
-Sentinel-2 multispectral & 10 m & Global, free & Free & {[}14, 16, 17{]} \\
+Airborne LiDAR & 5 -- 50 cm 3-D & National / regional campaigns & Very high & {[}6, 2{]} \\
+UAV / drone RGB & 1 -- 5 cm & A single survey area & Medium & {[}8, 4, 12{]} \\
+Aerial orthophotos & 5 -- 30 cm & Country-wide & Medium-high & {[}7, 9, 13{]} \\
+Very-high-res satellite & 30 cm -- 1 m & Global & Low--medium & {[}3, 11, 10{]} \\
+Sentinel-2 multispectral & 10 m & Global, free & Free & {[}10, 14, 15{]} \\
 \end{longtable}
-}
 
 The very-high-resolution satellite category is the most recent in the literature --- most dedicated satellite papers appeared in 2024 and 2025 --- and is the only data source practically available for Astana.
 
@@ -38,52 +37,60 @@ The very-high-resolution satellite category is the most recent in the literature
 
 Four model families are relevant to the present work: two-stage detectors (Faster R-CNN, Mask R-CNN), one-stage detectors (YOLO, RetinaNet), the domain-specialised DeepForest detector, and the SAM 2 foundation model for mask refinement. Table 1.2 consolidates the best reported numbers from each family.
 
-\textbf{Two-stage detectors.} Faster R-CNN {[}27{]} and its instance-segmentation extension Mask R-CNN {[}28{]} were the first deep architectures applied to individual tree detection. The most recent contribution in this family is the MCAN architecture of Lv et al.~{[}8{]}, which adds a CSPNet backbone and CBAM attention to Mask R-CNN and reports a detection AP of 92.40 \% on UAV imagery of a forested campus in Zhejiang, China. The principal disadvantage of the family is \textbf{computational cost}: for an interactive web tool, Mask-R-CNN-class instance segmenters are too slow on a laptop GPU. This consideration motivates the choice of a one-stage architecture for the YOLO branch of the present system.
+\textbf{Two-stage detectors.} Faster R-CNN {[}16{]} and its instance-segmentation extension Mask R-CNN {[}17{]} were the first deep architectures applied to individual tree detection. The most recent contribution in this family is the MCAN architecture of Lv et al.~{[}4{]}, which adds a CSPNet backbone and CBAM attention to Mask R-CNN and reports a detection AP of 92.40 \% on UAV imagery of a forested campus in Zhejiang, China. The principal disadvantage of the family is \textbf{computational cost}: for an interactive web tool, Mask-R-CNN-class instance segmenters are too slow on a laptop GPU. This consideration motivates the choice of a one-stage architecture for the YOLO branch of the present system.
 
-\textbf{One-stage detectors: YOLO and RetinaNet.} The YOLO family {[}30, 32{]} has been the dominant choice for urban-tree detection since 2022. Velasquez-Camacho et al.~{[}4{]} tested YOLOv5 against DeepForest and Faster R-CNN on aerial and satellite imagery of Lleida, Spain, and reported an F-score of 84.9 \% for the YOLOv5x variant --- substantially better than Faster R-CNN's 35.6 \%. The most recent benchmark of Abbas and Damaševičius {[}2{]} evaluated every modern YOLO variant --- YOLOv8 through YOLOv12 --- on a public RGB satellite tree dataset of 3 157 images and reported YOLOv12m as the best performer with mAP@50 = 90.8 \%. Sun {[}7{]} dedicated an entire PhD thesis to YOLOv7/v8 for tree-crown instance segmentation on Wellington, New Zealand aerial imagery, and reported that her improved YOLOv8 variants outperform Mask R-CNN, YOLOv5 and SOLOv2 on both Box AP and Mask AP with fewer parameters. The other relevant one-stage architecture is \textbf{RetinaNet} {[}29{]}: the benchmark by dos Santos et al.~{[}11{]} reported a RetinaNet AP of 92.64 \%, decisively outperforming YOLOv3 (85.88 \%) and Faster R-CNN (82.48 \%) on UAV imagery of Campo Grande, Brazil. This empirical result motivated the developers of DeepForest {[}1{]} to choose RetinaNet as their base architecture.
+\textbf{One-stage detectors: YOLO and RetinaNet.} The YOLO family {[}18, 19{]} has been the dominant choice for urban-tree detection since 2022. Velasquez-Camacho et al.~{[}9{]} tested YOLOv5 against DeepForest and Faster R-CNN on aerial and satellite imagery of Lleida, Spain, and reported an F-score of 84.9 \% for the YOLOv5x variant --- substantially better than Faster R-CNN's 35.6 \%. The most recent benchmark of Abbas and Damaševičius {[}3{]} evaluated every modern YOLO variant --- YOLOv8 through YOLOv12 --- on a public RGB satellite tree dataset of 3 157 images and reported YOLOv12m as the best performer with mAP@50 = 90.8 \%. Sun {[}20{]} dedicated an entire PhD thesis to YOLOv7/v8 for tree-crown instance segmentation on Wellington, New Zealand aerial imagery, and reported that her improved YOLOv8 variants outperform Mask R-CNN, YOLOv5 and SOLOv2 on both Box AP and Mask AP with fewer parameters. The other relevant one-stage architecture is \textbf{RetinaNet} {[}21{]}: the benchmark by dos Santos et al.~{[}8{]} reported a RetinaNet AP of 92.64 \%, decisively outperforming YOLOv3 (85.88 \%) and Faster R-CNN (82.48 \%) on UAV imagery of Campo Grande, Brazil. This empirical result motivated the developers of DeepForest {[}2{]} to choose RetinaNet as their base architecture.
 
-\textbf{The DeepForest model.} DeepForest {[}1{]} is a tree-specialised RetinaNet detector packaged as a Python library with pre-trained weights and a stable \texttt{predict\_tile()} API. The original release was trained on a large semi-supervised dataset derived from the NEON aerial-lidar campaigns over forested sites in the United States, and reported a baseline F1 ≈ 0.65 on held-out NEON scenes. Two empirical results from the literature decisively constrain its use on urban imagery. Ventura et al.~{[}3{]} tested DeepForest off-the-shelf on 60-cm NAIP imagery of eight Californian cities and reported precision 0.735 but \textbf{recall of only 0.294}, for an F-score of 0.42; after fine-tuning on a few hundred urban tiles, the same model recovered an F-score of \textbf{0.729}. The Sofia DeepForest work of Dakov and Petrova-Antonova {[}6{]} provides a complementary data point: trained on 826 manually-annotated trees in Sofia, Bulgaria, DeepForest reached an F1 of 0.674 -- 0.685 --- comparable to the original NEON benchmark but obtained on what is geographically and architecturally the closest analogue to Astana in the entire surveyed literature. Both works conclude that \textbf{DeepForest must be fine-tuned for urban use}.
+\textbf{The DeepForest model.} DeepForest {[}2{]} is a tree-specialised RetinaNet detector packaged as a Python library with pre-trained weights and a stable \texttt{predict\_tile()} API. The original release was trained on a large semi-supervised dataset derived from the NEON aerial-lidar campaigns over forested sites in the United States, and reported a baseline F1 ≈ 0.65 on held-out NEON scenes. Two empirical results from the literature decisively constrain its use on urban imagery. Ventura et al.~{[}13{]} tested DeepForest off-the-shelf on 60-cm NAIP imagery of eight Californian cities and reported precision 0.735 but \textbf{recall of only 0.294}, for an F-score of 0.42; after fine-tuning on a few hundred urban tiles, the same model recovered an F-score of \textbf{0.729}. The Sofia DeepForest work of Dakov and Petrova-Antonova {[}1{]} provides a complementary data point: trained on 826 manually-annotated trees in Sofia, Bulgaria, DeepForest reached an F1 of 0.674 -- 0.685 --- comparable to the original NEON benchmark but obtained on what is geographically and architecturally the closest analogue to Astana in the entire surveyed literature. Both works conclude that \textbf{DeepForest must be fine-tuned for urban use}.
 
-\textbf{Foundation models: SAM and SAM 2.} The newest paradigm in the field is the foundation-model approach exemplified by the Segment Anything Model (SAM) {[}25{]} and its 2024 successor SAM 2 {[}36{]}. Both expose a prompt-based interface in which the user supplies a point, a bounding box or a coarse mask and the model returns a precise segmentation of the corresponding object. The critical property is \textbf{zero-shot generalisation}: the models produce sharp masks even on object categories that were never explicitly labelled at training time, including trees in satellite imagery. SAM 2 specifically can therefore be used as a mask-refinement stage on top of any bounding-box detector --- DeepForest in our case --- without requiring an additional fine-tune. This idea is the basis of the fourth model branch in Section 2.6.
+\textbf{Foundation models: SAM and SAM 2.} The newest paradigm in the field is the foundation-model approach exemplified by the Segment Anything Model (SAM) {[}22{]} and its 2024 successor SAM 2 {[}23{]}. Both expose a prompt-based interface in which the user supplies a point, a bounding box or a coarse mask and the model returns a precise segmentation of the corresponding object. The critical property is \textbf{zero-shot generalisation}: the models produce sharp masks even on object categories that were never explicitly labelled at training time, including trees in satellite imagery. SAM 2 specifically can therefore be used as a mask-refinement stage on top of any bounding-box detector --- DeepForest in our case --- without requiring an additional fine-tune. This idea is the basis of the fourth model branch in Section 2.6.
 
-\textbf{Table 1.2 --- Best reported results from the surveyed literature, sorted by method family.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.214\linewidth} >{\raggedright\arraybackslash}p{0.214\linewidth} >{\raggedright\arraybackslash}p{0.093\linewidth} >{\raggedright\arraybackslash}p{0.214\linewidth} >{\raggedright\arraybackslash}p{0.214\linewidth}@{}}
+\caption{Best reported results from the surveyed literature, sorted by method family}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Method} & \textbf{Work} & \textbf{Year} & \textbf{Data} & \textbf{Best metric} \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
 \endlastfoot
-Faster R-CNN & dos Santos et al.~{[}11{]} & 2019 & UAV RGB, Campo Grande & AP = 82.48 \% \\
-Mask R-CNN (MCAN) & Lv et al.~{[}8{]} & 2023 & UAV RGB, Zhejiang & Det AP = 92.40 \%, Seg AP = 97.70 \% \\
-RetinaNet & dos Santos et al.~{[}11{]} & 2019 & UAV RGB, Campo Grande & AP = 92.64 \% \\
-YOLOv4-Lite & Zheng and Wu {[}12{]} & 2022 & Google Earth 0.27 m & Acc = 96.3 \% (campus) \\
-YOLOv5x & Velasquez-Camacho et al.~{[}4{]} & 2023 & Aerial + sat., Lleida & F1 = 84.9 \% \\
-YOLOv8 (Wellington) & Sun {[}7{]} & 2025 & Aerial, Wellington & Best Box and Mask AP vs.~Mask R-CNN / YOLOv5 / SOLOv2 \\
-YOLOv12m & Abbas and Damaševičius {[}2{]} & 2025 & RGB satellite, 3 157 imgs & \textbf{mAP@50 = 90.8 \%}, mAP@50:95 = 58.1 \% \\
-U-Net & Wang et al.~{[}9{]} & 2021 & Aerial 32 cm, Vaihingen & OA = 99.14 \%, IoU = 96.38 \% \\
-DeepLabV3+ & Martins et al.~{[}10{]} & 2021 & Aerial 10 cm, Campo Grande & F1 = 91.4 \%, IoU = 73.89 \% \\
-DeepForest off-the-shelf (urban) & Ventura et al.~{[}3{]} & 2024 & NAIP 60 cm, 8 CA cities & F = \textbf{0.42} (P = 0.74, R = 0.29) \\
-DeepForest fine-tuned (urban) & Ventura et al.~{[}3{]} & 2024 & NAIP 60 cm, 8 CA cities & F = \textbf{0.729} \\
-DeepForest urban (Sofia) & Dakov and Petrova-Antonova {[}6{]} & 2024 & Aerial 10 cm, Sofia & F1 = 0.674 -- 0.685 \\
-Sub-pixel canopy (CASNet) & He et al.~{[}14{]} & 2022 & Sentinel-2, 34 Chinese cities & OA = 88.6 \% \\
-Canopy height (MUFCH) & Xu et al.~{[}16{]} & 2025 & Sentinel-2 + OSM, Beijing & MAE = 2.02 m \\
+Faster R-CNN & dos Santos et al.~{[}8{]} & 2019 & UAV RGB, Campo Grande & AP = 82.48 \% \\
+Mask R-CNN (MCAN) & Lv et al.~{[}4{]} & 2023 & UAV RGB, Zhejiang & Det AP = 92.40 \%, Seg AP = 97.70 \% \\
+RetinaNet & dos Santos et al.~{[}8{]} & 2019 & UAV RGB, Campo Grande & AP = 92.64 \% \\
+YOLOv4-Lite & Zheng and Wu {[}24{]} & 2022 & Google Earth 0.27 m & Acc = 96.3 \% (campus) \\
+YOLOv5x & Velasquez-Camacho et al.~{[}9{]} & 2023 & Aerial + sat., Lleida & F1 = 84.9 \% \\
+YOLOv8 (Wellington) & Sun {[}20{]} & 2025 & Aerial, Wellington & Best Box and Mask AP vs.~Mask R-CNN / YOLOv5 / SOLOv2 \\
+YOLOv12m & Abbas and Damaševičius {[}3{]} & 2025 & RGB satellite, 3 157 imgs & \textbf{mAP@50 = 90.8 \%}, mAP@50:95 = 58.1 \% \\
+U-Net & Wang et al.~{[}25{]} & 2021 & Aerial 32 cm, Vaihingen & OA = 99.14 \%, IoU = 96.38 \% \\
+DeepLabV3+ & Martins et al.~{[}7{]} & 2021 & Aerial 10 cm, Campo Grande & F1 = 91.4 \%, IoU = 73.89 \% \\
+DeepForest off-the-shelf (urban) & Ventura et al.~{[}13{]} & 2024 & NAIP 60 cm, 8 CA cities & F = \textbf{0.42} (P = 0.74, R = 0.29) \\
+DeepForest fine-tuned (urban) & Ventura et al.~{[}13{]} & 2024 & NAIP 60 cm, 8 CA cities & F = \textbf{0.729} \\
+DeepForest urban (Sofia) & Dakov and Petrova-Antonova {[}1{]} & 2024 & Aerial 10 cm, Sofia & F1 = 0.674 -- 0.685 \\
+Sub-pixel canopy (CASNet) & He et al.~{[}10{]} & 2022 & Sentinel-2, 34 Chinese cities & OA = 88.6 \% \\
+Canopy height (MUFCH) & Xu et al.~{[}14{]} & 2025 & Sentinel-2 + OSM, Beijing & MAE = 2.02 m \\
+U-Net-DenseNet & He et al.~{[}26{]} & 2020 & VHR satellite, urban forests & object-based mapping \\
+Faster R-CNN (urban RGB) & Zhang et al.~{[}27{]} & 2022 & High-res RGB, urban & individual-tree detection \\
+Double-branch segmenter & Zhang and Liu {[}28{]} & 2024 & High-res remote sensing & multi-scale street trees \\
+Semantic segmentation & Chen et al.~{[}29{]} & 2022 & High-res, community green & green-space identification \\
+Double-branch CNN (multi-temporal) & Chen et al.~{[}30{]} & 2023 & Multi-temporal satellite & canopy mapping \\
+DeepLab/U-Net (metropolitan) & Huerta et al.~{[}31{]} & 2021 & VHR satellite & green-space semantic seg. \\
+OB-CNN (change) & Timilsina et al.~{[}32{]} & 2020 & Aerial, multi-temporal & tree-cover change mapping \\
+Geospatial neural network & Chen et al.~{[}33{]} & 2021 & Satellite, urban & green-space mapping \\
+Cascaded CNN & Dong et al.~{[}34{]} & 2019 & Google Earth & single-tree detection \\
 \textbf{YOLOv8x-seg v4 (this work)} & this thesis & 2026 & Very-high-res sat., Astana M14 & \textbf{Box mAP@50 = 0.315, Mask mAP@50 = 0.290} \\
 \textbf{Mask R-CNN v2+v3 (this work)} & this thesis & 2026 & Very-high-res sat., Astana M14 & Box mAP@50 = 0.166, Mask mAP@50 = 0.158 \\
 \textbf{DeepForest v3 + SAM 2 (this work)} & this thesis & 2026 & Very-high-res sat., Astana M14 & Box mAP@50 = 0.146, Mask mAP@50 = 0.134 \\
 \textbf{NEON off-the-shelf on Astana (this work)} & this thesis & 2026 & Very-high-res sat., Astana M14 & Box mAP@50 = \textbf{0.012} (first measurement on a Central-Asian city) \\
 \end{longtable}
-}
 
-Three observations follow from this table. First, the best reported numbers in the literature are very high --- state-of-the-art detection models routinely exceed 90 \% mAP at IoU = 0.5. Second, \textbf{all the best results are obtained on datasets from the United States, Europe, China, Brazil or New Zealand}: there is no paper in the surveyed corpus that evaluates any of these methods on Central-Asian imagery, no paper that uses imagery of Kazakhstan, and no paper that addresses the specific architectural context of a Soviet-era micro-district city. Third, the gap between off-the-shelf and fine-tuned DeepForest is enormous --- 0.42 → 0.73 F1 on the same data after a few hundred annotations {[}3{]}. This is the single most important quantitative finding for the present work, because it directly justifies the time investment in building a custom Astana annotated dataset.
+Three observations follow from this table. First, the best reported numbers in the literature are very high --- state-of-the-art detection models routinely exceed 90 \% mAP at IoU = 0.5. Second, \textbf{all the best results are obtained on datasets from the United States, Europe, China, Brazil or New Zealand}: there is no paper in the surveyed corpus that evaluates any of these methods on Central-Asian imagery, no paper that uses imagery of Kazakhstan, and no paper that addresses the specific architectural context of a Soviet-era micro-district city. Third, the gap between off-the-shelf and fine-tuned DeepForest is enormous --- 0.42 → 0.73 F1 on the same data after a few hundred annotations {[}13{]}. This is the single most important quantitative finding for the present work, because it directly justifies the time investment in building a custom Astana annotated dataset.
 
 \section{The geographic generalisation gap}\label{the-geographic-generalisation-gap}
 
 The pattern --- high in-domain performance, large performance drop on out-of-domain imagery --- is sometimes called the \textbf{geographic generalisation gap}. It is not specific to tree detection: similar drops have been reported in building segmentation, land-cover classification and road extraction whenever a model trained in one country is applied without fine-tuning to imagery of another.
 
-For Astana the magnitude of the gap was unknown at the start of the project, since no published number existed for any deep-learning tree-detection model on Central-Asian satellite imagery. As part of this work the public DeepForest checkpoint (trained on NEON aerial-lidar campaigns of forested sites in the United States) was evaluated out-of-the-box on the Astana M14 validation set described in Section 3.1. The result is a Box mAP@50 of \textbf{0.012} --- one to two orders of magnitude below any of the fine-tuned configurations reported later, and three orders of magnitude below the same model's off-the-shelf 0.42 F-score on NAIP USA imagery {[}3{]}. This single number is the empirical anchor of the entire diploma project: it quantifies, for the first time on a Central-Asian capital, the gap that motivates the dataset-construction and fine-tuning effort of Chapters 2 and 3.
+For Astana the magnitude of the gap was unknown at the start of the project, since no published number existed for any deep-learning tree-detection model on Central-Asian satellite imagery. As part of this work the public DeepForest checkpoint (trained on NEON aerial-lidar campaigns of forested sites in the United States) was evaluated out-of-the-box on the Astana M14 validation set described in Section 3.1. The result is a Box mAP@50 of \textbf{0.012} --- one to two orders of magnitude below any of the fine-tuned configurations reported later, and three orders of magnitude below the same model's off-the-shelf 0.42 F-score on NAIP USA imagery {[}13{]}. This single number is the empirical anchor of the entire diploma project: it quantifies, for the first time on a Central-Asian capital, the gap that motivates the dataset-construction and fine-tuning effort of Chapters 2 and 3.
 
 Four factors are commonly invoked to explain the gap: \textbf{floristic differences} (Astana's urban canopy is dominated by \emph{Populus}, elms, birches and apricots, which present visually different crowns from the broadleaf and conifer species typical of North-American NEON sites); \textbf{urban-morphology differences} (Soviet-era micro-district planning produces a regular grid of multi-storey apartment blocks separated by narrow strips of green space, qualitatively different from suburban-sprawl U.S. benchmarks and dense historic-city European benchmarks); \textbf{resolution and acquisition-geometry mismatch} (satellite look-angles can deviate by up to 30° from nadir, leading to large variations in tree-shadow direction within a single image); and \textbf{annotation-policy differences} (per-crown vs.~per-cluster labelling conventions vary between datasets). The conclusion is that off-the-shelf models cannot be expected to deliver state-of-the-art numbers on Astana imagery and that some form of domain adaptation --- fine-tuning, ensemble or both --- is mandatory. This is the principal motivation for the methodology of Chapter 2.
 

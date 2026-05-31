@@ -6,10 +6,10 @@ This chapter describes the technical design of the system. Section 2.1 gives a t
 
 The system follows a classical three-tier separation of concerns: a thin \textbf{presentation layer} (a single-page React 18 application served by FastAPI, with React, Babel-standalone and Leaflet loaded directly from a CDN --- no Node.js build step), an \textbf{application layer} (a FastAPI REST backend in Python 3.11) and a \textbf{model layer} (four pluggable deep-learning adapters that wrap the underlying frameworks). The five layers and their respective responsibilities are summarised in Table 2.1.
 
-\textbf{Table 2.1 --- Layered architecture of the system and the responsibilities of each layer.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.119\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth} >{\raggedright\arraybackslash}p{0.277\linewidth}@{}}
+\caption{Layered architecture of the system and the responsibilities of each layer}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Layer} & \textbf{Technology} & \textbf{Responsibility} & \textbf{Key components} \\
 \midrule\noalign{}
@@ -22,7 +22,6 @@ Model & PyTorch 2.5 + CUDA 12.1 + Ultralytics 8.4 + DeepForest 1.5 + sam2 1.1 + 
 Persistence & SQLite (\texttt{storage/app.db}) with \texttt{ON\ DELETE\ CASCADE} foreign keys & Persist every snapshot, run and detection ever produced by the system & \texttt{snapshots}, \texttt{runs}, \texttt{detections}, \texttt{scan\_sessions} tables \\
 Export & Python serialisers + Leaflet HTML template & Deliver the inventory in GIS-compatible formats & GeoJSON (QGIS / ArcGIS), CSV (Excel), standalone HTML (browser-only) \\
 \end{longtable}
-}
 
 The data flow through the system can be summarised as follows. The user opens the web interface and either uploads a satellite image as a file (PNG, JPG, TIFF or GeoTIFF) or selects an area directly on a Leaflet map; in the latter case the backend downloads the appropriate ESRI World Imagery or Google Satellite tiles, stitches and crops them, and returns the resulting image with embedded geographic bounds. The image is stored on the server and assigned an opaque identifier; image dimensions and, if available, GeoTIFF projection metadata are extracted via the \texttt{rasterio} library. The user selects one of four detection backends (YOLO, Mask R-CNN, DeepForest, DeepForest+SAM 2) or one of two ensembles (WBF, cross-YOLO vote) and a confidence threshold, and triggers inference; the corresponding adapter is loaded lazily on first request and reused for subsequent calls. For images larger than the network's native input resolution, the adapter performs sliding-window tiled inference, runs the model on each tile and aggregates the per-tile predictions through Non-Maximum Suppression to produce a single global set of detections. Each detection is annotated with geographic coordinates via the geographic-conversion module, which supports four operating modes depending on the metadata available. The result is stored as an immutable job record, returned to the frontend for interactive visualisation on a Leaflet map, and made available for export in three formats.
 
@@ -32,12 +31,12 @@ A key architectural decision is the use of the \textbf{adapter pattern} for the 
 
 The system accepts three categories of input: regular images (PNG, JPG, WebP) decoded with Pillow on first use; GeoTIFF images carrying an affine transform and CRS in their metadata, parsed with \texttt{rasterio.open()} and re-projected to WGS-84 (EPSG:4326) when needed; and \textbf{in-browser map capture}, where the user draws a rectangle on a Leaflet map and the backend downloads the corresponding tiles from a configurable provider.
 
-Two tile providers are registered (Table 2.1): the default \textbf{ESRI World Imagery} endpoint (max zoom 19, no API key, stable) and an unofficial \textbf{Google Satellite} endpoint (max zoom 20, the same image base as Google Earth Pro --- directly relevant because the YOLO and Mask R-CNN training data was collected from Google Earth Pro screenshots). The map-capture flow (i) converts the two corner coordinates from longitude / latitude into floating-point Web-Mercator tile coordinates; (ii) computes the integer tile range and, for large bounding boxes, splits the request into up to nine sub-regions each capped at approximately 100 tiles, so per-tile downloads remain below a configurable \texttt{MAX\_TILES} limit (default 400, ≈ 5 120 × 5 120 px per sub-region) that protects the server from accidental bulk downloads; (iii) downloads the tiles in parallel through a thread pool of eight workers, replacing failed tiles by a small grey placeholder; and (iv) stitches the tiles into a single canvas and crops to the requested bounding box, returning a PNG with the geographic bounds embedded.
+Two tile providers are registered (Table 2.2): the default \textbf{ESRI World Imagery} endpoint (max zoom 19, no API key, stable) and an unofficial \textbf{Google Satellite} endpoint (max zoom 20, the same image base as Google Earth Pro --- directly relevant because the YOLO and Mask R-CNN training data was collected from Google Earth Pro screenshots). The map-capture flow (i) converts the two corner coordinates from longitude / latitude into floating-point Web-Mercator tile coordinates; (ii) computes the integer tile range and, for large bounding boxes, splits the request into up to nine sub-regions each capped at approximately 100 tiles, so per-tile downloads remain below a configurable \texttt{MAX\_TILES} limit (default 400, ≈ 5 120 × 5 120 px per sub-region) that protects the server from accidental bulk downloads; (iii) downloads the tiles in parallel through a thread pool of eight workers, replacing failed tiles by a small grey placeholder; and (iv) stitches the tiles into a single canvas and crops to the requested bounding box, returning a PNG with the geographic bounds embedded.
 
-\textbf{Table 2.1 --- Tile providers registered in \texttt{backend/map\_capture.py::TILE\_PROVIDERS}.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.158\linewidth} >{\raggedright\arraybackslash}p{0.338\linewidth} >{\raggedright\arraybackslash}p{0.117\linewidth} >{\raggedright\arraybackslash}p{0.338\linewidth}@{}}
+\caption{Tile providers registered in the map-capture module}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Provider key} & \textbf{Endpoint} & \textbf{Max zoom} & \textbf{Notes} \\
 \midrule\noalign{}
@@ -47,13 +46,12 @@ Two tile providers are registered (Table 2.1): the default \textbf{ESRI World Im
 \texttt{esri} (default) & \texttt{server.arcgisonline.com/.../World\_Imagery/...} & 19 & Free, no API key, stable \\
 \texttt{google} & \texttt{mt\{0–3\}.google.com/vt/lyrs=s} & 20 & Same image base as Google Earth Pro (training data source); unofficial endpoint, academic prototyping only \\
 \end{longtable}
-}
 
 \textbf{Tiled inference.} A YOLOv8-seg or DeepForest model operates on inputs of approximately 640 × 640 px, while a single Astana screenshot is typically 1 600 × 1 100 px or larger. Resizing to fit the network input shrinks each tree crown --- typically 20 -- 40 px in diameter at zoom 18 --- below the resolution any modern detector can reliably handle. Early experiments confirmed this: a YOLOv8-seg trained at \texttt{imgsz=640} directly on full-resolution inputs detected \textbf{zero trees} on the validation set. The system therefore performs \textbf{sliding-window tiled inference} at the same resolution as training: the original image is partitioned into overlapping 640-px tiles with a 128-px overlap so that any tree crown is fully contained in at least one tile; the model is applied independently to each tile; and the per-tile detections are translated back into global image coordinates by adding the tile offset to every polygon vertex. Duplicate detections of the same tree that appears in multiple overlapping tiles are removed by a \textbf{global Non-Maximum Suppression} pass with an IoU threshold of 0.5, vectorised in NumPy. The same tiling-and-NMS pattern is reused in \texttt{ml/tile\_dataset.py} for training-data preparation and in \texttt{ml/prelabel\_coco.py} for model-in-the-loop pre-labelling.
 
 \section{YOLOv8-seg branch}\label{yolov8-seg-branch}
 
-YOLOv8 {[}32{]} is a single-stage anchor-free object detector. The segmentation variant \texttt{YOLOv8x-seg} extends the architecture with an additional \textbf{prototype mask head} that produces 32 prototype masks at one quarter the input resolution; each detected instance is then represented by a vector of 32 coefficients that, linearly combined with the prototype masks and thresholded, produces a binary segmentation mask aligned with the detected bounding box. This design --- borrowed from the YOLACT family of real-time instance segmenters --- separates the per-pixel and per-instance computations, so the cost of generating masks scales with the number of detections rather than with the number of pixels.
+YOLOv8 {[}19{]} is a single-stage anchor-free object detector. The segmentation variant \texttt{YOLOv8x-seg} extends the architecture with an additional \textbf{prototype mask head} that produces 32 prototype masks at one quarter the input resolution; each detected instance is then represented by a vector of 32 coefficients that, linearly combined with the prototype masks and thresholded, produces a binary segmentation mask aligned with the detected bounding box. This design --- borrowed from the YOLACT family of real-time instance segmenters --- separates the per-pixel and per-instance computations, so the cost of generating masks scales with the number of detections rather than with the number of pixels.
 
 \textbf{Why instance segmentation rather than detection.} Bounding-box detection is sufficient for counting trees, but the municipal user also wants the \textbf{crown size} (a proxy for species and age) and the \textbf{green-coverage percentage} of a given area (a standard urban-planning indicator). Both require pixel-level masks rather than rectangular boxes --- a poplar and a birch of the same canopy area can have radically different crown silhouettes, and the bounding box of two adjacent overlapping crowns can cover a substantial fraction of bare ground. The output of the adapter therefore contains: a bounding box, a polygon mask (the YOLO mask compressed into a closed sequence of \((x, y)\) vertices via Suzuki--Abe contour extraction), a confidence score, and --- derived from the mask --- the crown area in pixels and (when pixel size in metres is known) in square metres.
 
@@ -61,10 +59,10 @@ YOLOv8 {[}32{]} is a single-stage anchor-free object detector. The segmentation 
 
 \textbf{Training procedure.} Three YOLOv8-seg variants are used in this work, corresponding to three phases of the project's hyperparameter ablation reported in Chapter 3. The pre-ablation generations used \texttt{yolov8x-seg} (≈ 71 M parameters) on the initial hypothesis that the extra capacity would improve performance. Rounds 1 -- 3 of the systematic ablation reversed that hypothesis with the medium-size \texttt{yolov8m-seg} (≈ 27 M parameters) outperforming both larger variants by 15 -- 25 \% relative when trained from COCO weights with manually-tuned augmentation. Round 4 then reversed the reversal: with \textbf{Ultralytics' default augmentation pipeline} instead of the manually-tuned one, the largest \texttt{yolov8x-seg} becomes the strongest single configuration, reaching Box mAP@50 = 0.315 on M14 --- the headline empirical result of the diploma. The \textbf{final production checkpoint} is therefore \texttt{yolov8x-seg} trained from fresh COCO weights with \texttt{single\_cls=True} and Ultralytics' default augmentation, on the single laptop GPU (NVIDIA GeForce RTX 4060, 8 GiB VRAM); mixed-precision training (AMP) was essential to fit batch size 2 in memory. The principal hyper-parameters of the production training run are summarised in Table 2.3.
 
-\textbf{Table 2.3 --- Hyper-parameters of the YOLOv8x-seg v4\_x\_clean production training run.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.412\linewidth} >{\raggedright\arraybackslash}p{0.538\linewidth}@{}}
+\caption{Hyper-parameters of the YOLOv8x-seg production training run}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Parameter} & \textbf{Value} \\
 \midrule\noalign{}
@@ -83,25 +81,24 @@ Single-class mode & \texttt{single\_cls=True} \\
 Mixed-precision (AMP) & enabled \\
 Wall-clock time & ≈ 91 minutes \\
 \end{longtable}
-}
 
 \textbf{Loss function.} The training objective of YOLOv8-seg is the weighted sum of four components --- a bounding-box regression loss, a per-class classification loss, a Distribution Focal Loss for the discrete-bin regression head, and a per-pixel mask loss:
 
-\[
+\begin{equation}
 \mathcal{L} \;=\; \lambda_{\text{box}}\,\mathcal{L}_{\text{CIoU}} \;+\; \lambda_{\text{cls}}\,\mathcal{L}_{\text{BCE-cls}} \;+\; \lambda_{\text{dfl}}\,\mathcal{L}_{\text{DFL}} \;+\; \lambda_{\text{seg}}\,\mathcal{L}_{\text{BCE-mask}}
-\]
+\end{equation}
 
 The bounding-box term is the \textbf{Complete IoU loss}, which extends the plain IoU loss with a centre-point-distance term and an aspect-ratio-inconsistency term, \(\mathcal{L}_{\text{CIoU}} = 1 - \mathrm{IoU} + \rho^{2}(b, b^{gt})/c^{2} + \alpha v\), where \(\rho\) is the Euclidean distance between predicted and ground-truth box centres, \(c\) is the diagonal of the smallest box that encloses both, \(v\) is a measure of aspect-ratio inconsistency, and \(\alpha\) a trade-off coefficient. The loss-weight defaults are the Ultralytics-standard \(\lambda_{\text{box}} = 7.5\), \(\lambda_{\text{cls}} = 0.5\), \(\lambda_{\text{dfl}} = 1.5\), retained as-is for comparability with the COCO-pretrained checkpoint.
 
 \section{Mask R-CNN branch}\label{mask-r-cnn-branch}
 
-Mask R-CNN {[}28{]} is a two-stage instance-segmentation network that extends the Faster R-CNN {[}27{]} detector with a fully-convolutional mask head running in parallel with the bounding-box-regression head. The two-stage design relies on a Region Proposal Network that first generates a small set of class-agnostic region proposals, which are then classified, regressed and segmented independently. The variant adopted is the standard Mask R-CNN with a ResNet-50 backbone and an FPN neck, initialised from publicly-available COCO-pretrained \texttt{maskrcnn\_resnet50\_fpn\_v2} torchvision weights and fine-tuned on the same Astana polygon dataset used for the YOLO branch. The motivation for including this branch is methodological: it provides a like-for-like architectural comparison between a one-stage (YOLO) and a two-stage (Mask R-CNN) instance segmenter under identical training data and validation conditions, in line with the comparative analysis surveyed in Section 1.3.
+Mask R-CNN {[}17{]} is a two-stage instance-segmentation network that extends the Faster R-CNN {[}16{]} detector with a fully-convolutional mask head running in parallel with the bounding-box-regression head. The two-stage design relies on a Region Proposal Network that first generates a small set of class-agnostic region proposals, which are then classified, regressed and segmented independently. The variant adopted is the standard Mask R-CNN with a ResNet-50 backbone and an FPN neck, initialised from publicly-available COCO-pretrained \texttt{maskrcnn\_resnet50\_fpn\_v2} torchvision weights and fine-tuned on the same Astana polygon dataset used for the YOLO branch. The motivation for including this branch is methodological: it provides a like-for-like architectural comparison between a one-stage (YOLO) and a two-stage (Mask R-CNN) instance segmenter under identical training data and validation conditions, in line with the comparative analysis surveyed in Section 1.3.
 
 Two Mask R-CNN checkpoints exist in the project. The \textbf{v1 + v2 base} model was trained from the torchvision COCO V1 weights with SGD (momentum 0.9, weight decay \(5 \times 10^{-4}\)), an initial learning rate of \(5 \times 10^{-3}\), a \texttt{StepLR} scheduler halving the learning rate every 10 epochs, batch size 2 and AMP. The \textbf{v2 + v3 fine-tune} --- which is the production checkpoint released under tag \texttt{maskrcnn-v2v3} --- warm-starts from the v1 + v2 base via \texttt{-\/-resume-from} and lowers the initial learning rate automatically to \(1 \times 10^{-3}\). The principal training-side improvement is a richer Albumentations pipeline: horizontal flip (\(p\) = 0.5), vertical flip (\(p\) = 0.3), random 90-degree rotation (\(p\) = 0.5), random brightness/contrast adjustment (\(p\) = 0.3) and HSV jitter (\(p\) = 0.2). Early-stopping is implemented on the validation \texttt{mask\_map\_50} metric with a patience of 5 epochs; the v2 + v3 fine-tune was early-stopped at epoch 16 (best at epoch 11). The adapter exposes the standard \texttt{predict(image\_path,\ confidence)\ -\textgreater{}\ List{[}Detection{]}} method and reuses the same tiled-inference + global-NMS code path as the YOLO branch (Section 2.2).
 
 \section{DeepForest branch}\label{deepforest-branch}
 
-DeepForest {[}1{]} is a tree-detection library built on top of a RetinaNet single-stage detector with a ResNet-50 backbone. RetinaNet was selected by the DeepForest authors over Faster R-CNN because of its better speed--accuracy trade-off and over earlier YOLO versions because of its dedicated \textbf{focal-loss} formulation {[}29{]}, \(\mathcal{L}_{\text{focal}}(p_t) = -(1 - p_t)^{\gamma} \log(p_t)\) (with \(\gamma = 2\) in the DeepForest default), which down-weights well-classified background examples and is particularly well-suited to the highly imbalanced foreground-to-background ratio of dense forest scenes.
+DeepForest {[}2{]} is a tree-detection library built on top of a RetinaNet single-stage detector with a ResNet-50 backbone. RetinaNet was selected by the DeepForest authors over Faster R-CNN because of its better speed--accuracy trade-off and over earlier YOLO versions because of its dedicated \textbf{focal-loss} formulation {[}21{]}, \(\mathcal{L}_{\text{focal}}(p_t) = -(1 - p_t)^{\gamma} \log(p_t)\) (with \(\gamma = 2\) in the DeepForest default), which down-weights well-classified background examples and is particularly well-suited to the highly imbalanced foreground-to-background ratio of dense forest scenes.
 
 The model is shipped with two pre-trained weight sets: the ``tree'' model (\texttt{weecology/deepforest-tree}), trained on hundreds of thousands of semi-supervised annotations derived from NEON aerial-lidar data over forested sites in the United States, and a ``bird'' model irrelevant to the present work. DeepForest's recommended inference mode is the \texttt{predict\_tile()} method, which performs sliding-window patch-based inference on 400 × 400-px patches with a 5 \% overlap and merges per-patch detections via internal NMS. The adapter wraps this method and translates the resulting pandas DataFrame into the same \texttt{Detection} dataclass that the YOLO adapter produces.
 
@@ -109,7 +106,7 @@ The model is shipped with two pre-trained weight sets: the ``tree'' model (\text
 
 \section{DeepForest + SAM 2 mask-refinement branch}\label{deepforest-sam-2-mask-refinement-branch}
 
-The fourth branch exploits the \textbf{zero-shot generalisation} property of SAM 2 {[}36{]} to upgrade DeepForest's bounding-box detections into precise crown polygons without any additional annotation or training. SAM 2 is the second-generation version of Meta AI's foundation segmentation model, succeeding the original SAM {[}25{]}. Where SAM was trained on the SA-1B dataset of more than one billion masks across eleven million images, SAM 2 extends this with the SA-V dataset of more than thirty-five million masks across ≈ 250 000 videos. For the static-image, single-frame tree-detection task addressed here only the image-level segmentation capability of SAM 2 is used; its temporal-propagation mode is reserved for future-work multi-temporal canopy monitoring.
+The fourth branch exploits the \textbf{zero-shot generalisation} property of SAM 2 {[}23{]} to upgrade DeepForest's bounding-box detections into precise crown polygons without any additional annotation or training. SAM 2 is the second-generation version of Meta AI's foundation segmentation model, succeeding the original SAM {[}22{]}. Where SAM was trained on the SA-1B dataset of more than one billion masks across eleven million images, SAM 2 extends this with the SA-V dataset of more than thirty-five million masks across ≈ 250 000 videos. For the static-image, single-frame tree-detection task addressed here only the image-level segmentation capability of SAM 2 is used; its temporal-propagation mode is reserved for future-work multi-temporal canopy monitoring.
 
 The pipeline of this branch is:
 
@@ -134,12 +131,12 @@ The system implements two complementary ensemble strategies. The Weighted-Box-Fu
 
 \subsection{Weighted Box Fusion (YOLO + DeepForest)}\label{weighted-box-fusion-yolo-deepforest}
 
-The YOLO and DeepForest branches are trained on the same data but with different network architectures, patch sizes and loss formulations. Their errors are therefore partly de-correlated: YOLO tends to over-segment large dense canopies into several smaller crowns, while DeepForest tends to merge adjacent crowns into a single bounding box. The chosen ensemble strategy is \textbf{Weighted Box Fusion} {[}26{]}. Where Non-Maximum Suppression keeps the single highest-confidence box and discards every overlapping box, WBF instead \textbf{averages} the coordinates of the overlapping boxes weighted by their confidence scores. For a cluster of \(n\) overlapping predictions \(\{(\mathbf{b}_{i}, c_{i})\}_{i=1}^{n}\), the WBF-fused box and fused confidence are
+The YOLO and DeepForest branches are trained on the same data but with different network architectures, patch sizes and loss formulations. Their errors are therefore partly de-correlated: YOLO tends to over-segment large dense canopies into several smaller crowns, while DeepForest tends to merge adjacent crowns into a single bounding box. The chosen ensemble strategy is \textbf{Weighted Box Fusion} {[}35{]}. Where Non-Maximum Suppression keeps the single highest-confidence box and discards every overlapping box, WBF instead \textbf{averages} the coordinates of the overlapping boxes weighted by their confidence scores. For a cluster of \(n\) overlapping predictions \(\{(\mathbf{b}_{i}, c_{i})\}_{i=1}^{n}\), the WBF-fused box and fused confidence are
 
-\[
+\begin{equation}
 \mathbf{b}_{\text{fused}} \;=\; \frac{\sum_{i=1}^{n} c_{i}\, \mathbf{b}_{i}}{\sum_{i=1}^{n} c_{i}}, \qquad
 c_{\text{fused}} \;=\; \frac{\sum_{i=1}^{n} c_{i}}{n} \cdot \frac{\min(n, M)}{M}
-\]
+\end{equation}
 
 where \(M\) is the number of models being ensembled (here \(M = 2\)). The right-hand factor \(\min(n, M)/M\) down-weights clusters that contain detections from only a subset of the available models --- a single-model cluster receives half of its raw average confidence, while a two-model cluster receives the full average. This factor is what makes WBF a true ensemble (it rewards agreement between models) rather than a smoothing operation. The implementation uses the open-source \texttt{ensemble-boxes} package. The IoU threshold is set to 0.55, slightly higher than the typical 0.5 used for plain NMS, to compensate for the systematic location offset between YOLO and DeepForest boxes.
 
@@ -149,7 +146,7 @@ A complementary ensemble that operates \textbf{within} the YOLO family rather th
 
 \textbf{Algorithm.} Given \(N\) member YOLO checkpoints, the ensemble (i) runs every member on the input image independently, (ii) pools all \(M\) detections from the \(N\) members into a single flat list tagged by member identity, (iii) clusters the pooled detections by box IoU using a union-find data structure (any two detections with \(\text{IoU} \geq 0.5\) are merged into the same cluster), (iv) \textbf{discards any cluster whose detections come from fewer than \(K\) distinct member models} (default \(K = 2\)), and (v) emits the highest-confidence detection from each surviving cluster as its representative. The complexity is \(O(NM^2)\), dominated by the pairwise IoU computation; on a typical Astana tile with \(M \approx 750\) per member the four-member ensemble runs end-to-end in approximately 4--5 seconds on the laptop GPU.
 
-\textbf{Default member set.} Four YOLO checkpoints from the project archive are configured as the default ensemble members, chosen for the visual complementarity of their failure modes on Astana scenes: \textbf{v4\_x\_clean} (the final production checkpoint, strongest aggregate mAP, conservative on built-environment surfaces); \textbf{exp1\_m\_cocostart} (yolov8m-seg with v2-proven augmentation, recovers more partially-occluded crowns than v4\_x\_clean); \textbf{v4\_s\_clean} (yolov8s-seg with defaults, most permissive, highest raw detection count, useful for recall-priority scenes); and \textbf{v2-finetune} (the previous-generation production checkpoint, most conservative on novel surface types, no stadium-roof false-positive regression of the Round 4 / exp1 generation). The cross-YOLO ensemble is exposed in the frontend's hierarchical model picker under the \textbf{Ensemble → 4× YOLO vote} option.
+\textbf{Default member set.} Four YOLO checkpoints spanning \textbf{four distinct generations} are configured as the default ensemble members --- generation diversity is the design goal, because a vote made up only of same-generation models would share their failure modes: \textbf{v4\_x\_clean} (the final v4 production checkpoint, strongest aggregate Box mAP, but the generation that introduced the stadium-roof false positive); \textbf{exp1\_m\_cocostart} (a v3-era yolov8m-seg with v2-proven augmentation, recovers more partially-occluded crowns); \textbf{v3-finetune-run1} (a v3-era yolov8x checkpoint, a second independent v3 vote); and \textbf{v2-finetune} (the previous-generation production checkpoint, which predates and does \textbf{not} exhibit the stadium-roof regression). Because the roof artifact is specific to the v4 generation, the three earlier-generation members can outvote it under the \(K = 2\) rule, whereas a v4-only ensemble could not. The cross-YOLO ensemble is exposed in the frontend's hierarchical model picker under the \textbf{Ensemble → 4× YOLO vote} option.
 
 \section{Geographic conversion}\label{geographic-conversion}
 
@@ -157,7 +154,9 @@ A pixel coordinate \((x, y)\) inside the detection mask has no immediate meaning
 
 \textbf{Mode 1 --- GeoTIFF affine.} If the input is a GeoTIFF, the affine transform written in the metadata maps any pixel coordinate to a coordinate in the file's projection. The system reads the transform with \texttt{rasterio.transform.AffineTransformer.xy(row,\ col)} and re-projects the result to EPSG:4326 with \texttt{pyproj.Transformer} when needed. This mode is the most accurate and is the recommended workflow for production use.
 
-\textbf{Mode 2 --- Four-corner bilinear.} If the user supplies the geographic coordinates of all four corners of the image (by dragging four markers on the Leaflet map until the screenshot is aligned with the underlying satellite basemap), the conversion uses bilinear interpolation: for a pixel at relative coordinates \((u, v) \in [0,1]^{2}\), \[\mathbf{g}(u,v) = (1-u)(1-v)\mathbf{g}_{\text{nw}} + u(1-v)\mathbf{g}_{\text{ne}} + (1-u)v\mathbf{g}_{\text{sw}} + uv\mathbf{g}_{\text{se}}.\]
+\textbf{Mode 2 --- Four-corner bilinear.} If the user supplies the geographic coordinates of all four corners of the image (by dragging four markers on the Leaflet map until the screenshot is aligned with the underlying satellite basemap), the conversion uses bilinear interpolation: for a pixel at relative coordinates \((u, v) \in [0,1]^{2}\), \begin{equation}
+\mathbf{g}(u,v) = (1-u)(1-v)\mathbf{g}_{\text{nw}} + u(1-v)\mathbf{g}_{\text{ne}} + (1-u)v\mathbf{g}_{\text{sw}} + uv\mathbf{g}_{\text{se}}.
+\end{equation}
 
 \textbf{Mode 3 --- Two-corner axis-aligned.} When only the NW and SE corners are known (the common case after the in-browser map-capture workflow), the conversion is a simple linear interpolation along each axis, \(\lambda(x) = \lambda_{\text{nw}} + (x/W)(\lambda_{\text{se}} - \lambda_{\text{nw}})\) and \(\phi(y) = \phi_{\text{nw}} + (y/H)(\phi_{\text{se}} - \phi_{\text{nw}})\). This is exact under the assumption of an axis-aligned equirectangular projection at the city scale (the meridian curvature is negligible across a few hundred metres of Astana).
 
@@ -167,12 +166,12 @@ In addition to the coordinate conversion, the geographic module estimates the \t
 
 \section{Persistent storage layer}\label{persistent-storage-layer}
 
-All results are written to a local SQLite database at \texttt{storage/app.db} rather than kept in a Python process dictionary. The schema consists of four tables linked by foreign keys with \texttt{ON\ DELETE\ CASCADE}. The tables and their principal columns are described in Table 2.2.
+All results are written to a local SQLite database rather than kept in a Python process dictionary. The schema consists of four tables linked by foreign keys with \texttt{ON\ DELETE\ CASCADE}. The tables and their principal columns are described in Table 2.4.
 
-\textbf{Table 2.2 --- SQLite schema of the persistence layer (\texttt{storage/app.db}).}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.128\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth} >{\raggedright\arraybackslash}p{0.274\linewidth}@{}}
+\caption{SQLite schema of the persistence layer}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Table} & \textbf{What it stores} & \textbf{Foreign key} & \textbf{Typical cardinality} \\
 \midrule\noalign{}
@@ -184,7 +183,6 @@ All results are written to a local SQLite database at \texttt{storage/app.db} ra
 \texttt{detections} & One row per detected tree --- pixel + geographic bbox, polygon mask, confidence, crown area & \texttt{run\_id} → \texttt{runs(job\_id)}, ON DELETE CASCADE & 300 -- 800 per typical 1 km² capture \\
 \texttt{scan\_sessions} & One row per Auto-Zoom Region Scan --- bbox, zoom, provider, model, sub-region count, status & --- & 1 per scan \\
 \end{longtable}
-}
 
 The relationships form a chain: \texttt{scan\_sessions} ← \texttt{snapshots} ← \texttt{runs} ← \texttt{detections}, with cascade on the inner two foreign keys. Deleting a scan-session via \texttt{DELETE\ /api/scans/\{id\}} therefore propagates through all its sub-region snapshots, runs, detections and the PNG files on disk in a single SQL statement (with a complementary \texttt{os.unlink} on the file paths returned by the cascade).
 
@@ -234,12 +232,12 @@ The \textbf{Map view} is the principal demonstration deliverable of the project.
 
 The same screen exposes a \textbf{Display strip} anchored to the bottom-right corner of the map (visible in Figure 2.1) with two control groups: a four-button segmented control to switch the \textbf{rendering mode} of the aggregate layer (Point / BBox / Polygon / Heat) and a \emph{Filters} chip that opens an in-context popover with the same min-confidence slider as the left panel. Switching modes is instantaneous and does not require a re-fetch: every detection in the backend response carries three geometric representations --- a centre point, an axis-aligned bounding box, and a polygon mask --- and the frontend simply re-renders. The \textbf{Heat mode} uses the \texttt{leaflet.heat} plugin to produce a kernel-density visualisation weighted by per-detection confidence; the \textbf{Polygon mode} is the default whenever every detection in the active selection carries a mask, and the frontend falls back automatically to \textbf{Point} for any detection without geometry (most often a DeepForest detection rendered before SAM 2 mask refinement).
 
-A real-world example of the aggregate layer at scale is shown in Figure 2.3 --- a single Auto-Zoom Region Scan over the Astana Botanical Park (left-bank district, approximately 1 × 1 km), captured at zoom 19 with the v4\_x\_clean production checkpoint. The scan produces several thousand individual tree-crown detections rendered as yellow / green bounding boxes on the basemap; the colour encodes confidence tier (yellow / orange = low--medium, green = high). The aggregate counter in the left panel reports \textbf{51 348} total trees across all 14 stored scans, of which \textbf{13 749} are currently visible at the active zoom and filter settings.
+A real-world example of the aggregate layer at scale is shown in Figure 2.3 --- a single Auto-Zoom Region Scan over the Astana Botanical Park (left-bank district, approximately 1 × 1 km), captured at zoom 19 with the v4\_x\_clean production checkpoint. The scan produces several thousand individual tree-crown detections rendered as yellow / green bounding boxes on the basemap; the colour encodes confidence tier (yellow / orange = low--medium, green = high). The aggregate counter in the left panel sums every detection across all stored demo scans --- it illustrates the running-total UI, \textbf{not a validated tree census of Astana} (the total changes with each re-scan and includes overlapping demo runs over the same areas).
 
 \begin{figure}
 \centering
-\pandocbounded{\includegraphics[keepaspectratio,alt={Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale.}]{figures/ui_canopy_botanical_park.jpg}}
-\caption{\emph{Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale.}}
+\pandocbounded{\includegraphics[keepaspectratio,alt={Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale. The aggregate counts in the side panel come from repeated demo scans and are not a city-wide tree census.}]{figures/ui_canopy_botanical_park.jpg}}
+\caption{\emph{Real-world scan of the Astana Botanical Park (zoom 19, v4\_x\_clean production model, BBox display mode). Each rectangle is a single detected tree crown; colour encodes the confidence tier (yellow / orange for low-to-medium, green for high). The dense detection cluster outlines the regular star-shaped path layout of the park's central plantings and the more sparse perimeter row-trees along the surrounding avenues --- a strong qualitative validation that the production pipeline produces results consistent with what a human operator would expect at this scale. The aggregate counts in the side panel come from repeated demo scans and are not a city-wide tree census.}}
 \end{figure}
 
 \subsection{Action-aware model picker (centred modal)}\label{action-aware-model-picker-centred-modal}
@@ -326,12 +324,12 @@ Every detection produced by the backend carries three independent geometric repr
 
 \subsection{REST endpoints}\label{rest-endpoints}
 
-The backend exposes a complete REST API documented automatically by FastAPI's OpenAPI integration at \texttt{/docs}. Table 2.2 summarises the endpoints used by the frontend and by the export workflows.
+The backend exposes a complete REST API documented automatically by FastAPI's OpenAPI integration at \texttt{/docs}. Table 2.5 summarises the endpoints used by the frontend and by the export workflows.
 
-\textbf{Table 2.2 --- REST endpoints exposed by the backend.}
-
-{\def\LTcaptype{none} % do not increment counter
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{0.158\linewidth} >{\raggedright\arraybackslash}p{0.396\linewidth} >{\raggedright\arraybackslash}p{0.396\linewidth}@{}}
+\caption{REST endpoints exposed by the backend}\\
+\endfirsthead
+
 \toprule\noalign{}
 \textbf{Method} & \textbf{Path} & \textbf{Purpose} \\
 \midrule\noalign{}
@@ -349,7 +347,6 @@ The backend exposes a complete REST API documented automatically by FastAPI's Op
 \texttt{DELETE} & \texttt{/api/snapshots/\{id\}}, \texttt{/api/runs/\{job\_id\}} & Cascade-delete a snapshot or a single run \\
 \texttt{POST} & \texttt{/api/export/\{job\_id\}/\{format\}} & Export as GeoJSON / CSV / standalone HTML \\
 \end{longtable}
-}
 
 The endpoints are intentionally fine-grained: the frontend composes complex views from several small JSON responses rather than from a single monolithic dump, which makes the city-map view efficient even with tens of thousands of detections in the database.
 
