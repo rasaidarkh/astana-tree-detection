@@ -499,6 +499,14 @@ THESIS_MAIN_TEX = r"""% Auto-generated driver for the AITU memoir thesis templat
 \setsecnumdepth{subsection}
 \maxsecnumdepth{subsubsection}
 
+% Compact chapter openings. memoir's default leaves a very large vertical gap
+% above each \chapter title (≈ the top third of the page); the AITU reference
+% diploma starts its chapter titles much closer to the top. Shrink the
+% before-title skip so Abstract / Introduction / chapter headings sit near the
+% top of the page instead of being pushed into the middle.
+\setlength{\beforechapskip}{12pt}
+\setlength{\afterchapskip}{18pt}
+
 \makepagestyle{myvf}
 \makeoddfoot{myvf}{}{\thepage}{}
 \makeevenfoot{myvf}{}{\thepage}{}
