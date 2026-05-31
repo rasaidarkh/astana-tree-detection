@@ -50,7 +50,10 @@ CITATIONS: dict[str, int] = {
     "Xu2025": 14, "Awad2021": 15, "FasterRCNN2015": 16, "MaskRCNN2017": 17,
     "YOLOv1": 18, "UltralyticsYOLO2023": 19, "Sun2025": 20,
     "RetinaNet2017": 21, "SAM2023": 22, "SAM2024": 22, "Ravi2024": 23,
-    "SAM2_2024": 23, "Zheng2022": 24, "Wang2021": 25, "WBF2021": 26,
+    "SAM2_2024": 23, "Zheng2022": 24, "Wang2021": 25, "He2020": 26,
+    "Zhang2022": 27, "Zhang2024": 28, "Chen2022": 29, "Chen2023": 30,
+    "Huerta2021": 31, "Timilsina2020": 32, "Chen2021": 33, "Dong2019": 34,
+    "WBF2021": 35,
 }
 
 CITE_GROUP_RE = re.compile(r"\[((?:@[A-Za-z0-9_]+(?:\s*;\s*)?)+)\]")

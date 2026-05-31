@@ -50,6 +50,24 @@
 
 25. **Wang Z., Fan C., Xian M.** Application and Evaluation of a Deep Learning Architecture to Urban Tree Canopy Mapping. *Remote Sensing*, 2021, vol. 13, no. 9, art. 1749. University of Idaho.
 
-26. **Solovyev R., Wang W., Gabruseva T.** Weighted Boxes Fusion: Ensembling Boxes from Different Object Detection Models. *Image and Vision Computing*, 2021, vol. 107, art. 104117.
+26. **He S., Du H., Zhou G., Li X., Mao F., Zhu D., Xu Y., Zhang M., Huang Z., Liu H., Luo X.** Intelligent Mapping of Urban Forests from High-Resolution Remotely Sensed Imagery Using Object-Based U-Net-DenseNet-Coupled Network. *Remote Sensing*, 2020, vol. 12, no. 23, art. 3928.
+
+27. **Zhang L., Lin H., Wang F.** Individual Tree Detection Based on High-Resolution RGB Images for Urban Forestry Applications. *IEEE Access*, 2022, vol. 10, pp. 50642–50653. DOI: 10.1109/ACCESS.2022.3171585.
+
+28. **Zhang H., Liu S.** Double-Branch Multi-Scale Contextual Network: A Model for Multi-Scale Street Tree Segmentation in High-Resolution Remote Sensing Images. *Sensors*, 2024, vol. 24, no. 4, art. 1110.
+
+29. **Chen J., Shao S., Zhu Y., Wang Y., Rao F., Dai X., Lai D.** Enhanced Automatic Identification of Urban Community Green Space Based on Semantic Segmentation. *Land*, 2022, vol. 11, no. 6, art. 905.
+
+30. **Chen S., Chen M., Zhao B., Mao T., Wu J., Bao W.** Urban Tree Canopy Mapping Based on Double-Branch Convolutional Neural Network and Multi-Temporal High Spatial Resolution Satellite Imagery. *Remote Sensing*, 2023, vol. 15, no. 3, art. 765.
+
+31. **Huerta R. E., Yépez F. D., Lozano-García D. F., Guerra Cobián V. H., Ferriño Fierro A. L., de León Gómez H., Cavazos González R. A., Vargas-Martínez A.** Mapping Urban Green Spaces at the Metropolitan Level Using Very High Resolution Satellite Imagery and Deep Learning Techniques for Semantic Segmentation. *Remote Sensing*, 2021, vol. 13, no. 11, art. 2031.
+
+32. **Timilsina S., Aryal J., Kirkpatrick J. B.** Mapping Urban Tree Cover Changes Using Object-Based Convolution Neural Network (OB-CNN). *Remote Sensing*, 2020, vol. 12, no. 18, art. 3017.
+
+33. **Chen Y., Weng Q., Tang L., Liu Q., Zhang X., Bilal M.** Automatic Mapping of Urban Green Spaces Using a Geospatial Neural Network. *GIScience & Remote Sensing*, 2021, vol. 58, no. 4, pp. 624–642.
+
+34. **Dong T., Shen Y., Zhang J., Ye Y., Fan J.** Progressive Cascaded Convolutional Neural Networks for Single Tree Detection with Google Earth Imagery. *Remote Sensing*, 2019, vol. 11, no. 15, art. 1786.
+
+35. **Solovyev R., Wang W., Gabruseva T.** Weighted Boxes Fusion: Ensembling Boxes from Different Object Detection Models. *Image and Vision Computing*, 2021, vol. 107, art. 104117.
 
 \newpage

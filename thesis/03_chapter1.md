@@ -56,6 +56,15 @@ Four model families are relevant to the present work: two-stage detectors (Faste
 | DeepForest urban (Sofia) | Dakov and Petrova-Antonova [@SofiaDeepForest2024] | 2024 | Aerial 10 cm, Sofia | F1 = 0.674 – 0.685 |
 | Sub-pixel canopy (CASNet) | He et al. [@He2022] | 2022 | Sentinel-2, 34 Chinese cities | OA = 88.6 % |
 | Canopy height (MUFCH) | Xu et al. [@Xu2025] | 2025 | Sentinel-2 + OSM, Beijing | MAE = 2.02 m |
+| U-Net-DenseNet | He et al. [@He2020] | 2020 | VHR satellite, urban forests | object-based mapping |
+| Faster R-CNN (urban RGB) | Zhang et al. [@Zhang2022] | 2022 | High-res RGB, urban | individual-tree detection |
+| Double-branch segmenter | Zhang and Liu [@Zhang2024] | 2024 | High-res remote sensing | multi-scale street trees |
+| Semantic segmentation | Chen et al. [@Chen2022] | 2022 | High-res, community green | green-space identification |
+| Double-branch CNN (multi-temporal) | Chen et al. [@Chen2023] | 2023 | Multi-temporal satellite | canopy mapping |
+| DeepLab/U-Net (metropolitan) | Huerta et al. [@Huerta2021] | 2021 | VHR satellite | green-space semantic seg. |
+| OB-CNN (change) | Timilsina et al. [@Timilsina2020] | 2020 | Aerial, multi-temporal | tree-cover change mapping |
+| Geospatial neural network | Chen et al. [@Chen2021] | 2021 | Satellite, urban | green-space mapping |
+| Cascaded CNN | Dong et al. [@Dong2019] | 2019 | Google Earth | single-tree detection |
 | **YOLOv8x-seg v4 (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | **Box mAP@50 = 0.315, Mask mAP@50 = 0.290** |
 | **Mask R-CNN v2+v3 (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | Box mAP@50 = 0.166, Mask mAP@50 = 0.158 |
 | **DeepForest v3 + SAM 2 (this work)** | this thesis | 2026 | Very-high-res sat., Astana M14 | Box mAP@50 = 0.146, Mask mAP@50 = 0.134 |
