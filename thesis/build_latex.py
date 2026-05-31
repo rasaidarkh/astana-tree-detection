@@ -455,6 +455,11 @@ def make_references_tex(md: str) -> str:
     body = re.sub(r"\\chapter\{Bibliography\}\\label\{bibliography\}",
                   r"\\chapter*{Bibliography}\\addcontentsline{toc}{chapter}{Bibliography}\\markboth{Bibliography}{Bibliography}",
                   body, count=1)
+    # Render the reference list with bracketed labels [1], [2], ... (the AITU
+    # reference style) instead of the default "1." labels. Pandoc emits its own
+    # \def\labelenumi inside the list, so we rewrite that label definition.
+    body = body.replace("\\def\\labelenumi{\\arabic{enumi}.}",
+                        "\\def\\labelenumi{[\\arabic{enumi}]}")
     return body
 
 
