@@ -81,25 +81,35 @@ except Exception as e:
     print(f"SKIP yolo_v2_finetune_training_curves: {e}")
 
 
-# ── Figure 3: All four YOLO runs — mAP@50 comparison ────────────────────────
+# ── Figure 3.6: merged-M14 Box mAP@50 per checkpoint (the cross-run trajectory) ─
+# IMPORTANT: this plots the held-out merged-M14 Box mAP@50 of each checkpoint
+# (Table 3.2 values) — NOT training-time val, which is measured on each run's own
+# (smaller, easier) split and is therefore not comparable across runs.
 try:
-    dv1  = load_csv("astana_tiled_x_max")
-    dv2s = load_csv("astana_tiled_x_v2_fromscratch")
-    dv2f = load_csv("astana_tiled_x_v2_finetune")
-    try:
-        dv3 = load_csv("astana_tiled_x_v3_finetune")
-    except Exception:
-        dv3 = None
-
-    fig, ax = plt.subplots(figsize=(9, 4))
-    ax.plot(dv1["epoch"],  dv1["metrics/mAP50(B)"],  label="v1 (397 ep.)", alpha=0.6)
-    ax.plot(dv2s["epoch"], dv2s["metrics/mAP50(B)"], label="v2-fromscratch (204 ep.)", alpha=0.6)
-    ax.plot(dv2f["epoch"], dv2f["metrics/mAP50(B)"], label="v2-finetune (173 ep.)", linewidth=1.5)
-    if dv3 is not None:
-        ax.plot(dv3["epoch"], dv3["metrics/mAP50(B)"], label="v3-finetune (run1, ≈ 133 ep.)", linewidth=2.0, color="#C00000")
-    ax.set_xlabel("Epoch"); ax.set_ylabel("Box mAP@50 (training-time val)")
-    ax.set_title("YOLOv8x-seg — Box mAP@50 across the four training runs")
-    ax.legend(); ax.grid(alpha=0.3)
+    runs = ["v1", "v2-fs", "v2-ft", "v3-run1", "exp1", "v4_x_clean\n(FINAL)"]
+    m14  = [0.131, 0.156, 0.187, 0.268, 0.272, 0.315]   # exp1 = 3-replicate mean
+    yerr = [0.0,   0.0,   0.0,   0.0,   0.034, 0.0]      # only exp1 carries a variance band
+    champ = len(runs) - 1
+    fig, ax = plt.subplots(figsize=(9, 4.2))
+    colors = ["#9DB4D8"] * len(runs); colors[champ] = "#2E5AAC"
+    ax.bar(range(len(runs)), m14, yerr=yerr, color=colors,
+           capsize=5, error_kw=dict(ecolor="#555555", lw=1.2))
+    for i, v in enumerate(m14):
+        lab = f"{v:.3f} ± 0.034" if yerr[i] else f"{v:.3f}"
+        ax.text(i, v + (yerr[i] if yerr[i] else 0) + 0.007, lab, ha="center",
+                va="bottom", fontsize=9, fontweight="bold" if i == champ else "normal")
+    # exp1 lucky single-run outlier (the 0.308 result), marked above its mean bar
+    ax.scatter([4], [0.308], marker="*", s=110, color="#C00000", zorder=5)
+    ax.annotate("lucky run 0.308", xy=(4, 0.308), xytext=(2.9, 0.352),
+                fontsize=8, color="#C00000",
+                arrowprops=dict(arrowstyle="->", color="#C00000", lw=1))
+    ax.annotate("+140 %", xy=(champ, 0.315), xytext=(champ - 0.55, 0.365),
+                fontsize=9, fontweight="bold", color="#2E5AAC",
+                arrowprops=dict(arrowstyle="->", color="#2E5AAC", lw=1.2))
+    ax.set_xticks(range(len(runs))); ax.set_xticklabels(runs, fontsize=9)
+    ax.set_ylabel("Merged-M14 Box mAP@50"); ax.set_ylim(0, 0.40)
+    ax.set_title("YOLOv8-seg — merged-M14 Box mAP@50 across the project's checkpoints")
+    ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     out = os.path.join(FIGURES, "yolo_all_runs_map50.png")
     fig.savefig(out, bbox_inches="tight")
