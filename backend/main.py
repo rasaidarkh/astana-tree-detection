@@ -218,9 +218,13 @@ def _load_models() -> None:
     # Cross-YOLO ensemble — vote_2 over 4 user-selected variants.
     # Uses YOLOAdapter instances already in registry. Skips silently if any
     # member is missing.
+    # Members span FOUR distinct generations (v4-x, v3-m, v3-x, v2) on purpose:
+    # the stadium-roof false positive is a v4-generation regression, so a vote
+    # that is mostly v4 cannot suppress it. Mixing in v3_run1 and the
+    # pre-regression v2-finetune lets the K=2 vote outvote the v4 roof artifact.
     yolo_ens_members = []
     for kind in [ModelKind.YOLO_V4_X, ModelKind.YOLO_V3_EXP1,
-                 ModelKind.YOLO_V4_S, ModelKind.YOLO_V2]:
+                 ModelKind.YOLO_V3_RUN1, ModelKind.YOLO_V2]:
         if kind in registry:
             yolo_ens_members.append((kind.value, registry.get(kind)))
     if len(yolo_ens_members) >= 2:

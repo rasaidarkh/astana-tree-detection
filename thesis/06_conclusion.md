@@ -18,6 +18,10 @@ The six objectives of the introduction were addressed as follows.
 
 **Objective 6 — evaluation on realistic Astana scenes.** A 1 km × 1 km area captured at zoom 19 is processed in approximately 18 seconds on a single laptop GPU, comfortably below the 30-second budget set by the requirements of Section 1.5. Qualitative cross-checkpoint inspection confirms that meaningful per-detection complementarity exists between the YOLO variants, motivating both the cross-YOLO voting ensemble (Section 3.5) and the broader methodological discussion of aggregate-mAP limitations in Section 3.7.
 
+## Distribution of work among the authors
+
+This is a team diploma project; the work was divided so that each author owns a distinct model branch and is responsible for it end-to-end. **Rasul Aidarkhanov** developed the YOLOv8-seg branch (the full 23-experiment hyperparameter ablation of Section 3.2 and the production champion v4_x\_clean), the cross-YOLO voting ensemble (Section 3.5), the single common M14 evaluation harness on which every branch is scored (Section 3.1), and the complete **Canopy** web application of Section 2.10 — the FastAPI backend, the React + Leaflet frontend, the four-mode geographic-conversion module, the SQLite persistence layer and the three exporters. **Berik Sharipov** developed the Mask R-CNN branch (Sections 2.4 and 3.4.2). **Anuar Totin** developed the DeepForest and DeepForest + SAM 2 branches (Sections 2.5–2.6 and 3.4.3). The dataset annotation, the literature review and the integration of all branches behind the common adapter interface were carried out jointly.
+
 ## Scientific and engineering contributions
 
 1. **The first measured magnitude of the geographic-generalisation gap on Central-Asian satellite imagery** — Box mAP@50 = 0.012 for off-the-shelf NEON DeepForest on Astana, three orders of magnitude below the same model's reported off-the-shelf F-score on NAIP USA imagery.
@@ -28,7 +32,7 @@ The six objectives of the introduction were addressed as follows.
 
 4. **A multi-replicate variance estimate of the best single YOLO configuration** — four independent training runs of the same exp1 configuration produced merged-val Box mAP@50 = 0.308 / 0.268 / 0.269 / 0.239, sample mean **0.271 ± 0.028**. This places the headline variance band of any single-shot YOLO experiment on this dataset at approximately ± 0.03 Box mAP@50.
 
-5. **A novel cross-YOLO vote-based ensemble** (Section 3.5) that pools predictions from four YOLO members, clusters them by box IoU and discards single-model hallucinations through a $K = 2$ majority-vote rule. The ensemble is a qualitative false-positive killer for surface types absent from the training distribution (notably the stadium-roof regression of the v4_x_clean checkpoint).
+5. **A cross-YOLO vote-based ensemble** (Section 3.5) that pools predictions from four YOLO members spanning four generations (v4, two v3-era, and the pre-regression v2-finetune), clusters them by box IoU and discards single-model hallucinations through a $K = 2$ majority-vote rule. Generation diversity is deliberate: the stadium-roof false positive is a v4-generation regression, so the earlier-generation members can outvote it. The ensemble is demonstrated as a qualitative false-positive killer; its quantitative M14 evaluation is identified as future work.
 
 6. **An unexpected secondary finding**: the deprecated Roboflow-trained DeepForest v4 checkpoint scores Box mAP@50 = 0.004 on M14 — *below* the NEON pretrained baseline — because of an annotation-policy mismatch between the Roboflow bounding-box convention and the CVAT polygon convention. The result demonstrates that intra-Astana annotation-policy mismatch can dominate the floristic gap between continents.
 
