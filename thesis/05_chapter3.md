@@ -52,7 +52,7 @@ Six empirical findings emerge from this ablation.
 
 **(1) v4_x_clean is the strongest single configuration.** The largest YOLOv8 variant (yolov8x-seg, 71 M parameters) with **Ultralytics' default augmentation pipeline** — aggressive HSV colour jitter, random erasing, and **no geometric augmentation** — reaches Box mAP@50 = 0.315 on M14, a +140 % relative improvement on the v1 baseline (0.131) and +69 % over the previous v2-finetune production (0.187). The current `weights/yolo_satellite.pt` is a copy of `weights/v4_clean/v4_x_clean_v3val0.313_mergedval0.315.pt` (MD5 `58fb1c0018db3fd3dd49fae436bedcca`).
 
-**(2) The model-size landscape is U-shaped, not monotonic.** The medium m-seg variant (Round 1 winner with v2-proven aug at 0.308) and the extra-large x-seg variant (Round 4 winner with defaults at 0.315) both occupy local optima, while the l-seg variant (0.260 with defaults) sits in a valley between them. This is to the best of the authors' knowledge the first empirical observation of the U-shape on Central-Asian satellite-tree data.
+**(2) The model-size landscape appears non-monotonic.** The medium m-seg variant (Round 1 winner with v2-proven aug at 0.308) and the extra-large x-seg variant (Round 4 winner with defaults at 0.315) both sit near the top, while the l-seg variant (0.260 with defaults) is lower. The 0.315 / 0.308 / 0.291 spread among the leading configurations is, however, inside the ±0.028 single-run variance band measured in finding (4) below, so this U-shape is best read as **two local optima within the noise floor** rather than a statistically separated ranking — a caution that itself motivates the variance study and the cross-YOLO ensemble.
 
 **(3) The default augmentation pipeline outperforms the manually-tuned v2-proven pipeline.** The plausible explanation is that satellite trees viewed from above are rotationally consistent (any rotation introduces unnatural data variance not present in the test distribution), so the geometric component of the v2-proven pipeline (`degrees ± 20°`, full mixup, full copy-paste) actively hurts generalisation, while the strong colour-jitter and random-erasing components of the Ultralytics defaults correctly target the natural sources of variation in satellite imagery (illumination, season, sensor settings, partial occlusion).
 
@@ -83,7 +83,7 @@ The seven principal model configurations are summarised in Table 3.3. Numbers ar
 
 Five empirical observations follow from this table.
 
-**(1) The YOLOv8x-seg v4_x_clean production checkpoint is the strongest single configuration on every metric.** It reaches Box mAP@50 = 0.315 and Mask mAP@50 = 0.289 on M14 — **+140 %** relative to the YOLO v1 baseline and **+69 %** relative to the previous v2-finetune production.
+**(1) The YOLOv8x-seg v4_x_clean production checkpoint has the strongest aggregate Box mAP@50 of any single configuration.** It reaches Box mAP@50 = 0.315 and Mask mAP@50 = 0.289 on M14 — **+140 %** relative to the YOLO v1 baseline and **+69 %** relative to the previous v2-finetune production. On Mask mAP@50 the lucky-run exp1 m-seg checkpoint is marginally higher (0.305 vs 0.289), but the difference is inside the ±0.028 single-run variance band of Section 3.2, so v4_x_clean is selected as production on its aggregate Box score and its near-perfect 0.98 OOD recovery ratio (Table 3.4). For an operational reading of this number: at the application's default confidence of 0.25 the champion recovers approximately **30 %** of the labelled tree crowns (about 44 % at a looser threshold of 0.10), with precision ≈ 0.52 — mAP@50 integrates precision over the full recall range, so the headline 0.315 should not be confused with the fraction of trees actually found at the deployed operating point.
 
 **(2) YOLO v2-finetune (0.187) and Mask R-CNN v2+v3 (0.166) are within statistical noise on Box mAP@50,** but YOLO is consistently ahead on Mask mAP@50 (0.185 vs 0.158). The one-stage YOLOv8 design — anchor-free detection head, CIoU box-regression, distribution focal loss, prototype-mask head — closes the historical gap to the two-stage Mask R-CNN family for instance segmentation on a small low-resolution-satellite dataset, and the medium-size m-seg variant extends the lead to a roughly 2× margin over Mask R-CNN by Box mAP@50.
 
@@ -95,7 +95,7 @@ Five empirical observations follow from this table.
 
 The cross-model ranking visualised as a bar chart is shown in Figure 3.1.
 
-![*Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars — Box mAP\@50 (blue) and Mask mAP\@50 (orange). From left to right: YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), YOLO v2-fromscratch (0.156), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (intermediate checkpoint, 0.287 / 0.263), and YOLOv8m-seg exp1 (the v3-era champion at 0.308 / 0.305 that was production at the time this chart was generated). The bar chart was produced before the Round 4 clean-defaults sweep selected v4_x_clean (Box mAP\@50 = 0.315) as the new production champion; the v4_x_clean numbers are reported in Table 3.3 but not shown on this chart.*](figures/model_comparison_barchart.png)
+![*Cross-model comparison on the 14-image M14 validation set (702 polygons). Each model is represented by two bars — Box mAP\@50 (blue) and Mask mAP\@50 (orange). From left to right the models ascend from the off-the-shelf NEON DeepForest baseline (0.012) through YOLO v1 (0.131), DeepForest v3 + SAM 2 (0.146 / 0.134), Mask R-CNN v2+v3 (0.166 / 0.158), YOLO v2-finetune (0.187 / 0.185), YOLOv8x-seg v3-finetune-run1 (0.287 / 0.263) and YOLOv8m-seg exp1 (0.308 / 0.305) to the highlighted final production champion **YOLOv8x-seg v4_x_clean (0.315 / 0.289)** on the right. The chart visualises the full 0.012 → 0.315 trajectory reported in Table 3.3.*](figures/model_comparison_barchart.png)
 
 A useful complementary view of the same numbers is the breakdown by **validation subset**. The aggregate M14 metric mixes the in-distribution v1 / v2 subset with the out-of-distribution v3 subset; because the entire motivation for the v3 dataset extension was the OOD failure of v2-finetune on v3 imagery, it is informative to look at the two subsets separately. Table 3.4 reports the v2-only and v3-only Box mAP@50 of every YOLO checkpoint in the project, together with the OOD recovery ratio (v3-only divided by v2-only).
 
@@ -112,9 +112,9 @@ The OOD ratio rises monotonically along the project's checkpoint chain — from 
 
 A qualitative comparison of v1 vs v2-finetune on the same held-out tile is shown in Figure 3.2, and a four-tile strip of v2-finetune predictions on the version-2 validation set is shown in Figure 3.3. Both figures are reproducible from `thesis/gen_qualitative_figures.py`.
 
-![*Like-for-like qualitative comparison on the held-out validation tile `img_val_007` (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.*](figures/yolo_v1_vs_v2_finetune_comparison.png)
+![*Like-for-like qualitative comparison on a held-out validation tile (dense residential micro-district). Left: ground-truth polygon annotation in green. Centre: YOLOv8x-seg v1 predictions in red. Right: YOLOv8x-seg v2-finetune predictions in blue. The v2-finetune model recovers more of the partially-shadowed crowns in the centre of the tile and produces tighter crown boundaries on the row-planted street trees along the lower edge; both models still miss some heavily-occluded crowns and produce a small number of low-confidence false positives on bushes and shadow edges.*](figures/yolo_v1_vs_v2_finetune_comparison.png)
 
-![*YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set (`img_val_001`, `003`, `007`, `009`). The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.*](figures/yolo_v2_finetune_val_4tile_strip.png)
+![*YOLOv8x-seg v2-finetune predictions (blue polygons) on four held-out tiles from the version-2 validation set. The model covers the majority of the clearly-resolved crowns on every tile, but consistently misses small or heavily-shadowed crowns inside dense clusters and produces a residual set of low-confidence false positives on ornamental shrubs along road shoulders.*](figures/yolo_v2_finetune_val_4tile_strip.png)
 
 ## 3.4 Per-branch details
 
@@ -162,9 +162,9 @@ The **SAM 2 mask-refinement stage** (model `sam2.1-hiera-base-plus`, loaded from
 
 The per-checkpoint training-time variance of Section 3.2 (≈ ± 0.028 Box mAP@50) and the qualitative cross-checkpoint complementarity discussed below motivate a within-architecture ensemble. The ensemble pools predictions from $N$ YOLO members into a single detection list, clusters them by box IoU using a union-find data structure (any two detections with IoU ≥ 0.5 join the same cluster), discards any cluster whose detections come from fewer than $K = 2$ distinct members, and emits the highest-confidence detection from each surviving cluster.
 
-Running the four-checkpoint vote-2 ensemble at `conf = 0.15` on the 1 236 × 1 159 px Astana tennis-court complex tile produces the per-checkpoint and unified detection counts in Table 3.4.
+Running the four-checkpoint vote-2 ensemble at `conf = 0.15` on the 1 236 × 1 159 px Astana tennis-court complex tile produces the per-checkpoint and unified detection counts in Table 3.5.
 
-**Table 3.4 — Per-checkpoint detection counts on a single 1 236 × 1 159 px Astana tile at `conf = 0.15`. The vote-2 ensemble keeps only the IoU-clusters where at least two members agreed.**
+**Table 3.5 — Per-checkpoint detection counts on a single 1 236 × 1 159 px Astana tile at `conf = 0.15`. The vote-2 ensemble keeps only the IoU-clusters where at least two members agreed.**
 
 | Checkpoint | Raw detection count |
 |---|---|
@@ -185,9 +185,9 @@ A broader visual comparison across eight archived YOLO checkpoints on a differen
 
 ## 3.6 Comparison with the literature
 
-Table 3.5 contextualises the obtained numbers against the published baselines compiled in Chapter 1.
+Table 3.6 contextualises the obtained numbers against the published baselines compiled in Chapter 1.
 
-**Table 3.5 — Best obtained results compared with the literature.**
+**Table 3.6 — Best obtained results compared with the literature.**
 
 | System | Data | Best metric |
 |---|---|---|

@@ -131,6 +131,8 @@ def md_to_latex(md_text: str) -> str:
 
     tex = _caption_longtables(tex)
 
+    tex = _number_display_equations(tex)
+
     return tex
 
 
@@ -170,10 +172,37 @@ def _caption_longtables(latex: str) -> str:
         caption = m.group(1).strip().rstrip(".")
         open_tbl = m.group(2)
         body_and_end = m.group(3)
-        return (open_tbl + "\n\\caption{" + caption + "}\\\\\n"
+        # \caption + \endfirsthead so the caption (and its LoT entry) appears
+        # only on the FIRST page of a multi-page longtable; continuation pages
+        # would otherwise repeat the caption and emit a duplicate LoT line.
+        return (open_tbl + "\n\\caption{" + caption + "}\\\\\n\\endfirsthead\n"
                 + body_and_end)
 
     return cap_re.sub(repl, latex)
+
+
+def _number_display_equations(latex: str) -> str:
+    r"""Convert pandoc's unnumbered display math \[ ... \] into numbered
+    equation environments, so display formulas carry (chapter.n) numbers like
+    the AITU reference diploma. Pandoc renders markdown $$...$$ as
+
+        \[
+        ... \]
+
+    We replace each such block with \begin{equation} ... \end{equation}.
+    Inline math \( ... \) and already-numbered environments are left untouched.
+    """
+    # Non-greedy match of a top-level \[ ... \] block. Pandoc never nests these.
+    eq_re = re.compile(r"\\\[(.+?)\\\]", re.DOTALL)
+
+    def repl(m: re.Match) -> str:
+        body = m.group(1).strip()
+        # Skip if it already contains an alignment/equation environment.
+        if "\\begin{" in body:
+            return m.group(0)
+        return "\\begin{equation}\n" + body + "\n\\end{equation}"
+
+    return eq_re.sub(repl, latex)
 
 
 def _fix_longtable_styles(latex: str) -> str:
@@ -395,7 +424,7 @@ def make_acknowledgements_tex(md: str) -> str:
     """Dedication & acknowledgements — unnumbered, listed in the ToC."""
     body = md_to_latex(md)
     body = re.sub(r"\\chapter\{Acknowledgements\}\\label\{acknowledgements\}",
-                  r"\\chapter*{Acknowledgements}\\addcontentsline{toc}{chapter}{Acknowledgements}",
+                  r"\\chapter*{Acknowledgements}\\addcontentsline{toc}{chapter}{Acknowledgements}\\markboth{Acknowledgements}{Acknowledgements}",
                   body, count=1)
     return body
 
@@ -404,7 +433,7 @@ def make_abbreviations_tex(md: str) -> str:
     """Designations & abbreviations — unnumbered, listed in the ToC."""
     body = md_to_latex(md)
     body = re.sub(r"\\chapter\{Designations and Abbreviations\}\\label\{designations-and-abbreviations\}",
-                  r"\\chapter*{Designations and Abbreviations}\\addcontentsline{toc}{chapter}{Designations and Abbreviations}",
+                  r"\\chapter*{Designations and Abbreviations}\\addcontentsline{toc}{chapter}{Designations and Abbreviations}\\markboth{Designations and Abbreviations}{Designations and Abbreviations}",
                   body, count=1)
     return body
 
@@ -412,7 +441,7 @@ def make_abbreviations_tex(md: str) -> str:
 def make_definitions_tex(md: str) -> str:
     body = md_to_latex(md)
     body = re.sub(r"\\chapter\{Definitions\}\\label\{definitions\}",
-                  r"\\chapter*{Definitions}\\addcontentsline{toc}{chapter}{Definitions}",
+                  r"\\chapter*{Definitions}\\addcontentsline{toc}{chapter}{Definitions}\\markboth{Definitions}{Definitions}",
                   body, count=1)
     return body
 
