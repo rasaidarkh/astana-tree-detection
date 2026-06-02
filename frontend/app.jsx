@@ -69,6 +69,69 @@ function computeCanopyCoverage(trees, polygonRing) {
   return { groundM2, canopyM2, pct, measured, total: (trees || []).length };
 }
 
+// Ground ring for a scan: prefer the drawn polygon, else the rectangular bbox.
+// scan_sessions rows carry polygon_json (vertices) + nw/se corners.
+function scanGroundRing(scan) {
+  const poly = scan.polygon_json || scan.polygon;
+  if (Array.isArray(poly) && poly.length >= 3) {
+    return poly.map((p) => (Array.isArray(p) ? p : [p.lat, p.lng]));
+  }
+  if (scan.nw_lat != null && scan.se_lat != null) {
+    const { nw_lat, nw_lng, se_lat, se_lng } = scan;
+    return [[nw_lat, nw_lng], [nw_lat, se_lng], [se_lat, se_lng], [se_lat, nw_lng]];
+  }
+  return null;
+}
+
+// Per-scan (per-park) canopy coverage: group all aggregate detections by their
+// scan_session_id and measure canopy vs the scan's drawn area. Returns a list
+// sorted by coverage %, ready to render as a breakdown.
+function perScanCoverage(scans, trees) {
+  if (!scans || !trees) return [];
+  const byScan = new Map();
+  for (const t of trees) {
+    const sid = t.scan_session_id;
+    if (!sid) continue;
+    if (!byScan.has(sid)) byScan.set(sid, []);
+    byScan.get(sid).push(t);
+  }
+  const out = [];
+  for (const s of scans) {
+    if (s.hidden) continue;
+    const ring = scanGroundRing(s);
+    const group = byScan.get(s.id) || [];
+    const cov = ring ? computeCanopyCoverage(group, ring) : null;
+    if (!cov) continue;
+    out.push({
+      id: s.id,
+      name: s.display_name || `Scan ${String(s.id).slice(0, 8)}`,
+      trees: group.length,
+      ...cov,
+    });
+  }
+  out.sort((a, b) => b.pct - a.pct);
+  return out;
+}
+
+// Per-park tree-count breakdown of the aggregate total. Uses the server-side
+// per-scan `total_trees` (always present), so it stays correct even before the
+// detection list has finished loading. Each row carries its share of the grand
+// total for a proportional bar.
+function perScanTreeCounts(scans) {
+  if (!scans) return { rows: [], grandTotal: 0 };
+  const visible = scans.filter((s) => !s.hidden && (s.total_trees || 0) > 0);
+  const grandTotal = visible.reduce((sum, s) => sum + (s.total_trees || 0), 0);
+  const rows = visible
+    .map((s) => ({
+      id: s.id,
+      name: s.display_name || `Scan ${String(s.id).slice(0, 8)}`,
+      trees: s.total_trees || 0,
+      share: grandTotal > 0 ? (s.total_trees / grandTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.trees - a.trees);
+  return { rows, grandTotal };
+}
+
 /* ==================================================================
    Icon set (subset — only what's used)
    ================================================================== */
@@ -176,14 +239,22 @@ function TopBar({ view, setView, onOpenSettings, settingsOpen, backendStatus, da
    LeftPanel — rich info panel in map view (replaces floating cards)
    ================================================================== */
 function LeftPanel({
-  aggregateStats, scans, snapshots,
+  aggregateStats, scans, snapshots, aggregateTrees,
   scanMode, polygonMode, onStartScan, onStartPolygon, onCancel,
   pendingPolygon, onStartPolygonScan, onClearPolygon,
   threshold, setThreshold, filter, setFilter,
   visibleCount,
-  onOpenManager,
+  onOpenManager, onFocusScan,
   onToggleScanHidden,
 }) {
+  // Per-park (per-scan) green-space coverage breakdown.
+  const coverageByScan = useMemo(
+    () => perScanCoverage(scans, aggregateTrees),
+    [scans, aggregateTrees]
+  );
+  // Per-park tree-count breakdown of the aggregate total.
+  const treesByScan = useMemo(() => perScanTreeCounts(scans), [scans]);
+  const [treesOpen, setTreesOpen] = useState(false);
   const t = (aggregateStats && aggregateStats.total_trees) || 0;
   const s = (aggregateStats && aggregateStats.snapshot_count) || 0;
   const r = (aggregateStats && aggregateStats.run_count) || 0;
@@ -252,9 +323,16 @@ function LeftPanel({
         {/* ── hero stat ── */}
         <div className="lp-hero">
           <div className="lp-eyebrow">Astana · canopy aggregate</div>
-          <div className="lp-headline">
+          <div
+            className={`lp-headline${treesByScan.rows.length ? " expandable" : ""}`}
+            onClick={treesByScan.rows.length ? () => setTreesOpen((v) => !v) : undefined}
+            title={treesByScan.rows.length ? "Break down trees by area" : undefined}
+          >
             {t.toLocaleString()}
             <span className="unit">trees</span>
+            {treesByScan.rows.length > 0 && (
+              <Icon name="chevron" size={15} stroke={2.2} />
+            )}
           </div>
           <div className="lp-sub">across {totalScans} scan{totalScans === 1 ? "" : "s"} · {s} snapshot{s === 1 ? "" : "s"}</div>
           <div className="lp-hero-row">
@@ -264,6 +342,23 @@ function LeftPanel({
               <span><b>{visibleCount.visible.toLocaleString()}</b>visible</span>
             )}
           </div>
+
+          {/* trees-by-area breakdown — toggled from the headline */}
+          {treesOpen && treesByScan.rows.length > 0 && (
+            <div className="tba-list">
+              {treesByScan.rows.map((row) => (
+                <div key={row.id} className="tba-row">
+                  <div className="tba-row-top">
+                    <span className="tba-name">{row.name}</span>
+                    <span className="tba-count mono">{row.trees.toLocaleString()}</span>
+                  </div>
+                  <div className="tba-bar">
+                    <div className="tba-fill" style={{ width: `${row.share}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── secondary metrics ── */}
@@ -322,6 +417,43 @@ function LeftPanel({
             </div>
           </div>
         </div>
+
+        {/* ── green-space coverage by area (per park) ── */}
+        {coverageByScan.length > 0 && (
+          <div className="lp-section">
+            <div className="lp-section-head">
+              <div className="lp-section-title">Green-space by area</div>
+              <span className="lp-section-action" style={{ cursor: "default" }}>
+                {coverageByScan.length} {coverageByScan.length === 1 ? "area" : "areas"}
+              </span>
+            </div>
+            <div className="cov-list">
+              {coverageByScan.map((c) => {
+                const fmt = (m2) => m2 >= 10000 ? `${(m2 / 10000).toFixed(2)} ha` : `${Math.round(m2).toLocaleString()} m²`;
+                return (
+                  <div
+                    key={c.id}
+                    className={`cov-row${onFocusScan ? " clickable" : ""}`}
+                    onClick={onFocusScan ? () => onFocusScan(c.id) : undefined}
+                    title={onFocusScan ? "Focus this area on the map" : undefined}
+                  >
+                    <div className="cov-row-top">
+                      <span className="cov-row-name">{c.name}</span>
+                      <span className="cov-row-pct mono">{c.pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="cov-row-bar">
+                      <div className="cov-row-fill" style={{ width: `${c.pct}%` }} />
+                    </div>
+                    <div className="cov-row-meta">
+                      <span>{c.trees.toLocaleString()} trees</span>
+                      <span>canopy {fmt(c.canopyM2)} / {fmt(c.groundM2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── recent activity ── */}
         <div className="lp-section">
@@ -603,9 +735,14 @@ function ScanProgressCard({ scanProgress, onCancel, onRename }) {
 /* ==================================================================
    Welcome (shown on first load when no data)
    ================================================================== */
-function Welcome({ onStart }) {
+function Welcome({ onStart, onDismiss }) {
   return (
     <div className="welcome">
+      {onDismiss && (
+        <button className="welcome-close" onClick={onDismiss} title="Dismiss" aria-label="Dismiss">
+          <Icon name="x" size={14} stroke={2.2} />
+        </button>
+      )}
       <div className="welcome-title">Map a city's trees in minutes</div>
       <div className="welcome-sub">
         Draw a rectangle anywhere in Astana. The system fetches satellite imagery
@@ -1982,11 +2119,16 @@ function App() {
     setScanProgress({ regions: [], trees: [], done: false, polygon });
     const abort = new AbortController();
     scanAbortRef.current = abort;
+    // Scan at the provider's max native zoom: Google supports z20 (~0.15 m/px),
+    // Esri caps at z19. Higher zoom = more pixels per crown = the model separates
+    // adjacent trees in dense plantings far better (worth the extra tiles/time).
+    const provCfg = providersMap && providersMap[tileProvider];
+    const scanZoom = Math.min(provCfg?.max_zoom || 19, 20);
     try {
       await window.api.scanRegionStream(
         {
-          nw: bbox.nw, se: bbox.se, zoom: 19,
-          model, confidence: threshold, maxSubregions: 9,
+          nw: bbox.nw, se: bbox.se, zoom: scanZoom,
+          model, confidence: threshold, maxSubregions: 64,
           provider: tileProvider, polygon: polygon || undefined,
         },
         (ev) => {
@@ -2047,7 +2189,7 @@ function App() {
       scanAbortRef.current = null;
       setTimeout(() => setScanProgress(null), 4000);
     }
-  }, [model, threshold, tileProvider, refreshAggregate, showToast]);
+  }, [model, threshold, tileProvider, providersMap, refreshAggregate, showToast]);
 
   const cancelScan = useCallback(() => {
     if (scanAbortRef.current) scanAbortRef.current.abort();
@@ -2186,6 +2328,8 @@ function App() {
   }, [mapTrees, threshold, filter]);
 
   const isEmpty = view === "map" && aggregateStats.total_trees === 0 && !scanRunning && !scanMode && !polygonMode;
+  // Welcome card can flake during draw/scan transitions — let the user dismiss it.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
 
   // -------- render --------
   return (
@@ -2240,6 +2384,7 @@ function App() {
             aggregateStats={aggregateStats}
             scans={scans}
             snapshots={snapshots}
+            aggregateTrees={aggregateTrees}
             scanMode={scanMode} polygonMode={polygonMode}
             onStartScan={requestScanRect} onStartPolygon={requestScanPoly}
             onCancel={cancelDraw}
@@ -2272,7 +2417,9 @@ function App() {
 
           {view === "map" && (
             <>
-              {isEmpty && <Welcome onStart={requestScanRect} />}
+              {isEmpty && !welcomeDismissed && (
+                <Welcome onStart={requestScanRect} onDismiss={() => setWelcomeDismissed(true)} />
+              )}
 
               {hasTrees && (
                 <DisplayStrip

@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Astana Tree Detection — Defense Deck (AITU style · system-first)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#2E6DB4;        /* AITU title blue */
+  --cyan:#29ABE2;        /* shield / accents */
+  --navy:#173E63;        /* table header, dark blocks */
+  --ink:#1A1A1A;         /* body text */
+  --ink2:#33414D;
+  --muted:#6A7682;
+  --card:#EEF4FB;        /* pale-blue card */
+  --card-line:#CFE0F1;
+  --line:#D7DEE4;
+  --serif:"Tinos","Times New Roman",Times,serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#c9ccd1;display:flex;flex-direction:column;align-items:center;gap:28px;padding:28px 0 60px;
+  font-family:var(--serif);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;background:#fff;color:var(--ink)}
+
+/* ---- AITU header ribbon + corner shield ---- */
+.band{position:absolute;top:0;left:0;right:0;height:58px;z-index:3;
+  background:linear-gradient(90deg,#163A63 0%,#2E6DB4 46%,#5FC3E6 100%)}
+.band::after{content:"";position:absolute;top:0;right:0;width:150px;height:100%;background:#5FC3E6;opacity:.55}
+.shield{position:absolute;top:0;left:46px;width:84px;height:104px;z-index:5;background:var(--cyan);
+  clip-path:polygon(0 0,100% 0,100% 74%,50% 100%,0 74%);display:flex;align-items:flex-start;justify-content:center;padding-top:14px}
+.shield svg{width:46px;height:46px}
+.foot{position:absolute;left:56px;right:56px;bottom:30px;z-index:4;border-top:1px solid var(--line);
+  padding-top:9px;display:flex;justify-content:space-between;font-size:13px;color:var(--muted);font-style:italic}
+
+.pad{position:absolute;left:56px;right:56px;top:92px;bottom:58px;z-index:2;display:flex;flex-direction:column}
+.pad.vc{justify-content:center}
+
+h1{color:var(--blue);font-weight:700;font-size:46px;line-height:1.12;letter-spacing:-.01em}
+h2{color:var(--ink);font-weight:700;font-size:40px;line-height:1.08;margin-bottom:6px}
+.eyebrow{color:var(--blue);font-weight:700;font-size:16px;letter-spacing:.02em;margin-bottom:4px}
+p{font-size:21px;line-height:1.45;color:var(--ink2)}
+.lead p{margin-bottom:14px}
+b,strong{color:var(--ink);font-weight:700}
+.em{color:var(--blue);font-weight:700}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.grid2.wide{grid-template-columns:1.15fr .85fr}
+.grid2.arch{grid-template-columns:.82fr 1.18fr;gap:26px;align-items:stretch}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:14px}
+
+.card{background:var(--card);border:1px solid var(--card-line);border-left:4px solid var(--blue);border-radius:3px;padding:14px 18px}
+.card h3{color:var(--blue);font-weight:700;font-size:19px;margin-bottom:5px}
+.card p{font-size:17px;line-height:1.4}
+.card.sm p{font-size:14.5px;line-height:1.36}
+.card.plain{border-left:1px solid var(--card-line)}
+
+ul.bul{list-style:none;display:flex;flex-direction:column;gap:11px}
+ul.bul li{position:relative;padding-left:30px;font-size:20px;line-height:1.36;color:var(--ink2)}
+ul.bul li .n{position:absolute;left:0;top:0;color:var(--blue);font-weight:700}
+ul.bul li b{color:var(--ink)}
+ul.bul.tight li{font-size:17px;gap:7px}
+ul.dash li::before{content:"▸";position:absolute;left:4px;top:0;color:var(--cyan);font-weight:700}
+ul.dash li{list-style:none;position:relative;padding-left:26px;font-size:18px;line-height:1.4;color:var(--ink2);margin-bottom:9px}
+
+/* numbered objective/contents columns */
+.toc{display:grid;grid-template-columns:1fr 1fr;gap:8px 54px;font-size:21px;color:var(--ink)}
+.toc .row{display:flex;gap:12px}.toc .row .nn{color:var(--blue);font-weight:700;min-width:30px}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--navy);color:#fff;font-weight:700;text-align:left;padding:8px 11px;font-size:12.5px}
+tbody td{padding:7px 11px;border-bottom:1px solid #E6ECF2;vertical-align:top;color:var(--ink2);line-height:1.28}
+tbody tr:nth-child(even) td{background:#F6F9FC}
+tbody tr td:first-child{font-weight:700;color:var(--ink)}
+.met{color:var(--blue);font-weight:700;white-space:nowrap}
+.gapc{color:var(--ink2);font-style:italic}
+tr.ours td{background:#DCEBFA !important;color:var(--navy)}
+tr.ours td:first-child{color:var(--navy)}
+.note{margin-top:12px;font-size:15px;color:var(--ink2);font-style:italic}
+.note b{font-style:normal}
+
+/* big stat */
+.bignum{color:var(--blue);font-weight:700;font-size:150px;line-height:.85;letter-spacing:-.02em}
+.stat{display:flex;align-items:center;gap:30px}
+
+/* architecture stacked blocks */
+.stack{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.blk{color:#fff;font-weight:700;font-size:17px;text-align:center;padding:14px 10px;border-radius:2px;line-height:1.15}
+.archcard{background:var(--card);border:1px solid var(--card-line);border-left:4px solid var(--cyan);border-radius:3px;padding:10px 15px}
+.archcard .t{color:var(--blue);font-weight:700;font-size:16px}
+.archcard .d{font-size:14.5px;color:var(--ink2);line-height:1.32;margin-top:2px}
+
+/* horizontal flow */
+.flow{display:flex;align-items:stretch;gap:0;margin-top:6px}
+.node{flex:1;background:var(--card);border:1px solid var(--card-line);border-radius:3px;padding:11px 9px;text-align:center}
+.node .t{color:var(--blue);font-weight:700;font-size:13.5px}
+.node .d{font-size:12.5px;color:var(--ink2);margin-top:4px;line-height:1.28}
+.arrow{display:flex;align-items:center;color:var(--cyan);font-size:22px;font-weight:700;padding:0 7px}
+
+/* versus (minimum vs built) */
+.versus{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--card-line);border-radius:4px;overflow:hidden;margin-top:8px}
+.versus .side{padding:16px 20px}
+.versus .min{background:#F2F4F6}
+.versus .built{background:#DCEBFA}
+.versus .side h3{font-size:15px;font-weight:700;margin-bottom:11px;letter-spacing:.02em}
+.versus .min h3{color:var(--muted)}
+.versus .built h3{color:var(--navy)}
+.versus ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.versus li{font-size:15.5px;line-height:1.3;padding-left:20px;position:relative}
+.versus .min li{color:var(--ink2)}
+.versus .min li::before{content:"–";position:absolute;left:2px;color:var(--muted);font-weight:700}
+.versus .built li{color:var(--navy)}
+.versus .built li::before{content:"+";position:absolute;left:2px;color:var(--blue);font-weight:700}
+
+.frame{border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#fff;box-shadow:0 8px 22px -14px rgba(0,0,0,.35)}
+.frame img{display:block;width:100%}
+.frame video{display:block;width:100%}
+.cap{font-size:13.5px;color:var(--muted);font-style:italic;margin-top:6px}
+
+.authors{text-align:center}
+.authors .nm{font-size:24px;color:var(--ink);margin-bottom:6px}
+.authors .nm .dot{color:var(--cyan);margin:0 12px}
+.authors .sup{font-size:19px;color:var(--ink2)}
+.authors .org{font-size:18px;color:var(--muted);margin-top:26px}
+
+/* full-bleed image slide */
+.imgslide{padding:0}
+.imgslide .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.imgslide .scrim{position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.82) 30%,rgba(255,255,255,.15) 60%,transparent 78%)}
+.imgslide .ov{position:absolute;z-index:2;left:56px;top:150px;max-width:620px}
+
+@media print{@page{size:1280px 720px;margin:0}body{display:block;padding:0;gap:0;background:#fff}.slide{page-break-after:always}}
+</style></head><body>
+
+<!-- helper: shield SVG is repeated; kept inline per slide -->
+
+<!-- 01 TITLE -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc" style="align-items:center;text-align:center">
+    <h1 style="font-size:50px;max-width:24ch;margin:0 auto">Development of a Deep-Learning <span class="em">System</span> for Automated Tree Recognition &amp; Green-Space Mapping in Urban Environments</h1>
+    <div class="authors" style="margin-top:46px">
+      <div class="nm">Rasul Aidarkhanov<span class="dot">·</span>Berik Sharipov<span class="dot">·</span>Anuar Totin</div>
+      <div class="sup">Supervisor: Syndar Satbayev</div>
+      <div class="org">Astana IT University &nbsp;·&nbsp; 6B06101 Computer Science &nbsp;·&nbsp; 2026</div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 CONTENTS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <h2>Contents</h2>
+    <div class="toc" style="margin-top:18px">
+      <div class="row"><span class="nn">01</span><span>Relevance of the topic</span></div>
+      <div class="row"><span class="nn">08</span><span>Data, database &amp; hardware</span></div>
+      <div class="row"><span class="nn">02</span><span>The gap &amp; research aim</span></div>
+      <div class="row"><span class="nn">09</span><span>How we measure success</span></div>
+      <div class="row"><span class="nn">03</span><span>What this project is — a system</span></div>
+      <div class="row"><span class="nn">10</span><span>Four detection engines</span></div>
+      <div class="row"><span class="nn">04</span><span>Objectives &amp; methods</span></div>
+      <div class="row"><span class="nn">11</span><span>Why several models · ensembles</span></div>
+      <div class="row"><span class="nn">05</span><span>Problem statement · Input / Output</span></div>
+      <div class="row"><span class="nn">12</span><span>Results on one common set</span></div>
+      <div class="row"><span class="nn">06</span><span>Literature review &amp; the gap</span></div>
+      <div class="row"><span class="nn">13</span><span>Canopy — the system in use</span></div>
+      <div class="row"><span class="nn">07</span><span>The automated pipeline</span></div>
+      <div class="row"><span class="nn">14</span><span>Discussion &amp; conclusion</span></div>
+    </div>
+  </div>
+  <div class="foot"><span>Presenter — Rasul Aidarkhanov · system + YOLO + web app</span><span>02</span></div>
+</section>
+
+<!-- 03 RELEVANCE -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <h2>Relevance</h2>
+    <div class="lead" style="margin-top:14px;max-width:108ch">
+      <p>Urban trees regulate microclimate, sequester carbon and mitigate the heat-island effect — so a growing city like Astana needs an <b>up-to-date, spatially accurate inventory</b> of its green infrastructure for planning and climate-adaptation decisions.</p>
+      <p>Traditional inventories rely on <b>manual field surveys</b> — slow, expensive, and outdated before completion. A fundamental scalability problem for any large urban area.</p>
+      <p>Deep-learning detection on freely-available satellite imagery is a feasible alternative — but the real gap is that <span class="em">no automated process for this exists in Astana at all.</span> So the task we set ourselves was an engineering one: <b>build that process.</b></p>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Topic disclosure</span><span>03</span></div>
+</section>
+
+<!-- 04 GAP & AIM -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <div class="eyebrow">Why we couldn't just use an existing tool</div>
+    <div class="stat" style="margin-top:10px">
+      <div class="bignum">0.012</div>
+      <div style="max-width:40ch"><p style="font-size:18px"><b>Box mAP@50</b> — a popular ready-made detector (NEON DeepForest), run as-is on Astana. Essentially <b>blind.</b> There was no off-the-shelf system that worked here, so building one was the only option.</p></div>
+    </div>
+    <div class="card" style="margin-top:26px">
+      <h3>Research aim</h3>
+      <p>Design, build and evaluate an <b>automated end-to-end system</b> that recognises trees and maps green space from Astana satellite imagery — delivered as a working tool, with detection accuracy reported honestly.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Aim</span><span>04</span></div>
+</section>
+
+<!-- 05 WHAT THIS PROJECT IS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <div class="eyebrow">The thesis, in one idea</div>
+    <h2>The deliverable is a <span class="em">system</span> — not a model</h2>
+    <p style="margin-top:10px;max-width:112ch">Our title says <b>"automated … system."</b> So the unit of work isn't "which neural net scores highest" — it's the whole machine that turns a raw satellite capture into a usable, georeferenced tree inventory. Everything else is a <b>component of building that:</b></p>
+    <div class="grid3" style="margin-top:16px;grid-template-columns:1fr 1fr 1fr 1fr">
+      <div class="card sm"><h3>Dataset</h3><p>What the engine learns from — a means, not the goal.</p></div>
+      <div class="card sm"><h3>The models</h3><p>Four interchangeable engines that plug into the pipeline.</p></div>
+      <div class="card sm"><h3>The experiments</h3><p>How we tuned the engine — evidence of depth, not the product.</p></div>
+      <div class="card sm"><h3>UI &amp; features</h3><p>What makes it usable by a non-technical operator.</p></div>
+    </div>
+    <div class="card" style="margin-top:16px"><p>We could have shipped the bare minimum — one model, a mask, no metrics. Instead we built a <b>tool someone at a city service could actually operate.</b> The slides that follow lead with the system; the models come later, as parts of it.</p></div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Framing — engineering deliverable</span><span>05</span></div>
+</section>
+
+<!-- 06 OBJECTIVES & METHODS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <h2>Objectives &amp; methods</h2>
+    <div class="grid2" style="margin-top:16px;gap:18px 50px">
+      <ul class="bul">
+        <li><span class="n">1.</span>Build an <b>annotated Astana dataset</b> (tiled satellite imagery, instance polygons).</li>
+        <li><span class="n">2.</span>Train and compare four <b>detection engines</b> — YOLOv8-seg, Mask R-CNN, DeepForest, SAM 2.</li>
+        <li><span class="n">3.</span><b>Combine</b> them through ensembles and test whether that helps.</li>
+      </ul>
+      <ul class="bul">
+        <li><span class="n">4.</span>Evaluate everything on <b>one common test set</b> for a fair comparison.</li>
+        <li><span class="n">5.</span>Wrap it all in an <b>automated web application</b> — the deliverable that ties tasks 1–4 together.</li>
+      </ul>
+    </div>
+    <div class="card" style="margin-top:18px"><h3>Methods</h3><p>Supervised deep learning · transfer learning from pretrained weights · sliding-window tiling · pixel → WGS-84 geo-referencing · mAP@50 as the single comparison metric · software engineering (FastAPI · React · SQLite).</p></div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Tasks &amp; methods</span><span>06</span></div>
+</section>
+
+<!-- 07 PROBLEM STATEMENT -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <h2>Problem statement — Input / Output</h2>
+    <div class="grid2" style="margin-top:18px;gap:26px">
+      <div class="card"><h3>Input</h3><p>A satellite capture of an area of Astana at zoom 19 (≈ 0.3 m/px) — uploaded, or drawn on a map and auto-fetched from <b>ESRI or Google</b> tiles — cut into overlapping <b>640 px RGB tiles</b>. Plus the operator's choices: <b>model, confidence, geo-mode.</b></p></div>
+      <div class="card"><h3>Output</h3><p>For every detected tree: a <b>bounding box</b>, an <b>instance mask</b>, a <b>confidence score</b>, <b>crown area</b> and <b>lat/lng</b>. Tiles are stitched, duplicates merged, results shown on a <b>map</b> with per-area counts and <b>GeoJSON / CSV / HTML</b> export.</p></div>
+    </div>
+    <div class="archcard" style="margin-top:18px;border-left-color:var(--blue)"><div class="d" style="font-size:16px">capture &nbsp;→&nbsp; tile &nbsp;→&nbsp; model&nbsp;f(·) &nbsp;→&nbsp; { box, mask, conf, area, lat/lng }<sub>per tree</sub> &nbsp;→&nbsp; merge &amp; map &amp; export</div></div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Problem formulation</span><span>07</span></div>
+</section>
+
+<!-- 08 LITERATURE REVIEW (gap column, no our row) -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <h2 style="font-size:34px">Literature review — what others report, and the gap each leaves</h2>
+    <table style="margin-top:14px">
+      <thead><tr><th style="width:17%">Method</th><th style="width:19%">Authors · year</th><th style="width:16%">Data</th><th style="width:15%">Best metric</th><th style="width:33%">Gap for our problem</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td>Lv et al. · 2023</td><td>UAV RGB, China</td><td class="met">Det AP 92.4%</td><td class="gapc">Forest UAV, not urban satellite; research result only</td></tr>
+        <tr><td>RetinaNet / Faster R-CNN</td><td>dos Santos et al. · 2019</td><td>UAV RGB, Brazil</td><td class="met">AP 82–93%</td><td class="gapc">Detection only — no segmentation, no system</td></tr>
+        <tr><td>YOLOv12m</td><td>Abbas &amp; Damaševičius · 2025</td><td>RGB satellite</td><td class="met">mAP@50 90.8%</td><td class="gapc">Benchmark on a clean public set; no deployable tool</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td>Martins · 2021 / Wang · 2021</td><td>Aerial 10–32 cm</td><td class="met">F1 91% · IoU 96%</td><td class="gapc">Semantic mask, not per-tree instances; not Central Asia</td></tr>
+        <tr><td>DeepForest (off→fine)</td><td>Ventura et al. · 2024</td><td>NAIP 60 cm, USA</td><td class="met">F 0.42 → 0.73</td><td class="gapc">US imagery; collapses without local fine-tuning</td></tr>
+        <tr><td>YOLOv5x</td><td>Velasquez-Camacho · 2023</td><td>Ground-level, Spain</td><td class="met">F1 84.9%</td><td class="gapc">Europe, ground-level; no GIS/coordinate pipeline</td></tr>
+        <tr><td>DeepForest (urban)</td><td>Dakov &amp; Petrova-Antonova · 2024</td><td>Aerial, Sofia</td><td class="met">F1 0.67–0.69</td><td class="gapc">Closest analogue — but still Europe, still research-only</td></tr>
+      </tbody>
+    </table>
+    <div class="note">Every study reports high accuracy — on <b>its own region and sensor</b>, as a <b>research result</b>. Overall limitation: <b>none was tested on Central Asia, and none delivers a deployable, operator-run system.</b> That gap — not a higher mAP — is what this project fills. <span style="color:var(--muted)">(31 references reviewed.)</span></div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Critical literature analysis · ≥ 20 sources</span><span>08</span></div>
+</section>
+
+<!-- 09 ARCHITECTURE / PIPELINE -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">The core of the project</div>
+    <h2>The automated pipeline</h2>
+    <div class="grid2 arch" style="margin-top:16px">
+      <div class="stack">
+        <div class="blk" style="background:#14315A">Front end — React 18 + Leaflet</div>
+        <div class="blk" style="background:#1E5E32">API — FastAPI</div>
+        <div class="blk" style="background:#2E7D32">Sliding-window tiling (640 + 128)</div>
+        <div class="blk" style="background:#17A2C9;outline:2px solid #0E7C99">Engine — swappable (YOLO · M-RCNN · DF · Ensemble)</div>
+        <div class="blk" style="background:#3F86C6">Global NMS — cross-tile merge</div>
+        <div class="blk" style="background:#3F6FB5">Geo — pixel → WGS-84</div>
+        <div class="blk" style="background:#4F86C6">SQLite store → Map &amp; export</div>
+      </div>
+      <div class="col" style="justify-content:center">
+        <div class="archcard"><div class="t">One automated chain</div><div class="d">Capture → tile → detect → merge → georeference → store → map → export. <b>No manual step</b> between the operator drawing an area and the finished, downloadable inventory.</div></div>
+        <div class="archcard" style="border-left-color:var(--blue)"><div class="t">Swappable engine — the key design idea</div><div class="d">The detection model is just one plug-in step. Swap YOLO for Mask R-CNN, DeepForest or an ensemble without touching the rest — a better model tomorrow drops straight in.</div></div>
+        <div class="archcard"><div class="t">Performance</div><div class="d">~1 km² at zoom 19 in <b>≈ 18 s</b> on a single laptop GPU, with live streaming progress.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1–2 · System architecture + software</span><span>09</span></div>
+</section>
+
+<!-- 10 BEYOND THE MINIMUM -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <div class="eyebrow">Engineering effort</div>
+    <h2>A minimal version would do far less — we built a tool</h2>
+    <div class="versus">
+      <div class="side min">
+        <h3>THE BARE MINIMUM</h3>
+        <ul><li>One model, hard-coded</li><li>Just a segmentation mask</li><li>No coordinates, no export</li><li>No metrics, no comparison</li><li>Run once, nothing saved</li></ul>
+      </div>
+      <div class="side built">
+        <h3>WHAT CANOPY ACTUALLY DOES</h3>
+        <ul>
+          <li><b>Two tile providers</b> — ESRI &amp; Google, fetched in-browser</li>
+          <li><b>Model choice</b> — 7 YOLO sizes · Mask R-CNN · DeepForest ± SAM 2</li>
+          <li><b>Ensembles</b> — Weighted Box Fusion + cross-YOLO vote</li>
+          <li><b>Manage scans</b> — name · hide · delete (cascade)</li>
+          <li><b>Live metrics</b> — tree count · canopy coverage % · crown area</li>
+          <li><b>Geo + export</b> — WGS-84 · GeoJSON / CSV / HTML · persistent map</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">None of these is required to "detect a tree" — each is a deliberate choice to make the system <b>usable, comparable and repeatable.</b> That is where most of the engineering effort went.</div>
+  </div>
+  <div class="foot"><span>Criterion 2 · Depth &amp; completeness of the software</span><span>10</span></div>
+</section>
+
+<!-- 11 DATA / DB / HARDWARE -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">A component of the system — inputs &amp; infrastructure</div>
+    <h2>Data, database &amp; hardware</h2>
+    <div class="grid2 wide" style="margin-top:14px">
+      <div class="col">
+        <div class="card"><h3>Dataset</h3><p>High-zoom Astana captures (~0.3 m/px). We hand-labelled <b>~5 500 tree crowns</b> across <b>~100 images</b> as instance polygons (≈ 8 700 training tiles after 640+128 tiling). A held-out common set of <b>14 images · 702 trees</b> scores every model.</p></div>
+        <div class="card"><h3>Database — SQLite</h3>
+          <div class="flow">
+            <div class="node"><div class="t">scan_sessions</div></div><div class="arrow">→</div>
+            <div class="node"><div class="t">snapshots</div></div><div class="arrow">→</div>
+            <div class="node"><div class="t">runs</div></div><div class="arrow">→</div>
+            <div class="node"><div class="t">detections</div></div>
+          </div>
+          <p style="margin-top:8px;font-size:15px">One-to-many, <b>ON DELETE CASCADE</b> — delete a scan, its detections go too.</p></div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>Hardware</h3><p style="font-size:15.5px">RTX 4060 8 GB — YOLO + all common-set inference · RTX 4070 — Mask R-CNN · RTX 4050 — DeepForest. The 8 GB ceiling forces batch 2 + mixed precision — deliberately modest, to prove it runs <b>without a cluster.</b></p></div>
+        <div class="frame"><img src="../figures/yolo_v2_finetune_val_4tile_strip.png" alt="tiled samples"></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1–2 · DB schema + hardware</span><span>11</span></div>
+</section>
+
+<!-- 12 MATHS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">The maths, in plain terms</div>
+    <h2>Three simple ideas — one comparison number</h2>
+    <div class="grid2" style="margin-top:14px;gap:18px 28px">
+      <div class="col">
+        <div class="card"><h3>1 · IoU — did the box land on the tree?</h3><p>IoU = (overlap area) ÷ (combined area). <b>1.0</b> = perfect, <b>0</b> = miss. A tree counts as found when <b>IoU ≥ 0.5.</b></p></div>
+        <div class="card"><h3>2 · Precision &amp; recall</h3><p><b>Precision</b> — of the trees we flagged, how many were real. <b>Recall</b> — of all real trees, how many we found: <span class="em">ours ≈ 30%</span> at the default setting.</p></div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>3 · mAP@50 — the single score</h3><p>Sweep the confidence threshold, track precision against recall, take the <b>area under that curve</b> (at IoU ≥ 0.5). One honest number to compare every engine the same way — the <b>0.315</b> on the results slide.</p></div>
+        <div class="card"><h3>How the two detectors work</h3><p><b>YOLOv8</b> — one pass: grid → boxes + masks in a single look (fast). <b>Mask R-CNN</b> — two passes: propose regions, then refine (slower, careful).</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1–2 · Mathematical support (≤ 10 pts)</span><span>12</span></div>
+</section>
+
+<!-- 13 ENGINE DIVIDER -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad vc">
+    <div class="eyebrow">Four interchangeable engines · one pipeline</div>
+    <h1 style="font-size:42px;max-width:24ch">The system doesn't depend on one model — any of four can drive it.</h1>
+    <p style="margin-top:18px;max-width:104ch">YOLOv8-seg (Rasul) · Mask R-CNN (Berik) · DeepForest + SAM 2 (Anuar) · plus two ensembles. Each plugs into the same automated pipeline and is scored on the same 14 images.</p>
+  </div>
+  <div class="foot"><span>Team diploma — each member presents &amp; is scored on their branch</span><span>13</span></div>
+</section>
+
+<!-- 14 YOLO -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">Engine #1 · Rasul Aidarkhanov · 23 experiments</div>
+    <h2>YOLOv8x-seg — from 0.131 to 0.315</h2>
+    <div class="grid2 wide" style="margin-top:12px">
+      <div class="col">
+        <div class="frame"><img src="../figures/yolo_all_runs_map50.png" alt="all runs mAP@50"></div>
+        <div class="cap">Box mAP@50 across every experiment on the common set.</div>
+      </div>
+      <div class="col">
+        <div style="display:flex;align-items:baseline;gap:14px"><span class="bignum" style="font-size:84px">+140%</span></div>
+        <p style="font-size:15.5px;margin-top:-6px">Box mAP@50 over my own first model (0.131 → <b>0.315</b>).</p>
+        <div class="card sm"><h3>What actually mattered</h3><p>① Start from pretrained (COCO) weights · ② tile at the resolution you deploy at · ③ keep augmentation moderate.</p></div>
+        <div class="card sm"><h3>What I also found</h3><p>Default augmentation beat hand-tuned; model size is <b>U-shaped</b>; run-to-run noise ≈ ±0.03 — so small gaps aren't real.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Results + ablation · YOLOv8x-seg v4 · M14</span><span>14</span></div>
+</section>
+
+<!-- 15 MASK R-CNN -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">Engine #2 · Berik Sharipov</div>
+    <h2>Mask R-CNN — the careful, mask-first engine</h2>
+    <p style="margin-top:10px;font-size:18px;max-width:110ch">A classic <b>two-stage, region-based</b> detector. Where YOLO looks once, Mask R-CNN looks twice — propose, then refine — slower, but with naturally <b>crisp instance masks.</b> One of the swappable engines behind the same automated pipeline.</p>
+    <div class="grid2" style="margin-top:14px;gap:18px 24px">
+      <div class="col">
+        <div class="card sm"><h3>How it works</h3><p>An RPN suggests candidate boxes → RoIAlign crops each region → three heads output a box, a class and a per-pixel mask. Segmentation is built in, so outlines hug the crown.</p></div>
+        <div class="card sm"><h3>How Berik trained it</h3><p>Transfer-learned from a COCO-pretrained ResNet-50-FPN, fine-tuned on the same Astana tiles (v2 + v3), single "tree" class, same split as every engine. 50 epochs, SGD.</p></div>
+      </div>
+      <div class="col">
+        <div class="card sm"><h3>How it does on Astana</h3><p>Box mAP@50 <b>0.166</b>, Mask <b>0.158</b>. At conf 0.5: precision 0.44 · recall 0.22. Strongest on medium, well-separated crowns.</p></div>
+        <div class="card sm" style="border-left-color:var(--cyan)"><h3>Why it stays in the app</h3><p>Below YOLO overall — but it recovers some <b>larger trees the others miss</b>, and its masks are the cleanest. So the pipeline keeps it as a selectable engine.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Team member · Berik Sharipov · box 0.166 · mask 0.158</span><span>15</span></div>
+</section>
+
+<!-- 16 DEEPFOREST + SAM2 -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">Engine #3 · Anuar Totin</div>
+    <h2>DeepForest + SAM 2 — the forest specialist, re-taught</h2>
+    <p style="margin-top:10px;font-size:18px;max-width:110ch">A two-part engine: <b>DeepForest</b> (a RetinaNet-style crown detector) finds the trees, then <b>SAM 2</b> turns each box into a high-quality mask. It produced the <b>0.012</b> that started the whole project.</p>
+    <div class="grid2" style="margin-top:14px;gap:18px 24px">
+      <div class="col">
+        <div class="card sm"><h3>How it works</h3><p>DeepForest outputs a box per crown; each box becomes a <b>prompt</b> for SAM 2, which segments the exact pixels — zero-shot, no extra training.</p></div>
+        <div class="card sm"><h3>The domain problem</h3><p>DeepForest is pretrained on <b>North-American forest</b> imagery. Pointed at a dry steppe city it was nearly blind — <b>0.012.</b> A mismatch, not a bug.</p></div>
+      </div>
+      <div class="col">
+        <div class="card sm"><h3>How Anuar fixed it</h3><p>Fine-tuned DeepForest on the Astana data (LR 1e-4, 30 ep) + SAM 2 masks. Result: <b>0.012 → 0.146</b> Box mAP@50 (Mask 0.134) — a <b>×12</b> jump.</p></div>
+        <div class="card sm" style="border-left-color:var(--cyan)"><h3>Why it stays in the app</h3><p>SAM 2 gives the <b>best general-purpose masks</b> of any engine, and the off-the-shelf → fine-tuned story is the project's core lesson.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Team member · Anuar Totin · 0.012 → 0.146 · ×12</span><span>16</span></div>
+</section>
+
+<!-- 17 WHY SEVERAL MODELS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">A system choice, not a model choice</div>
+    <h2>Same garden, eight engines, eight answers</h2>
+    <div class="frame" style="margin:12px auto 0;width:760px"><img src="../figures/cross_model_8way_botanical.jpg" alt="eight models on the same garden"></div>
+    <div class="grid2" style="margin-top:12px;gap:24px">
+      <p style="font-size:16px">The same Botanical Garden, scanned by <b>eight engines</b> — each outlines a <b>different set of trees</b> and reports a different count (<span class="em">672–819</span>). None is simply "right".</p>
+      <p style="font-size:16px">So the system lets the operator <b>switch engines</b> and combine them — <b>Weighted Box Fusion</b> + a <b>cross-YOLO 4-vote</b> that drops single-model false positives. Choice is a feature.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Own contribution — design rationale · WBF · cross-YOLO vote</span><span>17</span></div>
+</section>
+
+<!-- 18 RESULTS -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">Head-to-head · same 14 images · 702 trees</div>
+    <h2>One common test set, every model</h2>
+    <div class="grid2" style="margin-top:14px;gap:26px;align-items:start">
+      <div class="col">
+        <table>
+          <thead><tr><th style="width:54%">Model</th><th style="width:23%">Box mAP@50</th><th style="width:23%">Mask mAP@50</th></tr></thead>
+          <tbody>
+            <tr class="ours"><td>YOLOv8x-seg v4 (ours)</td><td class="met">0.315</td><td class="met">0.289</td></tr>
+            <tr><td>YOLOv8x-seg v3</td><td class="met">0.268</td><td class="met">0.244</td></tr>
+            <tr><td>Mask R-CNN</td><td class="met">0.166</td><td class="met">0.158</td></tr>
+            <tr><td>DeepForest + SAM 2</td><td class="met">0.146</td><td class="met">0.134</td></tr>
+            <tr><td>YOLO v1 baseline</td><td class="met">0.131</td><td class="met">0.134</td></tr>
+            <tr><td>NEON DeepForest (off-the-shelf)</td><td class="met">0.012</td><td class="met">—</td></tr>
+          </tbody>
+        </table>
+        <div class="note">Champion operating point (conf 0.25): <b>precision 0.52 · recall 0.29.</b> Margins between top models are small — partly within run-to-run noise.</div>
+      </div>
+      <div class="col">
+        <div class="frame"><img src="../figures/model_comparison_barchart.png" alt="model comparison chart"></div>
+        <div class="cap">We read this as "these engines are in the same ballpark on Astana" — what matters is that <b>any of them can drive the system.</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1–2 · Results + comparison · M14 · 702 polygons</span><span>18</span></div>
+</section>
+
+<!-- 19 CANOPY OVERVIEW -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">The deliverable</div>
+    <h2>Canopy — the system in use</h2>
+    <div class="grid2 wide" style="margin-top:14px">
+      <div class="frame"><img src="../figures/ui_canopy_map_view.png" alt="Canopy map view"></div>
+      <div class="col">
+        <div class="card"><h3>One flow</h3><p>Select an area of Astana → the app tiles it, runs the chosen model, and draws every detected tree on the map — confidence filter, Point / Box / Polygon / Heat layers.</p></div>
+        <div class="card"><h3>Grows as you use it</h3><p>Every scan is stored; the city map is the running aggregate of everything ever processed. Coverage and counts update live.</p></div>
+        <div class="cap">Counts in screenshots come from repeated demo scans — <b>not</b> a full city census.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1–2 · Information system built &amp; working</span><span>19</span></div>
+</section>
+
+<!-- 20 CANOPY FEATURES -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">The choices that make it a tool, not a demo</div>
+    <h2>Choose · combine · manage · measure</h2>
+    <div class="grid3" style="margin-top:14px">
+      <div class="frame"><img src="../figures/ui_canopy_scan_model_modal.png" alt="model picker"></div>
+      <div class="frame"><img src="../figures/ui_canopy_library_modal.png" alt="library manage"></div>
+      <div class="frame"><img src="../figures/ui_canopy_map_heat.png" alt="heat map"></div>
+    </div>
+    <div class="grid3" style="margin-top:12px">
+      <div class="card sm"><h3>Choose &amp; combine</h3><p>7 YOLO sizes · Mask R-CNN · DeepForest ± SAM 2 · WBF &amp; cross-YOLO vote — chosen per scan, with provider (ESRI / Google) and confidence.</p></div>
+      <div class="card sm"><h3>Manage</h3><p>Every scan &amp; snapshot is renamable, hideable and deletable (cascade) from a library modal — the workspace stays usable over time.</p></div>
+      <div class="card sm"><h3>Measure</h3><p>Density heat-map, per-area count, <b>green-space coverage %</b> and crown area inside a drawn polygon — metrics, not just dots.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 2 · Feature depth of the system</span><span>20</span></div>
+</section>
+
+<!-- 21 DEMO -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <div class="eyebrow">The pipeline running end-to-end</div>
+    <h2>Live demo — automated scan of the Botanical Garden</h2>
+    <div style="display:flex;gap:30px;align-items:center;margin-top:14px">
+      <div class="frame" style="flex:0 0 auto;width:680px"><video src="assets/canopy_demo.mp4" poster="assets/canopy_demo_poster.jpg" muted loop playsinline preload="metadata" controls style="width:680px;height:382px;object-fit:cover;background:#0b0f0c"></video></div>
+      <div class="col" style="flex:1">
+        <div class="card sm"><h3>What you're seeing</h3><p>The v4 engine scanning the Botanical Garden end-to-end in Canopy: <b>tile → detect → map</b>, every tree drawn live.</p></div>
+        <div class="card sm"><h3>Why this scene</h3><p>A dense, well-defined planting — the clearest case. Honest reminder: on sparser scenes recall drops.</p></div>
+        <div class="card sm" style="border-left-color:var(--cyan)"><h3>Full recording</h3><p style="word-break:break-all;font-size:13px">drive.google.com/file/d/1OceaLC4yMEgLtIThVR8t7_B4VRRPNaNf/view</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 2 · Demonstration of the working system</span><span>21</span></div>
+</section>
+
+<!-- 22 CONCLUSION -->
+<section class="slide">
+  <div class="band"></div>
+  <div class="shield"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="pad">
+    <h2>Conclusion</h2>
+    <div class="grid2" style="margin-top:12px;gap:14px 22px">
+      <div class="card sm"><h3>O1 · Dataset</h3><p>Custom Astana dataset built from scratch — ~100 images, ~5 500 crown polygons (≈ 8 700 tiles); held-out M14 = 14 images / 702 trees.</p></div>
+      <div class="card sm"><h3>O2 · Detection engines</h3><p>Four engines trained &amp; compared; YOLOv8x-seg leads at Box mAP@50 = <b>0.315</b> (+140% over our v1 baseline).</p></div>
+      <div class="card sm"><h3>O3 · Ensembles</h3><p>WBF + cross-YOLO vote implemented in the system — choice and combination exposed to the operator.</p></div>
+      <div class="card sm"><h3>O4 · Fair evaluation</h3><p>Every engine scored on one common set — the <b>first such measurement for Astana</b> (off-the-shelf ≈ 0.012).</p></div>
+      <div class="card sm" style="border-left-color:var(--cyan)"><h3>O5 · The system — Canopy</h3><p>FastAPI + React + SQLite + Leaflet, deployed: provider &amp; model choice, ensembles, manage, live metrics, geo + export.</p></div>
+      <div class="card sm" style="background:#DCEBFA;border-left-color:var(--blue)"><h3>The headline</h3><p>Not a score — a <b>manual task is now an automated system.</b> Accuracy is modest and honestly so; the <b>system is the contribution.</b></p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Criterion 1 · Conclusions map 1:1 to tasks · manual → automated system</span><span>22</span></div>
+</section>
+
+<!-- 23 THANK YOU -->
+<section class="slide imgslide">
+  <img class="bg" src="../figures/ui_canopy_botanical_park.jpg" alt="">
+  <div class="scrim"></div>
+  <div class="band" style="z-index:4"></div>
+  <div class="shield" style="z-index:5"><svg viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="24" cy="24" r="4" fill="#fff" stroke="none"/><path d="M24 10a14 14 0 0 1 14 14" stroke-linecap="round"/><path d="M24 16a8 8 0 0 1 8 8" stroke-linecap="round"/><path d="M24 38A14 14 0 0 1 10 24" stroke-linecap="round"/><path d="M24 32a8 8 0 0 1-8-8" stroke-linecap="round"/></svg></div>
+  <div class="ov" style="top:170px;max-width:760px">
+    <h1 style="font-size:62px">Thank you — we'll gladly answer your questions.</h1>
+    <p style="margin-top:22px;font-size:22px;max-width:46ch">From a manual, one-by-one task to an <span class="em">automated</span> tree-mapping system for Astana — a working tool anyone can run.</p>
+    <div style="margin-top:26px;font-size:18px;color:var(--ink2)"><b>Rasul Aidarkhanov</b> · Berik Sharipov · Anuar Totin &nbsp;|&nbsp; Supervisor: S. Satbayev</div>
+  </div>
+</section>
+
+</body></html>

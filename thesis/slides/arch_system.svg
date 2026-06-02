@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Georgia, 'Times New Roman', serif">
+  <defs>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#173E63"/><stop offset="0.5" stop-color="#2E6DB4"/><stop offset="1" stop-color="#5FC3E6"/>
+    </linearGradient>
+    <linearGradient id="tierPres" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F86C6"/><stop offset="1" stop-color="#2E6DB4"/></linearGradient>
+    <linearGradient id="tierApp"  x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E7D32"/><stop offset="1" stop-color="#1E5E32"/></linearGradient>
+    <linearGradient id="tierModel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#29ABE2"/><stop offset="1" stop-color="#1697A6"/></linearGradient>
+    <linearGradient id="tierData" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3F6FB5"/><stop offset="1" stop-color="#173E63"/></linearGradient>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto"><path d="M0,1 L8,5 L0,9 Z" fill="#29ABE2"/></marker>
+    <marker id="arrW" markerWidth="9" markerHeight="9" refX="6" refY="4.5" orient="auto"><path d="M0,1 L7,4.5 L0,8 Z" fill="#ffffff"/></marker>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#1a2a3a" flood-opacity="0.16"/></filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="#ffffff"/>
+  <!-- header band + shield -->
+  <rect width="1280" height="58" fill="url(#band)"/>
+  <rect x="1130" width="150" height="58" fill="#5FC3E6" opacity="0.5"/>
+  <path d="M62,0 H142 V78 L102,108 L62,78 Z" fill="#29ABE2"/>
+  <circle cx="102" cy="32" r="15" fill="none" stroke="#fff" stroke-width="2.5"/><circle cx="102" cy="32" r="4" fill="#fff"/>
+
+  <text x="56" y="104" font-size="14" font-weight="bold" fill="#2E6DB4" letter-spacing="0.5">CANOPY · SYSTEM ARCHITECTURE</text>
+  <text x="56" y="140" font-size="30" font-weight="bold" fill="#1A1A1A">From a satellite tile to a GIS-ready tree map</text>
+
+  <!-- ============ USER / INPUT column (left) ============ -->
+  <g filter="url(#sh)">
+    <rect x="40" y="186" width="180" height="430" rx="8" fill="#F4F6F9" stroke="#CFE0F1"/>
+  </g>
+  <rect x="40" y="186" width="180" height="40" rx="8" fill="#173E63"/>
+  <rect x="40" y="206" width="180" height="20" fill="#173E63"/>
+  <text x="130" y="212" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">USER · INPUT</text>
+  <g font-size="12.5" fill="#33414D" text-anchor="middle">
+    <rect x="56" y="244" width="148" height="56" rx="5" fill="#fff" stroke="#CFE0F1"/>
+    <text x="130" y="266">Draw an area</text><text x="130" y="285">on the map</text>
+    <rect x="56" y="312" width="148" height="56" rx="5" fill="#fff" stroke="#CFE0F1"/>
+    <text x="130" y="334">Upload image</text><text x="130" y="353">PNG/JPG/GeoTIFF</text>
+    <rect x="56" y="380" width="148" height="74" rx="5" fill="#fff" stroke="#CFE0F1"/>
+    <text x="130" y="404">Pick model,</text><text x="130" y="423">confidence,</text><text x="130" y="442">geo-mode</text>
+    <rect x="56" y="466" width="148" height="56" rx="5" fill="#fff" stroke="#CFE0F1"/>
+    <text x="130" y="488">Tile providers:</text><text x="130" y="507" font-weight="bold" fill="#2E6DB4">ESRI · Google</text>
+  </g>
+
+  <!-- ============ PRESENTATION tier ============ -->
+  <g filter="url(#sh)"><rect x="252" y="186" width="226" height="430" rx="8" fill="#fff" stroke="#2E6DB4" stroke-width="1.5"/></g>
+  <rect x="252" y="186" width="226" height="56" rx="8" fill="url(#tierPres)"/><rect x="252" y="214" width="226" height="28" fill="#2E6DB4"/>
+  <text x="365" y="210" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">PRESENTATION</text>
+  <text x="365" y="231" font-size="11.5" fill="#DCEBFA" text-anchor="middle">React 18 + Leaflet (CDN, no build)</text>
+  <g font-size="12.5" fill="#33414D" text-anchor="middle">
+    <rect x="268" y="258" width="194" height="48" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="365" y="278">Interactive map +</text><text x="365" y="296">tree-polygon overlay</text>
+    <rect x="268" y="318" width="194" height="48" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="365" y="338">Auto-Zoom / Polygon</text><text x="365" y="356">scan · live progress</text>
+    <rect x="268" y="378" width="194" height="48" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="365" y="398">Point / Box / Polygon</text><text x="365" y="416">/ Heat layers</text>
+    <rect x="268" y="438" width="194" height="48" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="365" y="458">Model picker ·</text><text x="365" y="476">manage · export UI</text>
+    <rect x="268" y="498" width="194" height="40" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="365" y="523">Dark / light theme</text>
+  </g>
+
+  <!-- ============ APPLICATION tier (FastAPI) ============ -->
+  <g filter="url(#sh)"><rect x="510" y="186" width="250" height="430" rx="8" fill="#fff" stroke="#1E5E32" stroke-width="1.5"/></g>
+  <rect x="510" y="186" width="250" height="56" rx="8" fill="url(#tierApp)"/><rect x="510" y="214" width="250" height="28" fill="#1E5E32"/>
+  <text x="635" y="210" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">APPLICATION · FastAPI</text>
+  <text x="635" y="231" font-size="11.5" fill="#D8EEDD" text-anchor="middle">Python 3.11 · REST + NDJSON stream</text>
+  <g font-size="12.5" fill="#33414D" text-anchor="middle">
+    <rect x="526" y="258" width="218" height="44" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="276">capture_bbox() — fetch</text><text x="635" y="293">&amp; stitch provider tiles</text>
+    <rect x="526" y="312" width="218" height="44" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="330">Sliding-window tiling</text><text x="635" y="347" font-weight="bold" fill="#1E5E32">640 + 128 px</text>
+    <rect x="526" y="366" width="218" height="44" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="384">Batched inference</text><text x="635" y="401">via model adapter</text>
+    <rect x="526" y="420" width="218" height="44" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="438">Global NMS — cross-</text><text x="635" y="455">tile merge (IoU 0.5)</text>
+    <rect x="526" y="474" width="218" height="44" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="492">Geo-convert</text><text x="635" y="509" font-weight="bold" fill="#1E5E32">pixel → WGS-84</text>
+    <rect x="526" y="528" width="218" height="40" rx="5" fill="#EFF6F0" stroke="#CFE0DA"/><text x="635" y="553">20 REST endpoints</text>
+  </g>
+
+  <!-- ============ MODEL LAYER (swappable) ============ -->
+  <g filter="url(#sh)"><rect x="792" y="186" width="230" height="430" rx="8" fill="#fff" stroke="#1697A6" stroke-width="2"/></g>
+  <rect x="792" y="186" width="230" height="56" rx="8" fill="url(#tierModel)"/><rect x="792" y="214" width="230" height="28" fill="#1697A6"/>
+  <text x="907" y="210" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">MODEL LAYER</text>
+  <text x="907" y="231" font-size="11.5" fill="#E0F5FA" text-anchor="middle">pluggable adapter interface</text>
+  <g font-size="12.5" text-anchor="middle">
+    <rect x="808" y="258" width="198" height="42" rx="5" fill="#E7F6F8" stroke="#BCE3E8"/><text x="907" y="275" fill="#1A1A1A" font-weight="bold">YOLOv8-seg</text><text x="907" y="292" fill="#33414D" font-size="11">7 sizes · champion 0.315</text>
+    <rect x="808" y="308" width="198" height="38" rx="5" fill="#E7F6F8" stroke="#BCE3E8"/><text x="907" y="324" fill="#1A1A1A" font-weight="bold">Mask R-CNN</text><text x="907" y="340" fill="#33414D" font-size="11">0.166</text>
+    <rect x="808" y="354" width="198" height="42" rx="5" fill="#E7F6F8" stroke="#BCE3E8"/><text x="907" y="371" fill="#1A1A1A" font-weight="bold">DeepForest + SAM 2</text><text x="907" y="388" fill="#33414D" font-size="11">0.146</text>
+    <rect x="808" y="404" width="198" height="56" rx="5" fill="#E7F6F8" stroke="#BCE3E8"/><text x="907" y="424" fill="#1A1A1A" font-weight="bold">Ensembles</text><text x="907" y="441" fill="#33414D" font-size="11">Weighted Box Fusion</text><text x="907" y="455" fill="#33414D" font-size="11">+ cross-YOLO vote</text>
+    <rect x="808" y="476" width="198" height="62" rx="5" fill="#173E63"/><text x="907" y="500" fill="#fff" font-size="11.5">Any engine drives</text><text x="907" y="518" fill="#C8F24E" font-size="11.5" font-weight="bold">the same pipeline</text>
+  </g>
+
+  <!-- ============ DATA + OUTPUT tier (right) ============ -->
+  <g filter="url(#sh)"><rect x="1054" y="186" width="186" height="430" rx="8" fill="#fff" stroke="#173E63" stroke-width="1.5"/></g>
+  <rect x="1054" y="186" width="186" height="56" rx="8" fill="url(#tierData)"/><rect x="1054" y="214" width="186" height="28" fill="#173E63"/>
+  <text x="1147" y="210" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">DATA · OUTPUT</text>
+  <text x="1147" y="231" font-size="11.5" fill="#DCEBFA" text-anchor="middle">SQLite + exporters</text>
+  <g font-size="11.5" fill="#33414D" text-anchor="middle">
+    <rect x="1070" y="258" width="154" height="92" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/>
+    <text x="1147" y="276" font-weight="bold" fill="#2E6DB4" font-size="12">SQLite</text>
+    <text x="1147" y="296">scan_sessions</text><text x="1147" y="312">→ snapshots</text><text x="1147" y="328">→ runs</text><text x="1147" y="344">→ detections</text>
+    <rect x="1070" y="362" width="154" height="40" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="1147" y="380">City map +</text><text x="1147" y="396">density heat-map</text>
+    <rect x="1070" y="414" width="154" height="40" rx="5" fill="#EEF4FB" stroke="#CFE0F1"/><text x="1147" y="432">Count · coverage %</text><text x="1147" y="448">· crown area</text>
+    <rect x="1070" y="466" width="154" height="72" rx="5" fill="#DCEBFA" stroke="#9FC3E8"/>
+    <text x="1147" y="486" font-weight="bold" fill="#173E63" font-size="12">Export</text>
+    <text x="1147" y="504">GeoJSON · CSV</text><text x="1147" y="520">· standalone HTML</text>
+    <text x="1147" y="535" font-size="10" fill="#6A7682">(opens in QGIS / ArcGIS)</text>
+  </g>
+
+  <!-- flow arrows between tiers -->
+  <g stroke="#29ABE2" stroke-width="3" fill="none">
+    <line x1="222" y1="401" x2="248" y2="401" marker-end="url(#arr)"/>
+    <line x1="480" y1="401" x2="506" y2="401" marker-end="url(#arr)"/>
+    <line x1="762" y1="401" x2="788" y2="401" marker-end="url(#arr)"/>
+    <line x1="1024" y1="401" x2="1050" y2="401" marker-end="url(#arr)"/>
+  </g>
+
+  <!-- footer caption -->
+  <line x1="56" y1="650" x2="1224" y2="650" stroke="#D7DEE4"/>
+  <text x="56" y="676" font-size="14" fill="#33414D">Five layers, <tspan font-weight="bold" fill="#1A1A1A">one automated chain</tspan> — the detection model is just <tspan font-weight="bold" fill="#2E6DB4">one swappable layer</tspan>; a better model drops in without touching capture, tiling, geo or storage.</text>
+  <text x="56" y="700" font-size="12" font-style="italic" fill="#6A7682">~1 km² at zoom 19 processed in ≈ 18 s on a single laptop GPU.</text>
+</svg>

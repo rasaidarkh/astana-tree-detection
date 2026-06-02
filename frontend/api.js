@@ -260,6 +260,7 @@
       model: d.model,
       image_id: d.image_id,
       job_id: d.job_id,
+      scan_session_id: d.scan_session_id,   // needed to group crowns per scan/park
     }));
   };
 

@@ -77,7 +77,7 @@ class ScanRegionRequest(BaseModel):
     zoom: int = Field(19, ge=14, le=20)
     model: ModelKind = ModelKind.YOLO
     confidence: float = Field(0.25, ge=0.0, le=1.0)
-    max_subregions: int = Field(DEFAULT_MAX_SUBREGIONS, ge=1, le=25)
+    max_subregions: int = Field(DEFAULT_MAX_SUBREGIONS, ge=1, le=100)
     provider: str = Field(DEFAULT_PROVIDER, description="Tile provider key: esri | google")
     # Опциональный пользовательский полигон. Если задан — bbox (nw/se) должен
     # быть его axis-aligned bounding rectangle (фронт вычисляет и шлёт оба).
