@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Astana Tree Detection — Defense Deck (system-first)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F4EE; --paper2:#ECEAE0; --panel:#FBFAF6; --ink:#16190F; --ink2:#3A3E31;
+  --muted:#6C7060; --line:rgba(22,25,15,.16); --line2:rgba(22,25,15,.08);
+  --lime:#C8F24E; --lime-deep:#4F7A12; --lime-ink:#14210a;
+  --sans:"Schibsted Grotesk",sans-serif; --mono:"JetBrains Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#cdcabf;display:flex;flex-direction:column;align-items:center;gap:30px;padding:30px 0 64px;
+  font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1280px;height:720px;flex:0 0 auto;overflow:hidden;background:var(--paper);color:var(--ink)}
+.slide::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line2) 1px,transparent 1px);
+  background-size:64px 64px;opacity:.6}
+.pad{position:absolute;inset:0;padding:78px 64px 66px;display:flex;flex-direction:column;z-index:2}
+.pad.vc{justify-content:center}
+
+.rail{position:absolute;left:64px;right:64px;display:flex;justify-content:space-between;align-items:center;z-index:5;
+  font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.rail.top{top:30px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.rail.bot{bottom:26px;padding-top:11px;border-top:1px solid var(--line)}
+.rail .c{color:var(--lime-deep);font-weight:700}
+.rail .pin{display:flex;align-items:center;gap:8px}
+.rail .pin::before{content:"";width:7px;height:7px;background:var(--lime-deep)}
+
+.kicker{font-family:var(--mono);font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--lime-deep);font-weight:700;display:flex;align-items:center;gap:11px}
+.kicker::before{content:"";width:26px;height:2px;background:var(--lime-deep)}
+h1{font-weight:800;font-size:54px;line-height:1.02;letter-spacing:-.02em}
+h2{font-weight:800;font-size:42px;line-height:1.05;letter-spacing:-.018em;margin:13px 0 0}
+.sub{font-size:21px;font-weight:400;color:var(--ink2);line-height:1.46;max-width:62ch}
+p{font-size:18.5px;line-height:1.5;color:var(--ink2)}
+b,strong{color:var(--ink);font-weight:700}
+.em{color:var(--lime-deep);font-weight:700}
+.chip{display:inline-block;background:var(--lime);color:var(--lime-ink);font-family:var(--mono);font-weight:700;
+  font-size:12px;letter-spacing:.06em;padding:3px 9px;border-radius:2px}
+.tag{display:inline-block;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:2px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start}
+.grid2.wide{grid-template-columns:1.12fr .88fr}
+.grid2.narrow{grid-template-columns:.82fr 1.18fr}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:start}
+.col{display:flex;flex-direction:column;gap:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:17px 19px}
+.card h3{font-size:14.5px;font-family:var(--mono);font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lime-deep);margin-bottom:8px}
+.card p{font-size:16.5px;line-height:1.46}
+.card.sm{padding:13px 15px}
+.card.sm h3{font-size:12.5px;margin-bottom:5px}
+.card.sm p{font-size:13.5px;line-height:1.4}
+.card.hl{border-left:3px solid var(--lime-deep)}
+
+ul.clean{list-style:none;display:flex;flex-direction:column;gap:12px}
+ul.clean li{position:relative;padding-left:30px;font-size:18px;line-height:1.42;color:var(--ink2)}
+ul.clean li .n{position:absolute;left:0;top:1px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--lime-deep)}
+ul.clean li b{color:var(--ink)}
+ul.check li::before{content:"✓";position:absolute;left:0;top:0;color:var(--lime-deep);font-weight:800;font-size:18px}
+ul.check li{list-style:none;position:relative;padding-left:28px;font-size:17.5px;line-height:1.42;color:var(--ink2);margin-bottom:10px}
+ul.check.big li{font-size:20px;line-height:1.45;margin-bottom:20px;padding-left:34px}
+ul.check.big li::before{font-size:21px}
+ul.clean.big li{font-size:20px;line-height:1.5;padding-left:34px}
+ul.clean.big li .n{font-size:15px}
+
+table{width:100%;border-collapse:collapse;font-size:16.5px}
+thead th{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  text-align:left;padding:11px 14px;background:var(--ink);color:var(--paper)}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--line2);vertical-align:middle;color:var(--ink2)}
+tbody tr td:first-child{font-weight:700;color:var(--ink)}
+.work{color:var(--muted)}
+.met{font-family:var(--mono);font-weight:500;font-size:14px;color:var(--ink)}
+.gap{font-size:13.5px;color:var(--ink2);line-height:1.34}
+tr.ours td{background:var(--lime);color:var(--lime-ink) !important;font-weight:700;border-bottom:1px solid var(--lime)}
+.tnote{margin-top:11px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+.stat{display:flex;align-items:baseline;gap:18px}
+.bignum{font-weight:900;font-size:120px;line-height:.82;letter-spacing:-.04em;color:var(--ink);font-variant-numeric:tabular-nums}
+.statside{display:flex;flex-direction:column;gap:7px;padding-bottom:12px}
+
+.fml{font-family:var(--mono);font-size:17.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--lime-deep);border-radius:4px;padding:13px 16px;line-height:1.5}
+.frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 4px}
+.frac .n{border-bottom:1.5px solid var(--ink);padding:0 6px}
+.frac .d{padding:0 6px}
+
+.flow{display:flex;align-items:stretch;gap:0}
+.node{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:13px 12px;text-align:center}
+.node .t{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--lime-deep);font-weight:700}
+.node .d{font-size:13px;color:var(--ink2);margin-top:5px;line-height:1.32}
+.arrow{display:flex;align-items:center;color:var(--muted);font-size:20px;padding:0 9px}
+
+.feat{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:13px 14px}
+.feat .ic{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--lime-deep);display:flex;align-items:center;gap:7px}
+.feat .ic::before{content:"";width:8px;height:8px;background:var(--lime-deep);border-radius:1px}
+.feat .ti{font-weight:700;font-size:15.5px;color:var(--ink);margin:6px 0 3px}
+.feat p{font-size:13px;line-height:1.38;color:var(--ink2)}
+
+.img .pad{padding:0}
+.img .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.img .scrim{position:absolute;inset:0;z-index:2;pointer-events:none}
+.img .scrim.bl{background:linear-gradient(60deg,rgba(245,244,238,.97) 0%,rgba(245,244,238,.8) 26%,rgba(245,244,238,.18) 52%,transparent 72%)}
+.img .scrim.bot{background:linear-gradient(0deg,rgba(245,244,238,.96) 0%,rgba(245,244,238,.6) 14%,transparent 34%)}
+.img .topfade{position:absolute;top:0;left:0;right:0;height:128px;z-index:3;pointer-events:none;
+  background:linear-gradient(180deg,rgba(245,244,238,.97) 0%,rgba(245,244,238,.7) 48%,transparent 100%)}
+.img .rail.top{color:var(--ink);z-index:6}
+.img .rail.top .pin::before{background:var(--lime-deep)}
+.img .ov{position:absolute;z-index:4}
+.det{position:absolute;z-index:4;border:1.6px solid var(--lime-deep)}
+.det i{position:absolute;width:8px;height:8px;background:var(--lime-deep)}
+.det i.tl{left:-4px;top:-4px}.det i.tr{right:-4px;top:-4px}.det i.bl{left:-4px;bottom:-4px}.det i.br{right:-4px;bottom:-4px}
+.det .lab{position:absolute;top:-24px;left:-1.6px;background:var(--lime);color:var(--lime-ink);font-family:var(--mono);
+  font-size:11px;font-weight:700;padding:2px 8px;white-space:nowrap}
+
+.frame{border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 18px 40px -22px rgba(0,0,0,.4);background:#fff}
+.frame .bar{height:24px;background:var(--paper2);display:flex;align-items:center;gap:6px;padding:0 11px;border-bottom:1px solid var(--line)}
+.frame .bar i{width:8px;height:8px;border-radius:50%;background:#cfccbf}
+.frame img{display:block;width:100%}
+
+.authors{display:flex;align-items:center;flex-wrap:wrap;gap:11px;font-size:17px;font-weight:500;color:var(--ink2)}
+.authors .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.authors .me{color:var(--ink2);font-weight:600}
+.authors .dot{color:var(--muted)}
+
+.divider{background:var(--ink);color:var(--paper)}
+.divider::before{opacity:.18}
+.divider .pad{justify-content:center}
+.divider .kicker{color:var(--lime)}
+.divider .kicker::before{background:var(--lime)}
+.divider h1{color:var(--paper);font-size:60px;max-width:18ch}
+.divider .sub{color:rgba(245,244,238,.7)}
+.divider .rail{color:rgba(245,244,238,.6)}
+.divider .rail.top{border-color:rgba(245,244,238,.18)}.divider .rail.bot{border-color:rgba(245,244,238,.18)}
+.divider .rail .c,.divider .rail .pin::before{color:var(--lime);background:var(--lime)}
+
+.versus{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch;margin-top:20px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.versus .side{padding:20px 22px}
+.versus .side.min{background:var(--paper2)}
+.versus .side.built{background:var(--lime);color:var(--lime-ink)}
+.versus .side h3{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+.versus .side.min h3{color:var(--muted)}
+.versus .side.built h3{color:var(--lime-ink)}
+.versus .side ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+.versus .side li{font-size:15px;line-height:1.34;padding-left:20px;position:relative}
+.versus .side.min li{color:var(--ink2)}
+.versus .side.min li::before{content:"–";position:absolute;left:0;color:var(--muted);font-weight:700}
+.versus .side.built li{color:var(--lime-ink)}
+.versus .side.built li::before{content:"+";position:absolute;left:0;color:var(--lime-deep);font-weight:800}
+.versus .mid{display:flex;align-items:center;justify-content:center;padding:0 6px;background:var(--ink);color:var(--lime);font-family:var(--mono);font-size:13px;font-weight:700;writing-mode:vertical-rl;text-orientation:mixed;letter-spacing:.1em}
+
+@media print{@page{size:1280px 720px;margin:0}body{display:block;padding:0;gap:0;background:#fff}.slide{page-break-after:always}}
+</style></head><body>
+
+<!-- 01 TITLE -->
+<section class="slide img">
+  <div class="pad"></div>
+  <img class="bg" src="../figures/ui_canopy_botanical_park.jpg" alt="">
+  <div class="scrim bl"></div>
+  <div class="topfade"></div>
+  <div class="rail top"><span class="pin">Astana IT University — Bachelor Thesis Defense</span><span>2026 · 6B06101</span></div>
+  <div class="det" style="right:120px;top:174px;width:230px;height:188px"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="lab">Canopy · one capture, scanned</span></div>
+  <div class="ov" style="left:64px;bottom:96px;max-width:820px">
+    <div class="kicker">Computer Science · 6B06101</div>
+    <h1 style="margin-top:18px">Automated Tree Recognition<br>&amp; Green-Space Mapping</h1>
+    <div class="sub" style="margin-top:18px">We built a <b style="color:var(--lime-deep)">working system</b> that turns a satellite image of Astana into a tree map — end to end, in a browser. The detection models are the engine inside; the contribution is the whole machine.</div>
+    <div class="authors" style="margin-top:26px">
+      <span class="lbl">Authors</span><span>Berik Sharipov</span><span class="dot">·</span><span>Anuar Totin</span><span class="dot">·</span><span class="me">Rasul Aidarkhanov</span>
+      <span class="lbl" style="margin-left:10px">Supervisor</span><span>S. Satbayev</span>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Canopy — a deployable tree-inventory system</span><span class="pageno">01</span></div>
+</section>
+
+<!-- 02 CONTENTS -->
+<section class="slide">
+  <div class="rail top"><span>Contents</span><span class="c pageno">02</span></div>
+  <div class="pad">
+    <div class="kicker">Agenda</div>
+    <h2>What we'll cover</h2>
+    <div class="grid2" style="margin-top:24px;gap:16px 48px">
+      <ul class="clean">
+        <li><span class="n">01</span><b>Problem &amp; relevance</b> — why Astana needs this</li>
+        <li><span class="n">02</span><b>The gap &amp; aim</b> — off-the-shelf ≈ 0 here</li>
+        <li><span class="n">03</span><b>What this project really is</b> — a system, not a model</li>
+        <li><span class="n">04</span><b>Objectives, problem statement &amp; methods</b></li>
+        <li><span class="n">05</span><b>Literature review</b> &amp; the gap it leaves</li>
+        <li><span class="n">06</span><b>The automated pipeline</b> (architecture)</li>
+        <li><span class="n">07</span><b>Beyond the minimum</b> — what we chose to build</li>
+      </ul>
+      <ul class="clean">
+        <li><span class="n">08</span><b>Data, database &amp; hardware</b></li>
+        <li><span class="n">09</span><b>How we measure success</b> (the maths)</li>
+        <li><span class="n">10</span><b>Four detection engines</b> — YOLO · Mask R-CNN · DeepForest · SAM 2</li>
+        <li><span class="n">11</span><b>Why several models</b> &amp; ensembles</li>
+        <li><span class="n">12</span><b>Results</b> on one common test set</li>
+        <li><span class="n">13</span><b>Canopy</b> — the system in use</li>
+        <li><span class="n">14</span><b>Discussion &amp; conclusions</b></li>
+      </ul>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Presenter — Rasul Aidarkhanov (system + YOLO + web app)</span><span>Team diploma · scored individually</span></div>
+</section>
+
+<!-- 03 PROBLEM & RELEVANCE -->
+<section class="slide">
+  <div class="rail top"><span>01 · Problem &amp; Relevance</span><span class="c pageno">03</span></div>
+  <div class="pad vc">
+    <div class="kicker">Relevance</div>
+    <h2>Mapping a city's trees — today it's done by hand</h2>
+    <div class="grid2 wide" style="margin-top:22px">
+      <div class="col">
+        <p>Astana is expanding fast. Urban green cover matters for <b>heat mitigation, irrigation planning and green-space policy</b> — but to know where the trees are, someone has to <b>count them one by one</b> off imagery. That doesn't scale to a whole city, and it's outdated before it's finished.</p>
+        <p>The real problem isn't "can we beat a benchmark" — it's that <span class="em">there is no automated process</span> for this in Astana at all. So the task we set ourselves was an <b>engineering</b> one: build that process.</p>
+      </div>
+      <div class="col">
+        <div class="card"><h3>Today — manual</h3><p>Counting trees by eye, image by image. Slow, not repeatable, never finished for a growing city.</p></div>
+        <div class="card hl"><h3>Our goal — a system</h3><p>One repeatable tool: point at an area → it finds the trees and puts them on a map, with coordinates and exports. No manual counting.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Topic disclosure</span><span>Astana · 51.16° N 71.47° E</span></div>
+</section>
+
+<!-- 04 GAP & AIM -->
+<section class="slide">
+  <div class="rail top"><span>01 · The Generalisation Gap</span><span class="c pageno">04</span></div>
+  <div class="pad vc">
+    <div class="kicker">Why we couldn't just use an existing tool</div>
+    <div class="stat" style="margin-top:26px">
+      <div class="bignum" style="font-size:150px">0.012</div>
+      <div class="statside">
+        <span class="chip">Box mAP@50</span>
+        <p style="max-width:34ch;font-size:16px">A popular ready-made detector (NEON DeepForest), run as-is on Astana — essentially blind. There was <b>no off-the-shelf system</b> that worked here, so building one was the only option.</p>
+      </div>
+    </div>
+    <div class="card hl" style="margin-top:28px">
+      <h3>Aim</h3>
+      <p style="font-size:19px;color:var(--ink)">Design, build and evaluate an <b>automated end-to-end system</b> that recognises trees and maps green space from Astana satellite imagery — delivered as a working tool, with the detection accuracy reported honestly.</p>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Aim (one sentence)</span><span>Off-the-shelf ≈ 0 on Astana</span></div>
+</section>
+
+<!-- 05 WHAT THIS PROJECT REALLY IS (thesis statement) -->
+<section class="slide">
+  <div class="rail top"><span>01 · What This Project Is</span><span class="c pageno">05</span></div>
+  <div class="pad vc">
+    <div class="kicker">The thesis, in one idea</div>
+    <h2>The deliverable is a <span class="em">system</span> — not a model</h2>
+    <p style="margin-top:14px;max-width:108ch">Our title says <b>"automated … system."</b> So the unit of work isn't "which neural net scores highest" — it's the whole machine that takes a raw satellite capture and returns a usable, georeferenced tree inventory. Everything else is a <b>component of building that</b>:</p>
+    <div class="grid4" style="margin-top:20px">
+      <div class="feat"><div class="ic">Component</div><div class="ti">The dataset</div><p>What the engine learns from — a means, not the goal.</p></div>
+      <div class="feat"><div class="ic">Component</div><div class="ti">The models</div><p>Four interchangeable engines that plug into the pipeline.</p></div>
+      <div class="feat"><div class="ic">Component</div><div class="ti">The experiments</div><p>How we tuned the engine — evidence we went deep, not the product.</p></div>
+      <div class="feat"><div class="ic">Component</div><div class="ti">The UI &amp; features</div><p>What makes it usable by a non-technical operator.</p></div>
+    </div>
+    <div class="card hl" style="margin-top:18px"><p style="color:var(--ink)">We could have shipped the bare minimum — one model, a segmentation mask, no metrics. Instead we built a <b>tool someone at Zelenstroy could actually operate</b>. The next slides show the system first; the models come later, as parts of it.</p></div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Framing — engineering deliverable</span><span>system &gt; single model</span></div>
+</section>
+
+<!-- 06 OBJECTIVES & METHODS -->
+<section class="slide">
+  <div class="rail top"><span>01 · Objectives &amp; Methods</span><span class="c pageno">06</span></div>
+  <div class="pad">
+    <div class="kicker">Objectives</div>
+    <h2>Five tasks — all in service of the system</h2>
+    <div class="grid2" style="margin-top:20px;gap:16px 48px">
+      <ul class="clean">
+        <li><span class="n">1</span>Build an <b>annotated Astana dataset</b> (tiled satellite imagery, instance polygons).</li>
+        <li><span class="n">2</span>Train and compare four <b>detection engines</b> — YOLOv8-seg, Mask R-CNN, DeepForest, SAM 2.</li>
+        <li><span class="n">3</span><b>Combine</b> them through ensembles and test whether that helps.</li>
+      </ul>
+      <ul class="clean">
+        <li><span class="n">4</span>Evaluate everything on <b>one common test set</b> for a fair comparison.</li>
+        <li><span class="n">5</span>Wrap it all in an <b>automated web application</b> — the deliverable that ties tasks 1–4 together.</li>
+      </ul>
+    </div>
+    <div class="card" style="margin-top:8px"><h3>Methods</h3><p>Supervised deep learning · transfer learning from pretrained weights · sliding-window tiling of large captures · pixel→WGS-84 geo-referencing · mAP@50 as the single comparison metric · software engineering (FastAPI · React · SQLite).</p></div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Tasks &amp; methods</span><span>build → train → combine → evaluate → deploy</span></div>
+</section>
+
+<!-- 07 PROBLEM STATEMENT: INPUT / OUTPUT -->
+<section class="slide">
+  <div class="rail top"><span>01 · Problem Statement</span><span class="c pageno">07</span></div>
+  <div class="pad vc">
+    <div class="kicker">Formally — what goes in, what comes out</div>
+    <h2>Input → Output</h2>
+    <div class="grid2" style="margin-top:24px;gap:34px">
+      <div class="card"><h3>Input</h3>
+        <p>A satellite capture of an area of Astana at zoom 19 (≈ 0.3 m / px) — uploaded, or drawn on a map and auto-fetched from <b>ESRI or Google</b> tiles — cut into overlapping <b>640 px RGB tiles</b>.</p>
+        <p style="margin-top:8px">Plus the operator's choices: <b>model, confidence, geo-referencing mode</b>.</p></div>
+      <div class="card"><h3>Output</h3>
+        <p>For every detected tree: a <b>bounding box</b>, an <b>instance mask</b>, a <b>confidence score</b>, <b>crown area</b> and <b>lat/lng</b>.</p>
+        <p style="margin-top:8px">Tiles are stitched, duplicates merged, results shown on a city <b>map</b> with per-area counts and <b>GeoJSON / CSV / HTML</b> export.</p></div>
+    </div>
+    <div class="fml" style="margin-top:22px;font-size:15px">capture &nbsp;→&nbsp; tile &nbsp;→&nbsp; model f(·) &nbsp;→&nbsp; { box, mask, conf, area, lat/lng }<sub>per tree</sub> &nbsp;→&nbsp; merge &amp; map &amp; export</div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Problem formulation</span><span>detection + instance segmentation + geo</span></div>
+</section>
+
+<!-- 08 LITERATURE REVIEW — gap column, no "our" row -->
+<section class="slide">
+  <div class="rail top"><span>02 · State of the Art</span><span class="c pageno">08</span></div>
+  <div class="pad">
+    <div class="kicker">Literature review · 31 papers · 2019–2025</div>
+    <h2 style="margin-bottom:14px">What others report — and the gap each leaves</h2>
+    <table>
+      <thead><tr><th style="width:19%">Method</th><th style="width:19%">Authors · year</th><th style="width:17%">Data</th><th style="width:18%">Best metric</th><th style="width:27%">Gap for our problem</th></tr></thead>
+      <tbody>
+        <tr><td>Mask R-CNN (MCAN)</td><td class="work">Lv et al. · 2023</td><td class="work">UAV RGB, China</td><td class="met">Det AP 92.4%</td><td class="gap">Forest UAV, not urban satellite; research result only</td></tr>
+        <tr><td>RetinaNet / Faster R-CNN</td><td class="work">dos Santos et al. · 2019</td><td class="work">UAV RGB, Brazil</td><td class="met">AP 82–93%</td><td class="gap">Detection alone — no segmentation, no system</td></tr>
+        <tr><td>YOLOv12m</td><td class="work">Abbas &amp; Damaševičius · 2025</td><td class="work">RGB satellite</td><td class="met">mAP@50 90.8%</td><td class="gap">Benchmark on a clean public set; no deployable tool</td></tr>
+        <tr><td>DeepLabV3+ / U-Net</td><td class="work">Martins · 2021 / Wang · 2021</td><td class="work">Aerial 10–32 cm</td><td class="met">F1 91% · IoU 96%</td><td class="gap">Semantic mask, not per-tree instances; not Central Asia</td></tr>
+        <tr><td>DeepForest (off→fine)</td><td class="work">Ventura et al. · 2024</td><td class="work">NAIP 60 cm, USA</td><td class="met">F 0.42 → 0.73</td><td class="gap">US imagery; collapses without local fine-tuning</td></tr>
+        <tr><td>YOLOv5x</td><td class="work">Velasquez-Camacho · 2023</td><td class="work">Ground-level, Spain</td><td class="met">F1 84.9%</td><td class="gap">Europe, ground-level; no GIS/coordinate pipeline</td></tr>
+        <tr><td>DeepForest (urban)</td><td class="work">Dakov &amp; Petrova-Antonova · 2024</td><td class="work">Aerial, Sofia</td><td class="met">F1 0.67–0.69</td><td class="gap">Closest analogue — but still Europe, still research-only</td></tr>
+      </tbody>
+    </table>
+    <div class="tnote">Every study reports high accuracy — on <b>its own region and sensor</b>, as a <b>research result</b>. <b style="color:var(--lime-deep)">None was tested on Central Asia, and none delivers a deployable, operator-run system.</b> That gap — not a higher mAP — is what this project fills.</div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Critical literature analysis</span><span>≥ 20 peer-reviewed sources</span></div>
+</section>
+
+<!-- 09 ARCHITECTURE -->
+<section class="slide">
+  <div class="rail top"><span>03 · The Automated Pipeline</span><span class="c pageno">09</span></div>
+  <div class="pad">
+    <div class="kicker">The automated pipeline — the core of the project</div>
+    <h2>From a satellite image to a tree-map — automatically</h2>
+    <div class="flow" style="margin-top:24px">
+      <div class="node"><div class="t">Front end</div><div class="d">React 18 + Leaflet<br>pick an area &amp; a model</div></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="t">API · FastAPI</div><div class="d">tile (sliding window)<br>→ inference → merge</div></div>
+      <div class="arrow">→</div>
+      <div class="node" style="border-color:var(--lime-deep);border-width:1.5px"><div class="t">Engine (swappable)</div><div class="d">YOLOv8-seg · Mask R-CNN<br>DeepForest · Ensemble</div></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="t">Geo + Store</div><div class="d">pixel → WGS-84<br>SQLite persistence</div></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="t">Map &amp; export</div><div class="d">Leaflet layers<br>GeoJSON · CSV · HTML</div></div>
+    </div>
+    <div class="grid2" style="margin-top:26px;gap:34px">
+      <div class="card"><h3>One automated chain</h3><p>Capture → tile → detect → merge → georeference → store → map → export. <b>No manual step</b> between the operator drawing an area and the finished, downloadable inventory.</p></div>
+      <div class="card hl"><h3>Swappable engine — the key design idea</h3><p>The detection model is just one plug-in step — swap YOLO for Mask R-CNN, DeepForest or an ensemble without touching the rest. A better model tomorrow drops straight in. ~1 km² at zoom 19 in <b>≈ 18 s</b> on a laptop GPU.</p></div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1–2 · System architecture + software</span><span>FastAPI · React · SQLite · Leaflet</span></div>
+</section>
+
+<!-- 10 BEYOND THE MINIMUM — feature richness -->
+<section class="slide">
+  <div class="rail top"><span>03 · What We Chose To Build</span><span class="c pageno">10</span></div>
+  <div class="pad">
+    <div class="kicker">Beyond the minimum &nbsp;<span class="chip" style="margin-left:6px">Engineering effort</span></div>
+    <h2>A minimal version would do far less — we built a tool</h2>
+    <div class="versus">
+      <div class="side min">
+        <h3>The bare minimum</h3>
+        <ul>
+          <li>One model, hard-coded</li>
+          <li>Just a segmentation mask</li>
+          <li>No coordinates, no export</li>
+          <li>No metrics, no comparison</li>
+          <li>Run once, nothing saved</li>
+        </ul>
+      </div>
+      <div class="mid">WE WENT FURTHER →</div>
+      <div class="side built">
+        <h3>What Canopy actually does</h3>
+        <ul>
+          <li><b>Two tile providers</b> — ESRI &amp; Google, fetched in-browser</li>
+          <li><b>Model choice</b> — 7 YOLO sizes · Mask R-CNN · DeepForest ± SAM 2</li>
+          <li><b>Ensembles</b> — Weighted Box Fusion + cross-YOLO vote</li>
+          <li><b>Manage scans</b> — name, hide, delete (cascade)</li>
+          <li><b>Live metrics</b> — tree count, canopy coverage %, crown area</li>
+          <li><b>Geo + export</b> — WGS-84 · GeoJSON / CSV / HTML · persistent map</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:14px;font-size:15px;color:var(--ink2)">None of these is required to "detect a tree" — each is a deliberate choice to make the system <b>usable, comparable and repeatable</b>. That is where most of the engineering effort went.</p>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 2 · Depth &amp; completeness of the software</span><span>usable &gt; minimal</span></div>
+</section>
+
+<!-- 11 DATA + DB + HARDWARE -->
+<section class="slide">
+  <div class="rail top"><span>04 · Data · Database · Hardware</span><span class="c pageno">11</span></div>
+  <div class="pad">
+    <div class="kicker">A component of the system — inputs &amp; infrastructure</div>
+    <h2>What goes in, and where it runs</h2>
+    <div class="grid2 wide" style="margin-top:20px">
+      <div class="col">
+        <div class="card"><h3>Dataset</h3><p>High-zoom Astana captures (~0.3 m/px). We hand-labelled <b>~5 500 tree crowns</b> across <b>~100 images</b> as instance polygons (≈ 8 700 training tiles after 640+128 tiling). A held-out common set of <b>14 images · 702 trees</b> scores every model.</p></div>
+        <div class="card"><h3>Database (SQLite)</h3>
+          <div class="flow" style="margin-top:2px">
+            <div class="node" style="padding:8px 7px"><div class="t">scan_sessions</div></div><div class="arrow" style="font-size:14px;padding:0 5px">→</div>
+            <div class="node" style="padding:8px 7px"><div class="t">snapshots</div></div><div class="arrow" style="font-size:14px;padding:0 5px">→</div>
+            <div class="node" style="padding:8px 7px"><div class="t">runs</div></div><div class="arrow" style="font-size:14px;padding:0 5px">→</div>
+            <div class="node" style="padding:8px 7px"><div class="t">detections</div></div>
+          </div>
+          <p style="margin-top:8px;font-size:14px">One-to-many, <b>ON DELETE CASCADE</b> — delete a scan, its detections go too.</p></div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>Hardware</h3>
+          <ul class="clean" style="gap:8px;margin-top:2px">
+            <li><span class="n">●</span>RTX 4060 8 GB — YOLO + all common-set inference</li>
+            <li><span class="n">●</span>RTX 4070 — Mask R-CNN</li>
+            <li><span class="n">●</span>RTX 4050 — DeepForest</li>
+          </ul>
+          <p style="margin-top:9px;font-size:14px">8 GB VRAM ceiling → batch 2 + mixed precision. Deliberately modest — to prove it runs without a cluster.</p></div>
+        <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/yolo_v2_finetune_val_4tile_strip.png" alt="tiled samples"></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1–2 · DB schema + hardware</span><span>Earth Pro / ESRI captures · ~0.3 m GSD</span></div>
+</section>
+
+<!-- 12 HOW WE MEASURE SUCCESS (maths) -->
+<section class="slide">
+  <div class="rail top"><span>05 · How We Measure Success</span><span class="c pageno">12</span></div>
+  <div class="pad">
+    <div class="kicker">The maths, in plain terms</div>
+    <h2>Three simple ideas — one comparison number</h2>
+    <div class="grid2" style="margin-top:18px;gap:16px 36px">
+      <div class="col">
+        <div class="card"><h3>1 · IoU — did the box land on the tree?</h3>
+          <div class="fml" style="margin:2px 0 8px;font-size:15px">IoU&nbsp;=&nbsp;<span class="frac"><span class="n">overlap area&nbsp;(A ∩ B)</span><span class="d">combined area&nbsp;(A ∪ B)</span></span></div>
+          <p>How much a predicted box overlaps the real one. <b>1.0</b> = perfect, <b>0</b> = miss. A tree counts as found when <b>IoU ≥ 0.5</b>.</p></div>
+        <div class="card"><h3>2 · Precision &amp; recall</h3>
+          <p><b>Precision</b> — of the trees we flagged, how many were real.<br><b>Recall</b> — of all real trees, how many we found: <span class="em">ours ≈ 30%</span> at the default setting.</p></div>
+      </div>
+      <div class="col">
+        <div class="card hl"><h3>3 · mAP@50 — the single score</h3>
+          <p>Sweep the confidence threshold, track precision against recall, and take the <b>area under that curve</b> (at IoU ≥ 0.5). One honest number to compare every engine the same way — the <b>0.315</b> on the results slide.</p></div>
+        <div class="card"><h3>How the two detectors work</h3>
+          <p><b>YOLOv8</b> — one pass: grid → boxes + masks in a single look (fast).<br><b>Mask R-CNN</b> — two passes: propose regions, then refine (slower, careful).</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1–2 · Mathematical support (≤ 10 pts)</span><span>IoU · precision / recall · mAP@50</span></div>
+</section>
+
+<!-- 13 SECTION DIVIDER -->
+<section class="slide divider">
+  <div class="rail top"><span>06 · The Detection Engines</span><span class="c pageno">13</span></div>
+  <div class="pad">
+    <div class="kicker">Four interchangeable engines · one pipeline</div>
+    <h1>The system doesn't<br>depend on one model —<br>any of four can drive it.</h1>
+    <div class="sub" style="margin-top:22px">YOLOv8-seg (Rasul) · Mask R-CNN (Berik) · DeepForest + SAM 2 (Anuar) · plus two ensembles. Each plugs into the same automated pipeline and is scored on the same 14 images.</div>
+  </div>
+  <div class="rail bot"><span class="pin">Team diploma — each member presents &amp; is scored on their branch</span><span></span></div>
+</section>
+
+<!-- 14 YOLO + ABLATION (Rasul) -->
+<section class="slide">
+  <div class="rail top"><span>06 · YOLOv8-seg — Rasul</span><span class="c pageno">14</span></div>
+  <div class="pad">
+    <div class="kicker">Engine #1 · 23 experiments &nbsp;<span class="chip" style="margin-left:6px">My contribution</span></div>
+    <h2>YOLOv8x-seg: from 0.131 to 0.315</h2>
+    <div class="grid2 wide" style="margin-top:16px">
+      <div class="col">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/yolo_all_runs_map50.png" alt="all runs mAP@50"></div>
+        <p style="font-size:13px;color:var(--muted)">Box mAP@50 across every experiment on the common set.</p>
+      </div>
+      <div class="col">
+        <div class="stat"><div class="bignum" style="font-size:88px">+140%</div></div>
+        <p style="margin-top:-4px;font-size:15px">Box mAP@50 over my own first model (0.131 → <b>0.315</b>).</p>
+        <div class="card"><h3>What actually mattered</h3>
+          <ul class="clean" style="gap:6px;margin-top:2px;font-size:14px">
+            <li><span class="n">1</span>Start from pretrained (COCO) weights</li>
+            <li><span class="n">2</span>Tile at the resolution you deploy at</li>
+            <li><span class="n">3</span>Keep augmentation moderate</li>
+          </ul></div>
+        <div class="card"><h3>What I also found</h3>
+          <p style="font-size:14px">Default augmentation beat hand-tuned (top-down trees are rotation-invariant); model size is <b>U-shaped</b>; run-to-run noise ≈ ±0.03 — so small gaps aren't real.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Results + ablation</span><span>YOLOv8x-seg v4 · M14</span></div>
+</section>
+
+<!-- 15 MASK R-CNN (Berik) -->
+<section class="slide">
+  <div class="rail top"><span>06 · Mask R-CNN — Berik</span><span class="c pageno">15</span></div>
+  <div class="pad">
+    <div class="kicker">Engine #2 · Berik Sharipov</div>
+    <h2>Mask R-CNN — the careful, mask-first engine</h2>
+    <p style="margin-top:12px;max-width:104ch">A classic <b>two-stage, region-based</b> detector. Where YOLO looks once, Mask R-CNN looks twice — propose, then refine — slower, but with naturally <b>crisp instance masks</b>. In our project it is one of the swappable engines behind the same automated pipeline.</p>
+    <div class="grid2" style="margin-top:16px;gap:20px 30px">
+      <div class="col">
+        <div class="card"><h3>How it works</h3><p>A <b>Region Proposal Network</b> suggests candidate boxes → <b>RoIAlign</b> crops each region → three heads output a <b>box</b>, a <b>class</b> and a per-pixel <b>mask</b>. Segmentation is built in, so outlines hug the crown.</p></div>
+        <div class="card"><h3>How Berik trained it</h3><p>Transfer-learned from a <b>COCO-pretrained</b> ResNet-50-FPN Mask R-CNN, fine-tuned on the same Astana tiles (v2 + v3), single <b>"tree"</b> class, same split as every engine. 50 epochs, SGD.</p></div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>How it does on Astana</h3><p>Box mAP@50 <b>0.166</b>, Mask <b>0.158</b>. At confidence 0.5: <b>precision 0.44 · recall 0.22</b>. Strongest on medium, well-separated crowns; loses the small and shaded ones.</p></div>
+        <div class="card hl"><h3>Why it stays in the app</h3><p>Below YOLO overall on our data — but it recovers some <b>larger trees the others miss</b>, and its masks are the cleanest. That's exactly why the pipeline keeps it as a user-selectable engine.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Team member · Berik Sharipov</span><span>box 0.166 · mask 0.158 · M14</span></div>
+</section>
+
+<!-- 16 DEEPFOREST + SAM2 (Anuar) -->
+<section class="slide">
+  <div class="rail top"><span>06 · DeepForest + SAM 2 — Anuar</span><span class="c pageno">16</span></div>
+  <div class="pad">
+    <div class="kicker">Engine #3 · Anuar Totin</div>
+    <h2>DeepForest + SAM 2 — the forest specialist, re-taught</h2>
+    <p style="margin-top:12px;max-width:104ch">A two-part engine: <b>DeepForest</b> (a RetinaNet-style tree-crown detector) finds the trees, then <b>SAM 2</b> turns each box into a high-quality mask. It produced the <b>0.012</b> that started the whole project — the clearest proof of why domain adaptation matters.</p>
+    <div class="grid2" style="margin-top:16px;gap:20px 30px">
+      <div class="col">
+        <div class="card"><h3>How it works</h3><p><b>DeepForest</b> outputs a box per crown; each box becomes a <b>prompt</b> for <b>SAM 2</b>, which segments the exact pixels — zero-shot, no extra training.</p></div>
+        <div class="card"><h3>The domain problem</h3><p>DeepForest is pretrained on <b>North-American airborne forest</b> imagery. Pointed at a dry steppe city it was nearly blind — <b>0.012</b>. A mismatch, not a bug: different trees, spacing and sensor.</p></div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>How Anuar fixed it</h3><p>Fine-tuned DeepForest on the Astana data (LR 1e-4, 30 epochs) and paired it with SAM 2 masks (conf 0.3, 400 px patches). Result: <b>0.012 → 0.146</b> Box mAP@50 (Mask <b>0.134</b>) — a <b>×12</b> jump from re-teaching.</p></div>
+        <div class="card hl"><h3>Why it stays in the app</h3><p>SAM 2 gives the <b>best general-purpose masks</b> of any engine, and the off-the-shelf → fine-tuned story is the project's core lesson. Still weak on tiny dense trees — so it's offered alongside the others.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Team member · Anuar Totin</span><span>0.012 → 0.146 · ×12 · M14</span></div>
+</section>
+
+<!-- 17 WHY SEVERAL MODELS / ENSEMBLES -->
+<section class="slide">
+  <div class="rail top"><span>06 · Why Several Models</span><span class="c pageno">17</span></div>
+  <div class="pad">
+    <div class="kicker">The design rationale — a system choice, not a model choice</div>
+    <h2>Same garden, eight engines, eight answers</h2>
+    <div class="frame" style="margin:14px auto 0;width:880px">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="../figures/cross_model_8way_botanical.jpg" alt="the same Botanical Garden detected by eight different models" style="display:block;width:100%">
+    </div>
+    <div class="grid2 wide" style="margin-top:14px;gap:30px;align-items:start">
+      <p style="font-size:15px">The very same Botanical Garden, scanned by <b>eight detection engines</b> — each outlines a <b>different set of trees</b> and reports a different count (<span class="em">672–819</span>). None is simply "right".</p>
+      <p style="font-size:15px;color:var(--ink2)">That's why the system lets the operator <b>switch engines</b> and combine them — <b>Weighted Box Fusion</b> + a <b>cross-YOLO 4-vote</b> that drops single-model false positives (e.g. stadium roofs). Choice is a feature.</p>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Own contribution — design rationale</span><span>WBF · cross-YOLO vote</span></div>
+</section>
+
+<!-- 18 RESULTS -->
+<section class="slide">
+  <div class="rail top"><span>07 · Results</span><span class="c pageno">18</span></div>
+  <div class="pad">
+    <div class="kicker">Head-to-head · same 14 images · 702 trees</div>
+    <h2 style="margin-bottom:14px">One common test set, every model</h2>
+    <div class="grid2" style="gap:30px;align-items:start">
+      <div class="col">
+        <table>
+          <thead><tr><th style="width:50%">Model</th><th style="width:25%">Box mAP@50</th><th style="width:25%">Mask mAP@50</th></tr></thead>
+          <tbody>
+            <tr class="ours"><td>YOLOv8x-seg v4 (ours)</td><td class="met">0.315</td><td class="met">0.289</td></tr>
+            <tr><td>YOLOv8x-seg v3</td><td class="met">0.268</td><td class="met">0.244</td></tr>
+            <tr><td>Mask R-CNN</td><td class="met">0.166</td><td class="met">0.158</td></tr>
+            <tr><td>DeepForest + SAM 2</td><td class="met">0.146</td><td class="met">0.134</td></tr>
+            <tr><td>YOLO v1 baseline</td><td class="met">0.131</td><td class="met">0.134</td></tr>
+            <tr><td>NEON DeepForest (off-the-shelf)</td><td class="met">0.012</td><td class="met">—</td></tr>
+          </tbody>
+        </table>
+        <div class="tnote">Champion operating point (conf 0.25): <b style="color:var(--lime-deep)">precision 0.52 · recall 0.29</b>. Margins between top models are small — partly within run-to-run noise.</div>
+      </div>
+      <div class="col">
+        <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/model_comparison_barchart.png" alt="model comparison chart"></div>
+        <p style="font-size:13.5px;color:var(--muted)">We read this as "these engines are in the same ballpark on Astana," <b>not</b> "one clearly wins." What matters for the project: <b style="color:var(--lime-deep)">any of them can drive the system</b>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1–2 · Results + comparison</span><span>M14 · 702 polygons</span></div>
+</section>
+
+<!-- 19 QUALITATIVE (image) -->
+<section class="slide img">
+  <div class="pad"></div>
+  <img class="bg" src="../figures/yolo_v2_finetune_val_batch0.jpg" alt="">
+  <div class="scrim bl"></div>
+  <div class="topfade"></div>
+  <div class="rail top"><span class="pin">07 · Qualitative</span><span class="pageno">19</span></div>
+  <div class="ov" style="left:64px;top:150px;max-width:520px">
+    <div class="kicker">What it actually looks like</div>
+    <h2 style="margin-top:14px">Detections vs. real crowns</h2>
+    <p style="margin-top:16px;background:rgba(245,244,238,.84);padding:14px 16px;border-radius:6px;backdrop-filter:blur(2px)">Predictions line up with real tree crowns in many places. But honestly — it <b>doesn't find every tree</b>: at the default confidence it finds about <b class="em">30%</b> of labelled trees, and per image it swings from almost none to nearly all.</p>
+  </div>
+  <div class="rail bot"><span class="pin">Honest about misses — small &amp; shaded trees</span><span>conf 0.25 → ≈ 30% recall</span></div>
+</section>
+
+<!-- 20 CANOPY — the system in use -->
+<section class="slide">
+  <div class="rail top"><span>08 · Canopy — The System In Use</span><span class="c pageno">20</span></div>
+  <div class="pad">
+    <div class="kicker">The deliverable &nbsp;<span class="chip" style="margin-left:6px">My contribution</span></div>
+    <h2>Canopy — pick an area, pick a model, scan</h2>
+    <div class="grid2 wide" style="margin-top:18px">
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/ui_canopy_map_view.png" alt="Canopy map view"></div>
+      <div class="col">
+        <div class="card"><h3>One flow</h3><p>Select an area of Astana → the app tiles it, runs the chosen model, and draws every detected tree on the map — confidence filter, Point / Box / Polygon / Heat layers.</p></div>
+        <div class="card"><h3>Grows as you use it</h3><p>Every scan is stored; the city map is the running aggregate of everything ever processed. Coverage and counts update live.</p></div>
+        <p style="font-size:13.5px;color:var(--muted)">Counts shown in screenshots come from repeated demo scans — <b>not</b> a full city census.</p>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1–2 · Information system built &amp; working</span><span>GeoJSON · CSV · HTML export</span></div>
+</section>
+
+<!-- 21 CANOPY — features (manage / providers / heat / coverage) -->
+<section class="slide">
+  <div class="rail top"><span>08 · Canopy — Features</span><span class="c pageno">21</span></div>
+  <div class="pad">
+    <div class="kicker">The choices that make it a tool, not a demo</div>
+    <h2>Choose · combine · manage · measure</h2>
+    <div class="grid3" style="margin-top:18px">
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/ui_canopy_scan_model_modal.png" alt="model picker"></div>
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/ui_canopy_library_modal.png" alt="library manage"></div>
+      <div class="frame"><div class="bar"><i></i><i></i><i></i></div><img src="../figures/ui_canopy_map_heat.png" alt="heat map"></div>
+    </div>
+    <div class="grid3" style="margin-top:14px;gap:16px">
+      <div class="feat"><div class="ic">Choose &amp; combine</div><div class="ti">Model + ensemble picker</div><p>7 YOLO sizes · Mask R-CNN · DeepForest ± SAM 2 · WBF &amp; cross-YOLO vote — chosen per scan, with provider (ESRI / Google) and confidence.</p></div>
+      <div class="feat"><div class="ic">Manage</div><div class="ti">Name · hide · delete</div><p>Every scan and snapshot is renamable, hideable and deletable (cascade) from a library modal — so the workspace stays usable over time.</p></div>
+      <div class="feat"><div class="ic">Measure</div><div class="ti">Heat map &amp; coverage</div><p>Density heat-map, per-area tree count, <b>green-space coverage %</b> and crown area inside a drawn polygon — metrics, not just dots.</p></div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 2 · Feature depth of the system</span><span>4 geo modes · NDJSON progress</span></div>
+</section>
+
+<!-- 22 LIVE DEMO (video) -->
+<section class="slide">
+  <div class="rail top"><span>08 · Live Demo</span><span class="c pageno">22</span></div>
+  <div class="pad">
+    <div class="kicker">The pipeline running end-to-end &nbsp;<span class="chip" style="margin-left:6px">My contribution</span></div>
+    <h2>Live demo — automated scan of the Botanical Garden</h2>
+    <div style="display:flex;gap:36px;align-items:center;margin-top:18px">
+      <div class="frame" style="flex:0 0 auto;width:700px">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <video src="assets/canopy_demo.mp4" poster="assets/canopy_demo_poster.jpg"
+               muted loop playsinline preload="metadata" controls
+               style="display:block;width:700px;height:394px;object-fit:cover;background:#0b0f0c"></video>
+      </div>
+      <div class="col" style="flex:1;gap:12px">
+        <div class="card"><h3>What you're seeing</h3><p style="font-size:15px">The v4 engine scanning the Botanical Garden end-to-end in Canopy: <b>tile → detect → map</b>, every tree drawn live.</p></div>
+        <div class="card"><h3>Why this scene</h3><p style="font-size:15px">A dense, well-defined planting — the clearest case. Honest reminder: on sparser scenes recall drops.</p></div>
+        <div class="card hl">
+          <h3>Full demo video</h3>
+          <p style="font-size:14px">Plays here automatically (~1 min) — or open the full recording:</p>
+          <p style="font-family:var(--mono);font-size:13px;color:var(--lime-deep);word-break:break-all;margin-top:6px">https://drive.google.com/file/d/1OceaLC4yMEgLtIThVR8t7_B4VRRPNaNf/view</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 2 · Demonstration of the working system</span><span>YOLOv8x-seg v4 · Canopy</span></div>
+</section>
+
+<!-- 23 DISCUSSION & LIMITS -->
+<section class="slide">
+  <div class="rail top"><span>09 · Discussion &amp; Limitations</span><span class="c pageno">23</span></div>
+  <div class="pad vc">
+    <div class="kicker">Honest assessment</div>
+    <h2>What we'd say up front</h2>
+    <div class="grid2" style="margin-top:22px;gap:30px">
+      <div class="card"><h3>Limitations</h3>
+        <ul class="clean" style="gap:10px;margin-top:2px">
+          <li><span class="n">●</span>Small training set → modest accuracy (0.315 mAP, ≈ 30% recall)</li>
+          <li><span class="n">●</span>Domain shift: training captures vs. live map tiles</li>
+          <li><span class="n">●</span>No explicit split of heavily-overlapping crowns</li>
+        </ul></div>
+      <div class="card"><h3>But also</h3>
+        <ul class="clean" style="gap:10px;margin-top:2px">
+          <li><span class="n">●</span>Off-the-shelf fails here (0.012) — our models do meaningfully better</li>
+          <li><span class="n">●</span>A fair, reproducible comparison on local data</li>
+          <li><span class="n">●</span>A working <b>system</b>, not just a notebook</li>
+        </ul></div>
+    </div>
+    <p style="margin-top:20px;color:var(--ink)">None of this is hidden — it's the honest state of a student project, and accuracy improves directly with more annotated data, while the system around it already works.</p>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 3 · Anticipating the questions</span><span>candour &gt; overselling</span></div>
+</section>
+
+<!-- 24 CONCLUSIONS -->
+<section class="slide">
+  <div class="rail top"><span>09 · Conclusions</span><span class="c pageno">24</span></div>
+  <div class="pad vc">
+    <div class="kicker">Objectives → outcomes</div>
+    <h2 style="font-size:44px">Every task, addressed</h2>
+    <ul class="check big" style="margin-top:24px">
+      <li><b>An automated system</b> — capture → tile → detect → georeference → map → export, with no manual step.</li>
+      <li><b>Working application</b> — Canopy: provider &amp; model choice, ensembles, manage, metrics, export.</li>
+      <li><b>Dataset</b> — annotated, tiled Astana imagery with a held-out 14-image / 702-tree common set.</li>
+      <li><b>Four engines + two ensembles</b>, all scored identically on one set.</li>
+      <li><b>Fair evaluation</b> — the first such measurement for Astana.</li>
+    </ul>
+    <div class="card hl" style="margin-top:22px"><p style="color:var(--ink);font-size:21px;line-height:1.5">The headline isn't a score — it's that a <b>manual task is now an automated system</b>. Accuracy is modest (and honestly so: ready-made tools score ~0 here, ours do meaningfully better), but the <b>system</b> is the contribution.</p></div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Conclusions map 1:1 to tasks</span><span>manual → automated system</span></div>
+</section>
+
+<!-- 25 CONTRIBUTIONS & FUTURE WORK -->
+<section class="slide">
+  <div class="rail top"><span>09 · Contributions &amp; Future Work</span><span class="c pageno">25</span></div>
+  <div class="pad vc">
+    <h2 style="font-size:40px;margin-bottom:6px">Contributions &amp; future work</h2>
+    <div class="grid2" style="margin-top:22px;gap:48px;align-items:start">
+      <div class="col">
+        <div class="kicker">My contribution (Rasul)</div>
+        <ul class="clean big" style="gap:18px;margin-top:14px">
+          <li><span class="n">1</span>The whole <b>automated system &amp; Canopy app</b> (FastAPI + React + SQLite + Leaflet) — the deliverable</li>
+          <li><span class="n">2</span>The <b>YOLOv8 engine</b> — 23 experiments, +140% over my baseline</li>
+          <li><span class="n">3</span>The <b>cross-YOLO vote</b> ensemble &amp; the common-set evaluation harness</li>
+        </ul>
+      </div>
+      <div class="col">
+        <div class="kicker">Future work</div>
+        <ul class="clean big" style="gap:18px;margin-top:14px">
+          <li><span class="n">1</span>More annotated data → reach the F1 ≈ 0.7 range</li>
+          <li><span class="n">2</span>Train on the <b>same imagery we run on</b> (close the domain gap)</li>
+          <li><span class="n">3</span>Crown-splitting · species labels · containerised multi-user deploy</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Criterion 1 · Contribution &amp; outlook</span><span>team diploma · individual scoring</span></div>
+</section>
+
+<!-- 26 THANK YOU -->
+<section class="slide img">
+  <div class="pad"></div>
+  <img class="bg" src="../figures/ui_canopy_botanical_park.jpg" alt="">
+  <div class="scrim bl"></div>
+  <div class="topfade"></div>
+  <div class="rail top"><span class="pin">Astana IT University</span><span class="pageno">26</span></div>
+  <div class="ov" style="left:64px;top:150px;max-width:920px">
+    <div class="kicker">Thank you</div>
+    <h1 style="margin-top:18px;font-size:78px">Thank you — we'll gladly<br>answer your questions.</h1>
+    <div class="sub" style="margin-top:26px;max-width:52ch;font-size:23px">From a manual, one-by-one task to an <b style="color:var(--lime-deep)">automated</b> tree-mapping system for Astana — a working tool anyone can run.</div>
+    <div class="authors" style="margin-top:28px">
+      <span class="lbl">Authors</span><span>Berik Sharipov</span><span class="dot">·</span><span>Anuar Totin</span><span class="dot">·</span><span class="me">Rasul Aidarkhanov</span>
+      <span class="lbl" style="margin-left:10px">Supervisor</span><span>S. Satbayev</span>
+    </div>
+  </div>
+  <div class="rail bot"><span class="pin">Canopy · github.com/rasaidarkh/astana-tree-detection</span><span>2026</span></div>
+</section>
+
+</body></html>

@@ -1,0 +1,14 @@
+BEST Box mAP@50 per model:
+  YOLOv8n: 0.2600
+  YOLOv8s: 0.2864
+  YOLOv8m: 0.2958
+  YOLOv8l: 0.2686
+  YOLOv8x: 0.3116
+
+charts written to thesis/figures/presentation/:
+  map50_curves.png
+  map5095_curves.png
+  model_size_bar.png
+  pr_scatter.png
+  prod_loss_curves.png
+  prod_metrics.png
