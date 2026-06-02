@@ -138,7 +138,7 @@ We contribute: the first honest multi-model benchmark on Central-Asian urban ima
 - *"Is 0.315 good?"* — modest in absolute terms, but it's the first local benchmark and +140% over our own baseline; off-the-shelf is 0.012.
 - *"Recall?"* — v4 engine, default confidence 0.25: ≈30% of labelled trees found (≈44% at a looser 0.10), on the 14-image set. *(measured: `results/yolo_v4_recall.json`)*
 - *"Why keep lower-scoring engines?"* — different engines catch different trees; we offer choice + ensembles, not one forced winner.
-- *"mAP@50 vs 50:95?"* — we headline mAP@50 (IoU ≥ 0.5); stricter 50:95 = 0.115 box for v4, it's in the thesis.
+- *"mAP@50 vs 50:95?"* — we headline mAP@50 (IoU ≥ 0.5); stricter 50:95 = 0.110 box for v4, it's in the thesis.
 - *"How much did you annotate?"* — by hand: **~5,500 tree crowns across ~100 Astana images**; sliding-window tiling expands that to ≈8,700 training polygon instances (a crown on a tile boundary appears in two tiles).
 - *"Why is the test set only 14 images?"* — the **14-image / 702-polygon M14** set is the *common cross-model test set* (a held-out subset), so every engine is scored on identical ground truth — not the whole dataset. Training uses the full ~100 images.
 - *"Why m-seg 0.308 vs x-seg 0.315?"* — both are local optima (U-shaped size curve); x-seg is final production, the chart marks it.
