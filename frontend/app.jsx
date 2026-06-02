@@ -8,6 +8,67 @@ const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const ASTANA_CENTER = [51.1605, 71.4704];
 const ASTANA_ZOOM = 13;
 
+// Thermal "magma"-style ramp for the density heatmap: deep violet (sparse) →
+// magenta → orange → hot yellow (dense). Shared by L.heatLayer and the legend
+// so the two never drift apart.
+const HEAT_GRADIENT = {
+  0.0: "#3b0f70",
+  0.25: "#8c2981",
+  0.5: "#de4968",
+  0.75: "#fe9f6d",
+  1.0: "#fcfdbf",
+};
+// CSS gradient string mirroring HEAT_GRADIENT for the legend swatch.
+const HEAT_CSS = "linear-gradient(to right, #3b0f70 0%, #8c2981 25%, #de4968 50%, #fe9f6d 75%, #fcfdbf 100%)";
+
+const EARTH_R_M = 6378137.0;
+
+// Ground area (m²) of a lat/lng ring via the spherical shoelace formula.
+// Accurate to well under 1% at city scale — plenty for a coverage stat.
+// `ring` is [[lat,lng], ...]; the polygon is auto-closed.
+function polygonAreaM2(ring) {
+  if (!ring || ring.length < 3) return 0;
+  const rad = Math.PI / 180;
+  let total = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const [lat1, lng1] = ring[i];
+    const [lat2, lng2] = ring[(i + 1) % ring.length];
+    total += (lng2 - lng1) * rad * (2 + Math.sin(lat1 * rad) + Math.sin(lat2 * rad));
+  }
+  return Math.abs(total * EARTH_R_M * EARTH_R_M / 2);
+}
+
+// Approximate the area (m²) of one tree crown. Prefer the segmentation mask
+// polygon when present (true crown shape); otherwise fall back to a disc from
+// the crown diameter. Returns 0 when neither is available.
+function crownAreaM2(t) {
+  if (t.mask_polygon_geo && t.mask_polygon_geo.length >= 3) {
+    const a = polygonAreaM2(t.mask_polygon_geo);
+    if (a > 0) return a;
+  }
+  if (t.crown != null && t.crown > 0) {
+    const r = t.crown / 2;
+    return Math.PI * r * r;
+  }
+  return 0;
+}
+
+// Canopy coverage of a set of trees within a drawn polygon. Coverage is capped
+// at 100% (overlapping crowns can otherwise sum past the ground area). Returns
+// null when the polygon area is unknown.
+function computeCanopyCoverage(trees, polygonRing) {
+  const groundM2 = polygonAreaM2(polygonRing);
+  if (!groundM2) return null;
+  let canopyM2 = 0;
+  let measured = 0;
+  for (const t of trees || []) {
+    const a = crownAreaM2(t);
+    if (a > 0) { canopyM2 += a; measured++; }
+  }
+  const pct = Math.min(100, (canopyM2 / groundM2) * 100);
+  return { groundM2, canopyM2, pct, measured, total: (trees || []).length };
+}
+
 /* ==================================================================
    Icon set (subset — only what's used)
    ================================================================== */
@@ -425,6 +486,17 @@ function ScanProgressCard({ scanProgress, onCancel, onRename }) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   const isDone = scanProgress.done && scanProgress.sessionId;
 
+  // Polygon scans report green-space coverage inside the drawn boundary.
+  // scanProgress.polygon is [{lat,lng}, ...]; normalise to [[lat,lng], ...].
+  const polyRing = (scanProgress.polygon || []).map((p) =>
+    Array.isArray(p) ? p : [p.lat, p.lng]
+  );
+  const coverage = polyRing.length >= 3
+    ? computeCanopyCoverage(scanProgress.trees || [], polyRing)
+    : null;
+  const fmtArea = (m2) =>
+    m2 >= 10000 ? `${(m2 / 10000).toFixed(2)} ha` : `${Math.round(m2).toLocaleString()} m²`;
+
   const submit = async () => {
     if (!isDone || !draft.trim()) return;
     setSaving(true);
@@ -476,6 +548,30 @@ function ScanProgressCard({ scanProgress, onCancel, onRename }) {
       <div className="scan-progress-line">
         <div className="scan-progress-fill" style={{ width: `${pct}%` }} />
       </div>
+
+      {/* Green-space coverage — only for polygon scans, where a real boundary
+          area exists. Bbox scans have no meaningful denominator. */}
+      {coverage && (
+        <div className="coverage-box">
+          <div className="coverage-head">
+            <Icon name="polygon" size={12} />
+            <span>Green-space coverage</span>
+            <span className="coverage-pct mono">{coverage.pct.toFixed(1)}%</span>
+          </div>
+          <div className="coverage-bar">
+            <div className="coverage-bar-fill" style={{ width: `${coverage.pct}%` }} />
+          </div>
+          <div className="coverage-detail">
+            <span>Canopy <b className="mono">{fmtArea(coverage.canopyM2)}</b></span>
+            <span>Area <b className="mono">{fmtArea(coverage.groundM2)}</b></span>
+          </div>
+          {coverage.measured < coverage.total && (
+            <div className="coverage-note">
+              {coverage.measured}/{coverage.total} crowns sized
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Optional post-scan rename — non-blocking, юзер может проигнорировать */}
       {isDone && (
@@ -1411,8 +1507,11 @@ function MapHost({
           .map((t) => [t.lat, t.lng, Math.max(0.1, t.confidence || 0.5)]);
         if (pts.length) {
           heatLayerRef.current = L.heatLayer(pts, {
-            radius: 24, blur: 28, maxZoom: 20, minOpacity: 0.4,
-            gradient: { 0.2: "#EA9F27", 0.5: "#5DCAA5", 0.8: "#0F6E56", 1.0: "#0A3F30" },
+            radius: 26, blur: 24, maxZoom: 20, minOpacity: 0.35,
+            // Magma thermal ramp (violet→magenta→orange→hot yellow). Reads as a
+            // real density heatmap and pops on dark satellite tiles — deliberately
+            // NOT the old green ramp, which blended into the canopy/imagery.
+            gradient: HEAT_GRADIENT,
           }).addTo(map.current);
         }
         return;
@@ -1704,6 +1803,27 @@ function MapLegend({ trees, threshold, filter }) {
     return filter.low;
   });
   return null;  // legend is integrated into stats card + filter popover now
+}
+
+/* ==================================================================
+   HeatLegend — bottom-left swatch shown only in Heat display mode,
+   so the magma ramp is interpretable (sparse → dense canopy).
+   ================================================================== */
+function HeatLegend({ show }) {
+  if (!show) return null;
+  return (
+    <div className="float float-bl heat-legend">
+      <div className="heat-legend-title">
+        <Icon name="flame" size={12} />
+        <span>Tree density</span>
+      </div>
+      <div className="heat-legend-bar" style={{ background: HEAT_CSS }} />
+      <div className="heat-legend-scale">
+        <span>Sparse</span>
+        <span>Dense</span>
+      </div>
+    </div>
+  );
 }
 
 /* ==================================================================
@@ -2163,6 +2283,8 @@ function App() {
                   treeCount={visibleCount}
                 />
               )}
+
+              <HeatLegend show={hasTrees && displayMode === "heat"} />
 
               <ScanProgressCard
                 scanProgress={scanProgress}
